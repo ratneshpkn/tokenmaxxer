@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tokenmaxxer
+      POSTGRES_PASSWORD: tokenmaxxer
+      POSTGRES_DB: tokenmaxxer
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5439:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tokenmaxxer -d tokenmaxxer"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    build:
+      context: .
+      target: dev
+    environment:
+      DATABASE_URL: postgres://tokenmaxxer:tokenmaxxer@postgres:5432/tokenmaxxer
+    env_file:
+      - path: ./.env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "bun install --frozen-lockfile && bun run db:migrate && bun run bootstrap"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+
+  server:
+    build:
+      context: .
+      target: dev
+    environment:
+      DATABASE_URL: postgres://tokenmaxxer:tokenmaxxer@postgres:5432/tokenmaxxer
+      PORT: 3003
+      BASE_URL: http://localhost:3003
+      NODE_ENV: development
+    env_file:
+      - path: ./.env
+        required: false
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: bun --hot run server/index.ts
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - ./data:/app/data
+
+  client:
+    build:
+      context: .
+      target: dev
+    environment:
+      BACKEND_URL: http://server:3003
+    env_file:
+      - path: ./.env
+        required: false
+    ports:
+      - "3003:5173"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: bunx vite --host 0.0.0.0
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+      - ./data:/app/data
+
+volumes:
+  pgdata:
+  node_modules:

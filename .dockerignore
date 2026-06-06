@@ -1,0 +1,16 @@
+node_modules
+.env
+.env.*
+.git
+.gitignore
+.superpowers
+.cursor
+.vscode
+.idea
+dist
+*.log
+README.md
+docs
+
+# Master key + session secret — must NOT be baked into image layers.
+data

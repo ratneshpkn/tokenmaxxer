@@ -1,0 +1,373 @@
+@import "tailwindcss";
+@plugin "tailwindcss-animate";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ─── tokenmaxxer · design tokens (theme-aware, OKLCH) ─────────────────── */
+/* Light is the default in :root. Dark values live under .dark — applied by
+ * the useTheme hook based on user preference (system | light | dark). */
+
+@layer base {
+	:root {
+		/* ── Light theme (default) ──────────────────────────────────────── */
+
+		/* Surfaces */
+		--bg: oklch(100% 0 0);
+		--bg-elev: oklch(98.51% 0 0);
+		--bg-elev-2: oklch(96.12% 0 0);
+		--line: oklch(90.67% 0 0);
+		--line-strong: oklch(82.97% 0 0);
+
+		/* Text */
+		--fg: oklch(19.13% 0 0);
+		--fg-mid: oklch(46.4% 0 0);
+		--fg-dim: oklch(64.01% 0 0);
+		--fg-very-dim: oklch(78.26% 0 0);
+
+		/* Accents */
+		--amber: oklch(69.72% 0.186 49.36);
+		--amber-hot: oklch(63.91% 0.2209 34.82);
+		--mint: oklch(61.13% 0.1614 149.57);
+		--sky: oklch(59.21% 0.129 238.05);
+		--rose: oklch(59.98% 0.2327 28.06);
+		--warn: oklch(76.31% 0.1665 68.88);
+
+		/* Decorative atmosphere (body background gradient): off on light. */
+		--decorative-opacity: 0;
+
+		/* shadcn token aliases */
+		--background: var(--bg);
+		--foreground: var(--fg);
+		--card: var(--bg-elev);
+		--card-foreground: var(--fg);
+		--popover: var(--bg-elev);
+		--popover-foreground: var(--fg);
+		--primary: var(--amber);
+		--primary-foreground: oklch(100% 0 0);
+		--secondary: oklch(95.51% 0 0);
+		--secondary-foreground: var(--fg);
+		--muted: oklch(97.02% 0 0);
+		--muted-foreground: var(--fg-mid);
+		--accent: var(--amber);
+		--accent-foreground: oklch(100% 0 0);
+		--destructive: var(--rose);
+		--destructive-foreground: oklch(100% 0 0);
+		--border: var(--line);
+		--input: var(--line);
+		--ring: var(--amber);
+
+		--chart-1: var(--amber);
+		--chart-2: var(--sky);
+		--chart-3: var(--mint);
+		--chart-4: var(--warn);
+		--chart-5: oklch(54.68% 0.2503 310.33);
+
+		/* shadcn Sidebar tokens — aliased to our existing surface/accent tokens
+     * so the sidebar matches the rest of the app in both themes. */
+		--sidebar-background: var(--bg-elev);
+		--sidebar-foreground: var(--fg-mid);
+		--sidebar-primary: var(--amber);
+		--sidebar-primary-foreground: oklch(100% 0 0);
+		--sidebar-accent: var(--bg-elev-2);
+		--sidebar-accent-foreground: var(--fg);
+		--sidebar-border: var(--line);
+		--sidebar-ring: var(--amber);
+	}
+
+	.dark {
+		/* ── Dark theme (overrides) ─────────────────────────────────────── */
+
+		/* Surfaces */
+		--bg: oklch(14.48% 0 0);
+		--bg-elev: oklch(18.22% 0 0);
+		--bg-elev-2: oklch(20.46% 0 0);
+		--line: oklch(28.09% 0 0);
+		--line-strong: oklch(34.07% 0 0);
+
+		/* Text */
+		--fg: oklch(94.03% 0.0029 84.56);
+		--fg-mid: oklch(68.3% 0 0);
+		--fg-dim: oklch(49.26% 0 0);
+		--fg-very-dim: oklch(34.07% 0 0);
+
+		/* Accents */
+		--amber: oklch(74.34% 0.1775 53.98);
+		--amber-hot: oklch(66.11% 0.2044 36.44);
+		--mint: oklch(81.08% 0.1779 152.18);
+		--sky: oklch(77.38% 0.1219 231.19);
+		--rose: oklch(63.58% 0.2088 25.41);
+		--warn: oklch(86.66% 0.1647 88.68);
+
+		--decorative-opacity: 1;
+
+		--primary-foreground: oklch(14.48% 0 0);
+		--secondary: oklch(23.93% 0 0);
+		--muted: oklch(21.78% 0 0);
+		--accent-foreground: oklch(14.48% 0 0);
+		--destructive-foreground: oklch(96% 0 0);
+		--chart-5: oklch(65.67% 0.2167 312.95);
+
+		/* Sidebar tokens in dark — same aliasing pattern. */
+		--sidebar-background: var(--bg);
+		--sidebar-foreground: var(--fg-mid);
+		--sidebar-primary: var(--amber);
+		--sidebar-primary-foreground: oklch(14.48% 0 0);
+		--sidebar-accent: var(--bg-elev);
+		--sidebar-accent-foreground: var(--fg);
+		--sidebar-border: var(--line);
+		--sidebar-ring: var(--amber);
+	}
+
+	/* color-scheme follows the active theme; browsers use this for form controls
+   * and the native scrollbar default. */
+	html {
+		color-scheme: light;
+	}
+	html.dark {
+		color-scheme: dark;
+	}
+
+	* {
+		border-color: var(--line);
+	}
+
+	body {
+		background: var(--bg);
+		color: var(--fg);
+		font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-feature-settings: "ss01", "ss02", "cv02", "cv03", "cv04";
+		font-variant-numeric: tabular-nums slashed-zero;
+		-webkit-font-smoothing: antialiased;
+		text-rendering: optimizeLegibility;
+	}
+
+	/* Decorative dotted-grid + vignette: only in dark mode (controlled by the
+   * --decorative-opacity variable, which is 0 in light). */
+	body::before {
+		content: "";
+		position: fixed;
+		inset: 0;
+		pointer-events: none;
+		z-index: -1;
+		opacity: var(--decorative-opacity);
+		background-image:
+			radial-gradient(
+				ellipse 80% 60% at 50% 0%,
+				color-mix(in oklch, var(--amber) 4%, transparent) 0%,
+				transparent 60%
+			),
+			radial-gradient(
+				circle at 1px 1px,
+				color-mix(in oklch, var(--fg) 2%, transparent) 1px,
+				transparent 0
+			);
+		background-size:
+			100% 100%,
+			28px 28px;
+		background-attachment: fixed;
+	}
+
+	::selection {
+		background: color-mix(in oklch, var(--amber) 35%, transparent);
+		color: var(--fg);
+	}
+
+	/* Scrollbar — theme-aware via CSS variables */
+	::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+	::-webkit-scrollbar-thumb {
+		background: var(--line-strong);
+	}
+	::-webkit-scrollbar-thumb:hover {
+		background: var(--fg-dim);
+	}
+}
+
+@theme {
+	--font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--font-display: "Fraunces", "Times New Roman", serif;
+
+	--radius-lg: 0px;
+	--radius-md: 0px;
+	--radius-sm: 0px;
+
+	--color-bg: var(--bg);
+	--color-elev: var(--bg-elev);
+	--color-elev2: var(--bg-elev-2);
+	--color-line: var(--line);
+	--color-line-strong: var(--line-strong);
+	--color-fg: var(--fg);
+	--color-fg-mid: var(--fg-mid);
+	--color-fg-dim: var(--fg-dim);
+	--color-fg-very-dim: var(--fg-very-dim);
+	--color-amber: var(--amber);
+	--color-amber-hot: var(--amber-hot);
+	--color-mint: var(--mint);
+	--color-sky: var(--sky);
+	--color-rose: var(--rose);
+	--color-warn: var(--warn);
+
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-destructive-foreground: var(--destructive-foreground);
+
+	--color-chart-1: var(--chart-1);
+	--color-chart-2: var(--chart-2);
+	--color-chart-3: var(--chart-3);
+	--color-chart-4: var(--chart-4);
+	--color-chart-5: var(--chart-5);
+
+	--color-sidebar: var(--sidebar-background);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* ─── Typography utilities ────────────────────────────────────────────── */
+
+@layer utilities {
+	.font-display {
+		font-family: "Fraunces", "Times New Roman", serif;
+		font-feature-settings: "ss01";
+	}
+	.font-mono {
+		font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+
+	.tracked {
+		letter-spacing: 0.18em;
+		text-transform: uppercase;
+	}
+	.tracked-sm {
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+	.tracked-lg {
+		letter-spacing: 0.28em;
+		text-transform: uppercase;
+	}
+
+	.tabular {
+		font-variant-numeric: tabular-nums slashed-zero;
+	}
+
+	.hairline {
+		background: linear-gradient(
+			to right,
+			transparent 0%,
+			var(--line) 8%,
+			var(--line) 92%,
+			transparent 100%
+		);
+		height: 1px;
+	}
+
+	.panel {
+		background: var(--bg-elev);
+		border: 1px solid var(--line);
+	}
+	.panel-elev {
+		background: var(--bg-elev-2);
+		border: 1px solid var(--line-strong);
+	}
+}
+
+/* ─── Animations ──────────────────────────────────────────────────────── */
+
+@keyframes pip-pulse {
+	0%,
+	100% {
+		box-shadow: 0 0 0 0 color-mix(in oklch, var(--mint) 60%, transparent);
+		opacity: 1;
+	}
+	50% {
+		box-shadow: 0 0 0 6px color-mix(in oklch, var(--mint) 0%, transparent);
+		opacity: 0.85;
+	}
+}
+.pip-live {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--mint);
+	animation: pip-pulse 2s infinite;
+}
+.pip-warn {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--amber);
+}
+.pip-danger {
+	display: inline-block;
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--amber-hot);
+	box-shadow: 0 0 8px color-mix(in oklch, var(--amber-hot) 60%, transparent);
+}
+
+@keyframes fade-rise {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+.fade-rise {
+	animation: fade-rise 0.5s ease both;
+}
+
+@keyframes num-tick {
+	0% {
+		color: var(--amber);
+	}
+	100% {
+		color: var(--fg);
+	}
+}
+.num-tick {
+	animation: num-tick 0.7s ease both;
+}
+
+/* Recharts overrides — theme-aware via CSS variables */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+	stroke: var(--line);
+	stroke-dasharray: 2 4;
+	opacity: 0.5;
+}
+.recharts-text {
+	fill: var(--fg-dim);
+	font-size: 10px;
+	letter-spacing: 0.05em;
+}
+.recharts-tooltip-wrapper {
+	outline: none;
+}

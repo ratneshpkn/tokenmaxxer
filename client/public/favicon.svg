@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Cutout mask to create a clean, sharp gap around the overlapping Sky square -->
+    <mask id="cutout">
+      <!-- Everything white remains visible -->
+      <rect width="512" height="512" fill="white" />
+      <!-- The cutout shape is black (making it transparent on the layer below) -->
+      <!-- Positioned at 222 - 12 = 210, size 200 + 24 = 224, sharp corners -->
+      <rect x="210" y="78" width="224" height="224" fill="black" />
+    </mask>
+  </defs>
+
+  <style>
+    :root {
+      /* Flat colors for Light theme (high contrast, slightly deeper tones) */
+      --amber-color: hsl(28, 100%, 48%);
+      --sky-color: hsl(199, 89%, 40%);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* Flat colors for Dark theme (vibrant, neon colors that pop on dark browser tabs) */
+        --amber-color: hsl(28, 100%, 56%);
+        --sky-color: hsl(199, 89%, 65%);
+      }
+    }
+
+    .amber-square {
+      fill: var(--amber-color);
+    }
+
+    .sky-square {
+      fill: var(--sky-color);
+    }
+  </style>
+
+  <!-- Bottom-Left Square (Amber / Anthropic / Claude Code) -->
+  <!-- Applied the cutout mask to create a floating 12px gap -->
+  <rect class="amber-square" x="90" y="222" width="200" height="200" mask="url(#cutout)" />
+
+  <!-- Top-Right Square (Sky / Cursor) -->
+  <rect class="sky-square" x="222" y="90" width="200" height="200" />
+</svg>

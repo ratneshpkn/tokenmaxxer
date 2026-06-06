@@ -1,0 +1,61 @@
+# Production-style local stack: runs the baked `prod` image (no source bind mount,
+# no hot reload). Use this to smoke-test what will actually be deployed.
+#
+#   docker compose -f docker-compose.prod.yml up --build
+#
+# Same Postgres + migrate + app shape as dev, but the migrate and app services use
+# the multi-stage Dockerfile's `prod` target.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tokenmaxxer
+      POSTGRES_PASSWORD: tokenmaxxer
+      POSTGRES_DB: tokenmaxxer
+    volumes:
+      - pgdata-prod:/var/lib/postgresql/data
+    ports:
+      - "5439:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tokenmaxxer -d tokenmaxxer"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: tokenmaxxer:prod
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://tokenmaxxer:tokenmaxxer@postgres:5432/tokenmaxxer
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Apply the generated SQL migration(s), then idempotently ensure the
+    # app_config singleton and import any .env values that haven't been
+    # written through the setup wizard yet.
+    command: sh -c "bun run db:migrate && bun run bootstrap"
+
+
+  app:
+    image: tokenmaxxer:prod
+    build:
+      context: .
+      target: prod
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://tokenmaxxer:tokenmaxxer@postgres:5432/tokenmaxxer
+    ports:
+      - "3003:3003"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: bun run server/index.ts
+    restart: unless-stopped
+
+volumes:
+  pgdata-prod:
