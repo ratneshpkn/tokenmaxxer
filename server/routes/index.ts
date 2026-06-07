@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
 import { loadConfig } from "../lib/config"
+import { registerAdminConfigRoutes } from "./admin-config"
 import { registerAlertRoutes } from "./alerts"
 import { registerAuthPasswordRoutes } from "./auth-password"
 import { registerDashboardRoutes } from "./dashboard"
@@ -56,4 +57,5 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 	registerSyncRoutes(app)
 	registerInvitationRoutes(app)
 	registerSetupRoutes(app)
+	registerAdminConfigRoutes(app)
 }

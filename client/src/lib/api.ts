@@ -1,4 +1,6 @@
 import type {
+	AdminConfigPatch,
+	AdminConfigResponse,
 	AlertItem,
 	AuthResponse,
 	ConfigResponse,
@@ -37,6 +39,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
 	config: () => request<ConfigResponse>("/api/config"),
+	adminConfig: () => request<AdminConfigResponse>("/api/admin/config"),
+	updateAdminConfig: (payload: AdminConfigPatch) =>
+		request<{ ok: true }>("/api/admin/config", {
+			method: "PUT",
+			body: JSON.stringify(payload),
+		}),
 	me: () => request<MeResponse>("/api/auth/me"),
 	logout: () => request<{ ok: true }>("/api/auth/logout", { method: "POST" }),
 

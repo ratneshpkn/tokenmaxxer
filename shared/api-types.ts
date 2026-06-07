@@ -19,6 +19,34 @@ export interface ConfigResponse {
 	bootstrapNeeded: boolean
 }
 
+export interface AdminConfigResponse {
+	orgName: string
+	allowedEmailDomain: string | null
+	openSignupEnabled: boolean
+	googleOauthEnabled: boolean
+	googleClientId: string | null
+	googleOauthRedirectUri: string | null
+	slackChannelId: string | null
+	anthropicAdminApiKeySet: boolean
+	cursorAdminApiKeySet: boolean
+	slackBotTokenSet: boolean
+	googleClientSecretSet: boolean
+}
+
+export interface AdminConfigPatch {
+	orgName?: string
+	allowedEmailDomain?: string | null
+	openSignupEnabled?: boolean
+	googleOauthEnabled?: boolean
+	googleClientId?: string | null
+	googleClientSecret?: string | null
+	googleOauthRedirectUri?: string | null
+	anthropicAdminApiKey?: string | null
+	cursorAdminApiKey?: string | null
+	slackBotToken?: string | null
+	slackChannelId?: string | null
+}
+
 export interface MeResponse {
 	id: string
 	email: string

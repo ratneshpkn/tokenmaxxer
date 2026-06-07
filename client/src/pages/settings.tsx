@@ -1,5 +1,7 @@
+import type { AdminConfigPatch } from "@shared/api-types"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { Edit2 } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,6 +17,77 @@ import { api } from "@/lib/api"
 import { platformLabel } from "@/lib/platform"
 import { formatCents, formatDate } from "@/lib/utils"
 
+type ValidationState = "idle" | "checking" | "ok" | "bad"
+
+function useDebouncedValidation(
+	value: string,
+	provider: "anthropic" | "cursor" | "slack",
+	slackChannel?: string,
+	delay = 500,
+): { state: ValidationState; error: string | null } {
+	const [state, setState] = useState<ValidationState>("idle")
+	const [error, setError] = useState<string | null>(null)
+	const acRef = useRef<AbortController | null>(null)
+	const lastFingerprintRef = useRef<string>("")
+
+	useEffect(() => {
+		const fp = value.slice(-4)
+		if (!value || value.length < 8) {
+			setState("idle")
+			setError(null)
+			return
+		}
+		if (fp === lastFingerprintRef.current) return
+		setState("checking")
+		setError(null)
+
+		const t = setTimeout(async () => {
+			acRef.current?.abort()
+			const ac = new AbortController()
+			acRef.current = ac
+			try {
+				const body: Record<string, string> = { provider, key: value }
+				if (provider === "slack" && slackChannel) {
+					body.channelId = slackChannel
+				}
+				const r = await fetch("/api/setup/validate-key", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					credentials: "include",
+					body: JSON.stringify(body),
+					signal: ac.signal,
+				})
+				const res = await r.json()
+				if (ac.signal.aborted) return
+				if (res.ok) {
+					setState("ok")
+					setError(null)
+					lastFingerprintRef.current = fp
+				} else {
+					setState("bad")
+					setError(res.error ?? "Invalid")
+				}
+			} catch (err) {
+				if (ac.signal.aborted) return
+				setState("bad")
+				setError(err instanceof Error ? err.message : String(err))
+			}
+		}, delay)
+
+		return () => clearTimeout(t)
+	}, [value, provider, slackChannel, delay])
+
+	return { state, error }
+}
+
+function StatusPip({ state }: { state: ValidationState }): React.JSX.Element | null {
+	if (state === "idle") return null
+	if (state === "checking")
+		return <span className="text-[10px] tracked text-fg-dim">⏳ CHECKING…</span>
+	if (state === "ok") return <span className="text-[10px] tracked text-mint">✓ VALID</span>
+	return <span className="text-[10px] tracked text-amber-hot">✗ INVALID</span>
+}
+
 export function SettingsPage(): React.JSX.Element {
 	const qc = useQueryClient()
 	const { data: thresholds } = useQuery({
@@ -29,7 +102,10 @@ export function SettingsPage(): React.JSX.Element {
 			return data.some((r) => r.status === "running") ? 2000 : false
 		},
 	})
-	const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: api.config })
+	const { data: adminCfg } = useQuery({
+		queryKey: ["admin.config"],
+		queryFn: api.adminConfig,
+	})
 	const { data: invites = [] } = useQuery({
 		queryKey: ["invitations"],
 		queryFn: api.invitations.list,
@@ -84,31 +160,598 @@ export function SettingsPage(): React.JSX.Element {
 		running: "text-amber",
 	}
 
+	// Edit mode state
+	const [editingSection, setEditingSection] = useState<"org" | "oauth" | "creds" | null>(null)
+
+	// Admin configuration form state
+	const [orgName, setOrgName] = useState("")
+	const [allowedDomain, setAllowedDomain] = useState("")
+	const [openSignup, setOpenSignup] = useState(false)
+	const [googleOauthEnabled, setGoogleOauthEnabled] = useState(false)
+	const [googleClientId, setGoogleClientId] = useState("")
+	const [googleClientSecret, setGoogleClientSecret] = useState("")
+	const [googleOauthRedirectUri, setGoogleOauthRedirectUri] = useState("")
+	const [anthropicKey, setAnthropicKey] = useState("")
+	const [cursorKey, setCursorKey] = useState("")
+	const [slackToken, setSlackToken] = useState("")
+	const [slackChannel, setSlackChannel] = useState("")
+
+	const [clearSlackToken, setClearSlackToken] = useState(false)
+	const [clearGoogleSecret, setClearGoogleSecret] = useState(false)
+
+	const hasInitialized = useRef(false)
+
+	useEffect(() => {
+		if (adminCfg && !hasInitialized.current) {
+			setOrgName(adminCfg.orgName || "")
+			setAllowedDomain(adminCfg.allowedEmailDomain || "")
+			setOpenSignup(adminCfg.openSignupEnabled || false)
+			setGoogleOauthEnabled(adminCfg.googleOauthEnabled || false)
+			setGoogleClientId(adminCfg.googleClientId || "")
+			setGoogleClientSecret("")
+			setGoogleOauthRedirectUri(adminCfg.googleOauthRedirectUri || "")
+			setAnthropicKey("")
+			setCursorKey("")
+			setSlackToken("")
+			setSlackChannel(adminCfg.slackChannelId || "")
+			setClearSlackToken(false)
+			setClearGoogleSecret(false)
+			hasInitialized.current = true
+		}
+	}, [adminCfg])
+
+	// Debounced key validations
+	const anthropicVal = useDebouncedValidation(anthropicKey, "anthropic")
+	const cursorVal = useDebouncedValidation(cursorKey, "cursor")
+	const slackVal = useDebouncedValidation(slackToken, "slack", slackChannel || undefined)
+
+	const handleCancel = (section: "org" | "oauth" | "creds") => {
+		if (adminCfg) {
+			if (section === "org") {
+				setOrgName(adminCfg.orgName || "")
+				setAllowedDomain(adminCfg.allowedEmailDomain || "")
+				setOpenSignup(adminCfg.openSignupEnabled || false)
+			} else if (section === "oauth") {
+				setGoogleOauthEnabled(adminCfg.googleOauthEnabled || false)
+				setGoogleClientId(adminCfg.googleClientId || "")
+				setGoogleClientSecret("")
+				setGoogleOauthRedirectUri(adminCfg.googleOauthRedirectUri || "")
+				setClearGoogleSecret(false)
+			} else if (section === "creds") {
+				setAnthropicKey("")
+				setCursorKey("")
+				setSlackToken("")
+				setSlackChannel(adminCfg.slackChannelId || "")
+				setClearSlackToken(false)
+			}
+		}
+		setEditingSection(null)
+	}
+
+	const updateConfig = useMutation({
+		mutationFn: async (section: "org" | "oauth" | "creds") => {
+			const payload: AdminConfigPatch = {}
+			if (section === "org") {
+				if (orgName !== adminCfg?.orgName) payload.orgName = orgName
+				if (allowedDomain !== (adminCfg?.allowedEmailDomain || "")) {
+					payload.allowedEmailDomain = allowedDomain.trim() || null
+				}
+				if (openSignup !== adminCfg?.openSignupEnabled) {
+					payload.openSignupEnabled = openSignup
+				}
+			} else if (section === "oauth") {
+				if (googleOauthEnabled !== adminCfg?.googleOauthEnabled) {
+					payload.googleOauthEnabled = googleOauthEnabled
+				}
+				if (googleClientId !== (adminCfg?.googleClientId || "")) {
+					payload.googleClientId = googleClientId.trim() || null
+				}
+				if (googleOauthRedirectUri !== (adminCfg?.googleOauthRedirectUri || "")) {
+					payload.googleOauthRedirectUri = googleOauthRedirectUri.trim() || null
+				}
+				if (clearGoogleSecret) {
+					payload.googleClientSecret = ""
+				} else if (googleClientSecret) {
+					payload.googleClientSecret = googleClientSecret
+				}
+			} else if (section === "creds") {
+				if (anthropicKey) payload.anthropicAdminApiKey = anthropicKey
+				if (cursorKey) payload.cursorAdminApiKey = cursorKey
+				if (clearSlackToken) {
+					payload.slackBotToken = ""
+				} else if (slackToken) {
+					payload.slackBotToken = slackToken
+				}
+				if (slackChannel !== (adminCfg?.slackChannelId || "")) {
+					payload.slackChannelId = slackChannel.trim() || null
+				}
+			}
+
+			return api.updateAdminConfig(payload)
+		},
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ["admin.config"] })
+			qc.invalidateQueries({ queryKey: ["config"] })
+			alert("Workspace configuration updated successfully.")
+			setAnthropicKey("")
+			setCursorKey("")
+			setSlackToken("")
+			setGoogleClientSecret("")
+			setClearSlackToken(false)
+			setClearGoogleSecret(false)
+			setEditingSection(null)
+		},
+		onError: (err: Error) => {
+			alert(`Failed to update configuration:\n${err.message}`)
+		},
+	})
+
 	return (
 		<div className="space-y-8 fade-rise">
-			{/* Organization */}
+			{/* Workspace Configuration */}
 			<section className="panel">
-				<div className="px-5 py-3 border-b border-line">
-					<span className="text-[11px] tracked text-fg">ORGANIZATION</span>
+				<div className="px-5 py-3 border-b border-line flex justify-between items-center">
+					<span className="text-[11px] tracked text-fg">WORKSPACE CONFIGURATION</span>
+					{updateConfig.isPending && (
+						<span className="text-[10px] tracked text-amber">⏳ SAVING CHANGES…</span>
+					)}
 				</div>
-				<div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div className="p-5 space-y-6">
+					{/* Section 1: Org Details */}
 					<div>
-						<Label className="text-[10px] tracked text-fg-dim">ORG NAME</Label>
-						<p className="mt-1 text-fg">{cfg?.orgName || "—"}</p>
+						<div className="flex justify-between items-center mb-3">
+							<div className="text-[10px] tracked text-amber">/ 01 · ORGANIZATION</div>
+							{editingSection === null && (
+								<button
+									type="button"
+									onClick={() => setEditingSection("org")}
+									className="flex items-center gap-1.5 text-[9px] tracked text-fg-dim hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
+									title="Edit Organization Details"
+								>
+									<Edit2 className="h-2.5 w-2.5" strokeWidth={1.5} />
+									EDIT
+								</button>
+							)}
+						</div>
+
+						{editingSection !== "org" ? (
+							/* Read-Only Org Details */
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">ORG NAME</Label>
+									<p className="mt-1 text-fg text-sm">{adminCfg?.orgName || "—"}</p>
+								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">ALLOWED EMAIL DOMAIN</Label>
+									<p className="mt-1 text-fg text-sm">{adminCfg?.allowedEmailDomain || "Any"}</p>
+								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">SELF-SIGNUP</Label>
+									<p className="mt-1 text-fg text-sm">
+										{adminCfg?.openSignupEnabled ? "Enabled (domain-gated)" : "Invite-only"}
+									</p>
+								</div>
+							</div>
+						) : (
+							/* Edit Org Details */
+							<div className="space-y-4">
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<Label htmlFor="orgName" className="text-[10px] tracked text-fg-dim">
+											ORG NAME
+										</Label>
+										<Input
+											id="orgName"
+											value={orgName}
+											onChange={(e) => setOrgName(e.target.value)}
+											placeholder="Acme Corp"
+											className="mt-1"
+										/>
+									</div>
+									<div>
+										<Label htmlFor="domain" className="text-[10px] tracked text-fg-dim">
+											ALLOWED EMAIL DOMAIN (OPTIONAL)
+										</Label>
+										<Input
+											id="domain"
+											value={allowedDomain}
+											onChange={(e) => setAllowedDomain(e.target.value)}
+											placeholder="acme.com"
+											className="mt-1"
+										/>
+									</div>
+									<div>
+										<Label className="text-[10px] tracked text-fg-dim">SELF-SIGNUP</Label>
+										<label className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none cursor-pointer">
+											<input
+												type="checkbox"
+												checked={openSignup}
+												onChange={(e) => setOpenSignup(e.target.checked)}
+											/>
+											<span>
+												Allow self-signup for{" "}
+												{allowedDomain ? `@${allowedDomain}` : "the allowed domain"} addresses
+											</span>
+										</label>
+									</div>
+								</div>
+								<div className="flex justify-end gap-2 pt-2">
+									<button
+										type="button"
+										onClick={() => handleCancel("org")}
+										className="text-xs px-3 h-7 text-fg-dim hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
+									>
+										CANCEL
+									</button>
+									<Button
+										onClick={() => updateConfig.mutate("org")}
+										disabled={updateConfig.isPending || orgName.trim().length === 0}
+										className="h-7 px-3 text-xs"
+									>
+										SAVE
+									</Button>
+								</div>
+							</div>
+						)}
 					</div>
+
+					<hr className="border-line" />
+
+					{/* Section 2: Google OAuth */}
 					<div>
-						<Label className="text-[10px] tracked text-fg-dim">ALLOWED DOMAIN</Label>
-						<p className="mt-1 text-fg">{cfg?.allowedEmailDomain || "Any"}</p>
+						<div className="flex justify-between items-center mb-3">
+							<div className="text-[10px] tracked text-amber">/ 02 · GOOGLE OAUTH</div>
+							{editingSection === null && (
+								<button
+									type="button"
+									onClick={() => setEditingSection("oauth")}
+									className="flex items-center gap-1.5 text-[9px] tracked text-fg-dim hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
+									title="Edit Google OAuth Configuration"
+								>
+									<Edit2 className="h-2.5 w-2.5" strokeWidth={1.5} />
+									EDIT
+								</button>
+							)}
+						</div>
+
+						{editingSection !== "oauth" ? (
+							/* Read-Only Google OAuth */
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">STATUS</Label>
+									<p className="mt-1 text-fg text-sm">
+										{adminCfg?.googleOauthEnabled ? "Enabled" : "Disabled"}
+									</p>
+								</div>
+								{adminCfg?.googleOauthEnabled && (
+									<>
+										<div>
+											<Label className="text-[10px] tracked text-fg-dim">CLIENT ID</Label>
+											<p className="mt-1 text-fg text-sm font-mono truncate max-w-xs">
+												{adminCfg?.googleClientId || "—"}
+											</p>
+										</div>
+										<div>
+											<Label className="text-[10px] tracked text-fg-dim">CLIENT SECRET</Label>
+											<p className="mt-1 text-fg text-sm font-mono">
+												{adminCfg?.googleClientSecretSet
+													? "•••••••••••• (configured)"
+													: "Not configured"}
+											</p>
+										</div>
+										<div>
+											<Label className="text-[10px] tracked text-fg-dim">REDIRECT URI</Label>
+											<p className="mt-1 text-fg text-sm font-mono truncate max-w-xs">
+												{adminCfg?.googleOauthRedirectUri || "—"}
+											</p>
+										</div>
+									</>
+								)}
+							</div>
+						) : (
+							/* Edit Google OAuth */
+							<div className="space-y-4">
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<Label className="text-[10px] tracked text-fg-dim">STATUS</Label>
+										<label className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none cursor-pointer">
+											<input
+												type="checkbox"
+												checked={googleOauthEnabled}
+												onChange={(e) => setGoogleOauthEnabled(e.target.checked)}
+											/>
+											<span>Enable Google OAuth login</span>
+										</label>
+									</div>
+
+									{googleOauthEnabled && (
+										<>
+											<div>
+												<Label htmlFor="googleClientId" className="text-[10px] tracked text-fg-dim">
+													GOOGLE CLIENT ID
+												</Label>
+												<Input
+													id="googleClientId"
+													value={googleClientId}
+													onChange={(e) => setGoogleClientId(e.target.value)}
+													placeholder="12345678-abc.apps.googleusercontent.com"
+													className="mt-1"
+												/>
+											</div>
+											<div>
+												<div className="flex items-center justify-between mb-1">
+													<Label
+														htmlFor="googleClientSecret"
+														className="text-[10px] tracked text-fg-dim"
+													>
+														GOOGLE CLIENT SECRET
+													</Label>
+													<div className="flex items-center gap-2">
+														{adminCfg?.googleClientSecretSet && !clearGoogleSecret && (
+															<button
+																type="button"
+																onClick={() => setClearGoogleSecret(true)}
+																className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+															>
+																[Clear Secret]
+															</button>
+														)}
+														{clearGoogleSecret && (
+															<button
+																type="button"
+																onClick={() => setClearGoogleSecret(false)}
+																className="text-[9px] text-mint uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+															>
+																[Undo Clear]
+															</button>
+														)}
+													</div>
+												</div>
+												<Input
+													id="googleClientSecret"
+													value={googleClientSecret}
+													onChange={(e) => {
+														setGoogleClientSecret(e.target.value)
+														if (clearGoogleSecret) setClearGoogleSecret(false)
+													}}
+													placeholder={
+														clearGoogleSecret
+															? "Cleared (will save on Save)"
+															: adminCfg?.googleClientSecretSet
+																? "•••••••••••• (configured)"
+																: "Enter client secret"
+													}
+													type="password"
+													disabled={clearGoogleSecret}
+												/>
+											</div>
+											<div>
+												<Label
+													htmlFor="googleOauthRedirectUri"
+													className="text-[10px] tracked text-fg-dim"
+												>
+													REDIRECT URI
+												</Label>
+												<Input
+													id="googleOauthRedirectUri"
+													value={googleOauthRedirectUri}
+													onChange={(e) => setGoogleOauthRedirectUri(e.target.value)}
+													placeholder="https://your-domain.com/api/auth/google/callback"
+													className="mt-1"
+												/>
+											</div>
+										</>
+									)}
+								</div>
+								<div className="flex justify-end gap-2 pt-2">
+									<button
+										type="button"
+										onClick={() => handleCancel("oauth")}
+										className="text-xs px-3 h-7 text-fg-dim hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
+									>
+										CANCEL
+									</button>
+									<Button
+										onClick={() => updateConfig.mutate("oauth")}
+										disabled={updateConfig.isPending}
+										className="h-7 px-3 text-xs"
+									>
+										SAVE
+									</Button>
+								</div>
+							</div>
+						)}
 					</div>
+
+					<hr className="border-line" />
+
+					{/* Section 3: Credentials & API Keys */}
 					<div>
-						<Label className="text-[10px] tracked text-fg-dim">GOOGLE OAUTH</Label>
-						<p className="mt-1 text-fg">{cfg?.googleOauthEnabled ? "Enabled" : "Disabled"}</p>
-					</div>
-					<div>
-						<Label className="text-[10px] tracked text-fg-dim">SELF-SIGNUP</Label>
-						<p className="mt-1 text-fg">
-							{cfg?.openSignupEnabled ? "Enabled (domain-gated)" : "Invite-only"}
-						</p>
+						<div className="flex justify-between items-center mb-3">
+							<div className="text-[10px] tracked text-amber">/ 03 · CREDENTIALS & API KEYS</div>
+							{editingSection === null && (
+								<button
+									type="button"
+									onClick={() => setEditingSection("creds")}
+									className="flex items-center gap-1.5 text-[9px] tracked text-fg-dim hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
+									title="Edit Credentials & API Keys"
+								>
+									<Edit2 className="h-2.5 w-2.5" strokeWidth={1.5} />
+									EDIT
+								</button>
+							)}
+						</div>
+
+						{editingSection !== "creds" ? (
+							/* Read-Only Credentials & API Keys */
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">ANTHROPIC ADMIN API KEY</Label>
+									<p className="mt-1 text-fg text-sm font-mono">
+										{adminCfg?.anthropicAdminApiKeySet
+											? "•••••••••••• (configured)"
+											: "Not configured"}
+									</p>
+								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">CURSOR ADMIN API KEY</Label>
+									<p className="mt-1 text-fg text-sm font-mono">
+										{adminCfg?.cursorAdminApiKeySet
+											? "•••••••••••• (configured)"
+											: "Not configured"}
+									</p>
+								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">SLACK BOT TOKEN</Label>
+									<p className="mt-1 text-fg text-sm font-mono">
+										{adminCfg?.slackBotTokenSet ? "•••••••••••• (configured)" : "Not configured"}
+									</p>
+								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">SLACK CHANNEL ID</Label>
+									<p className="mt-1 text-fg text-sm font-mono">
+										{adminCfg?.slackChannelId || "—"}
+									</p>
+								</div>
+							</div>
+						) : (
+							/* Edit Credentials & API Keys */
+							<div className="space-y-4">
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<div className="flex items-center justify-between mb-1">
+											<Label htmlFor="anthropic" className="text-[10px] tracked text-fg-dim">
+												ANTHROPIC ADMIN API KEY
+											</Label>
+											<StatusPip state={anthropicVal.state} />
+										</div>
+										<Input
+											id="anthropic"
+											value={anthropicKey}
+											onChange={(e) => setAnthropicKey(e.target.value)}
+											placeholder={
+												adminCfg?.anthropicAdminApiKeySet
+													? "•••••••••••• (configured)"
+													: "Enter Anthropic admin key"
+											}
+											type="password"
+										/>
+										{anthropicVal.error ? (
+											<p className="text-[10px] text-amber-hot mt-1">{anthropicVal.error}</p>
+										) : null}
+									</div>
+
+									<div>
+										<div className="flex items-center justify-between mb-1">
+											<Label htmlFor="cursor" className="text-[10px] tracked text-fg-dim">
+												CURSOR ADMIN API KEY
+											</Label>
+											<StatusPip state={cursorVal.state} />
+										</div>
+										<Input
+											id="cursor"
+											value={cursorKey}
+											onChange={(e) => setCursorKey(e.target.value)}
+											placeholder={
+												adminCfg?.cursorAdminApiKeySet
+													? "•••••••••••• (configured)"
+													: "Enter Cursor admin key"
+											}
+											type="password"
+										/>
+										{cursorVal.error ? (
+											<p className="text-[10px] text-amber-hot mt-1">{cursorVal.error}</p>
+										) : null}
+									</div>
+
+									<div>
+										<div className="flex items-center justify-between mb-1">
+											<Label htmlFor="slackToken" className="text-[10px] tracked text-fg-dim">
+												SLACK BOT TOKEN
+											</Label>
+											<div className="flex items-center gap-2">
+												{adminCfg?.slackBotTokenSet && !clearSlackToken && (
+													<button
+														type="button"
+														onClick={() => setClearSlackToken(true)}
+														className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+													>
+														[Clear Token]
+													</button>
+												)}
+												{clearSlackToken && (
+													<button
+														type="button"
+														onClick={() => setClearSlackToken(false)}
+														className="text-[9px] text-mint uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+													>
+														[Undo Clear]
+													</button>
+												)}
+												<StatusPip state={slackVal.state} />
+											</div>
+										</div>
+										<Input
+											id="slackToken"
+											value={slackToken}
+											onChange={(e) => {
+												setSlackToken(e.target.value)
+												if (clearSlackToken) setClearSlackToken(false)
+											}}
+											placeholder={
+												clearSlackToken
+													? "Cleared (will save on Save)"
+													: adminCfg?.slackBotTokenSet
+														? "•••••••••••• (configured)"
+														: "xoxb-..."
+											}
+											type="password"
+											disabled={clearSlackToken}
+										/>
+										{slackVal.error ? (
+											<p className="text-[10px] text-amber-hot mt-1">{slackVal.error}</p>
+										) : null}
+									</div>
+
+									<div>
+										<Label htmlFor="slackChannel" className="text-[10px] tracked text-fg-dim">
+											SLACK CHANNEL ID
+										</Label>
+										<Input
+											id="slackChannel"
+											value={slackChannel}
+											onChange={(e) => setSlackChannel(e.target.value)}
+											placeholder="C0XXXXXXX"
+											className="mt-1"
+										/>
+									</div>
+								</div>
+								<div className="flex justify-end gap-2 pt-2">
+									<button
+										type="button"
+										onClick={() => handleCancel("creds")}
+										className="text-xs px-3 h-7 text-fg-dim hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
+									>
+										CANCEL
+									</button>
+									<Button
+										onClick={() => updateConfig.mutate("creds")}
+										disabled={
+											updateConfig.isPending ||
+											anthropicVal.state === "checking" ||
+											anthropicVal.state === "bad" ||
+											cursorVal.state === "checking" ||
+											cursorVal.state === "bad" ||
+											slackVal.state === "checking" ||
+											slackVal.state === "bad"
+										}
+										className="h-7 px-3 text-xs"
+									>
+										SAVE
+									</Button>
+								</div>
+							</div>
+						)}
 					</div>
 				</div>
 			</section>
