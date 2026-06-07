@@ -148,8 +148,8 @@ export async function runAnthropicSync(
 			// lose earlier days.
 			const MESSAGES_WINDOW_DAYS = 30
 			const dayMs = 24 * 60 * 60 * 1000
-			const rangeStart = new Date(`${fromDay}T00:00:00Z`).getTime()
-			const rangeEnd = new Date(`${toDay}T00:00:00Z`).getTime() + dayMs // exclusive
+			const rangeStart = new Date(`${fromDay}T00:00:00Z`).getTime() - dayMs
+			const rangeEnd = new Date(`${toDay}T00:00:00Z`).getTime() + 2 * dayMs // exclusive
 			// Wrapped non-fatal: if messages pull fails mid-stream, phases 3+4 still
 			// run against whatever was committed, and the next sync will refresh.
 			try {

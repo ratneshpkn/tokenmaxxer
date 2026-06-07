@@ -1,4 +1,5 @@
 import { cursorMembers, cursorSpendSnapshots, dailyCursorUsage, trackedUsers } from "@shared/schema"
+import { sql } from "drizzle-orm"
 import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
 import { CursorAdminClient, dateRangeToEpochMs } from "../lib/cursor-admin"
@@ -195,12 +196,12 @@ export async function runCursorSync(
 					.onConflictDoUpdate({
 						target: [dailyCursorUsage.date, dailyCursorUsage.email, dailyCursorUsage.model],
 						set: {
-							inputTokens: dailyCursorUsage.inputTokens,
-							outputTokens: dailyCursorUsage.outputTokens,
-							cacheReadTokens: dailyCursorUsage.cacheReadTokens,
-							cacheWriteTokens: dailyCursorUsage.cacheWriteTokens,
-							chargedCents: dailyCursorUsage.chargedCents,
-							requestCount: dailyCursorUsage.requestCount,
+							inputTokens: sql`excluded.input_tokens`,
+							outputTokens: sql`excluded.output_tokens`,
+							cacheReadTokens: sql`excluded.cache_read_tokens`,
+							cacheWriteTokens: sql`excluded.cache_write_tokens`,
+							chargedCents: sql`excluded.charged_cents`,
+							requestCount: sql`excluded.request_count`,
 							syncedAt: new Date(),
 						},
 					})

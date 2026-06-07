@@ -229,7 +229,8 @@ export class CursorAdminClient {
 
 /** Returns [startEpochMs, endEpochMs] for the inclusive UTC date range. */
 export function dateRangeToEpochMs(startYmd: string, endYmd: string): [number, number] {
-	const start = new Date(`${startYmd}T00:00:00Z`).getTime()
-	const end = new Date(`${endYmd}T23:59:59Z`).getTime()
+	const dayMs = 24 * 60 * 60 * 1000
+	const start = new Date(`${startYmd}T00:00:00Z`).getTime() - dayMs
+	const end = new Date(`${endYmd}T23:59:59Z`).getTime() + dayMs
 	return [start, end]
 }
