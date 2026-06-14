@@ -61,6 +61,11 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 			cu_tokens: number
 			cc_users: number
 			cu_users: number
+			gh_prs_opened: number
+			gh_prs_merged: number
+			gh_additions: number
+			gh_deletions: number
+			gh_users: number
 			open_alerts: number
 		}>(sql`
       select
@@ -78,6 +83,16 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
           where date between ${effFrom} and ${effTo}) as cc_users,
         (select count(distinct email)::int from daily_cursor_usage
           where date between ${effFrom} and ${effTo}) as cu_users,
+        (select coalesce(sum(prs_opened),0)::bigint from daily_github_activity
+          where date between ${effFrom} and ${effTo}) as gh_prs_opened,
+        (select coalesce(sum(prs_merged),0)::bigint from daily_github_activity
+          where date between ${effFrom} and ${effTo}) as gh_prs_merged,
+        (select coalesce(sum(additions),0)::bigint from daily_github_activity
+          where date between ${effFrom} and ${effTo}) as gh_additions,
+        (select coalesce(sum(deletions),0)::bigint from daily_github_activity
+          where date between ${effFrom} and ${effTo}) as gh_deletions,
+        (select count(distinct email)::int from daily_github_activity
+          where date between ${effFrom} and ${effTo}) as gh_users,
         (select count(*)::int from alerts where status = 'open') as open_alerts
     `)
 
@@ -100,7 +115,10 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
                coalesce((select sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens)
                            from daily_claude_code_attribution where date = dates.d),0)::bigint as claude_code_tokens,
                coalesce((select sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens)
-                           from daily_cursor_usage where date = dates.d),0)::bigint as cursor_tokens
+                           from daily_cursor_usage where date = dates.d),0)::bigint as cursor_tokens,
+               coalesce((select sum(prs_merged) from daily_github_activity where date = dates.d),0)::bigint as gh_prs_merged,
+               coalesce((select sum(additions) from daily_github_activity where date = dates.d),0)::bigint as gh_additions,
+               coalesce((select sum(deletions) from daily_github_activity where date = dates.d),0)::bigint as gh_deletions
           from dates
          order by date asc
       `)
@@ -129,7 +147,16 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
                coalesce((select sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens)
                            from daily_cursor_usage
                           where date between weeks.wk and weeks.wk + 6
-                            and date between ${effFrom} and ${effTo}),0)::bigint as cursor_tokens
+                            and date between ${effFrom} and ${effTo}),0)::bigint as cursor_tokens,
+               coalesce((select sum(prs_merged) from daily_github_activity
+                          where date between weeks.wk and weeks.wk + 6
+                            and date between ${effFrom} and ${effTo}),0)::bigint as gh_prs_merged,
+               coalesce((select sum(additions) from daily_github_activity
+                          where date between weeks.wk and weeks.wk + 6
+                            and date between ${effFrom} and ${effTo}),0)::bigint as gh_additions,
+               coalesce((select sum(deletions) from daily_github_activity
+                          where date between weeks.wk and weeks.wk + 6
+                            and date between ${effFrom} and ${effTo}),0)::bigint as gh_deletions
           from weeks
          order by date asc
       `)
@@ -138,17 +165,27 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 
 		const totalsRow: Record<string, unknown> | null =
 			(totals.rows?.[0] as Record<string, unknown>) ?? null
-		if (currentRole(c) !== "admin") {
-			if (totalsRow) {
-				totalsRow.cc_cents = null
-				totalsRow.cu_cents = null
-				totalsRow.open_alerts = null
-			}
-			for (const row of trendRows) {
-				;(row as Record<string, unknown>).claude_code_cents = null
-				;(row as Record<string, unknown>).cursor_cents = null
+		if (totalsRow) {
+
+			totalsRow.gh_prs_opened = Number(totalsRow.gh_prs_opened ?? 0)
+			totalsRow.gh_prs_merged = Number(totalsRow.gh_prs_merged ?? 0)
+			totalsRow.gh_additions = Number(totalsRow.gh_additions ?? 0)
+			totalsRow.gh_deletions = Number(totalsRow.gh_deletions ?? 0)
+			totalsRow.gh_users = Number(totalsRow.gh_users ?? 0)
+		}
+
+		for (const row of trendRows) {
+			const r = row as Record<string, unknown>
+
+			r.gh_prs_merged = Number(r.gh_prs_merged ?? 0)
+			r.gh_additions = Number(r.gh_additions ?? 0)
+			r.gh_deletions = Number(r.gh_deletions ?? 0)
+			if (currentRole(c) !== "admin") {
+				r.claude_code_cents = null
+				r.cursor_cents = null
 			}
 		}
+
 		return c.json({ totals: totalsRow, trend: trendRows })
 	})
 
@@ -207,6 +244,16 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
          where date between ${effFrom} and ${effTo}
          group by email
       ),
+      gh as (
+        select email,
+
+               coalesce(sum(prs_merged),0)::bigint as prs_merged,
+               coalesce(sum(additions),0)::bigint as additions,
+               coalesce(sum(deletions),0)::bigint as deletions
+          from daily_github_activity
+         where date between ${effFrom} and ${effTo}
+         group by email
+      ),
       combined as (
         select coalesce(cc.email, cu.email) as email,
                coalesce(cc.cents,0) as cc_cents,
@@ -220,9 +267,14 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
       top as (
         select c.email, tu.name,
                c.cc_cents, c.cu_cents, c.total_cents,
-               c.cc_tokens, c.cu_tokens, c.total_tokens
+               c.cc_tokens, c.cu_tokens, c.total_tokens,
+
+               coalesce(gh.prs_merged, 0)::bigint as gh_prs_merged,
+               coalesce(gh.additions, 0)::bigint as gh_additions,
+               coalesce(gh.deletions, 0)::bigint as gh_deletions
           from combined c
           left join tracked_users tu on tu.email = c.email
+          left join gh on gh.email = c.email
          order by ${orderByInner} desc
          limit ${limit}
       ),
@@ -259,6 +311,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
       select t.email, t.name,
              t.cc_cents, t.cu_cents, t.total_cents,
              t.cc_tokens, t.cu_tokens, t.total_tokens,
+             t.gh_prs_merged, t.gh_additions, t.gh_deletions,
              (select array_agg(cents order by date) from trends tr where tr.email = t.email) as trend_cents,
              (select array_agg(tokens order by date) from trends tr where tr.email = t.email) as trend_tokens
         from top t
@@ -268,6 +321,10 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 		const typed = (result.rows ?? []) as Record<string, unknown>[]
 		typed.forEach((row) => {
 			coerceTrendArrays(row, ["trend_cents", "trend_tokens"])
+
+			row.gh_prs_merged = Number(row.gh_prs_merged ?? 0)
+			row.gh_additions = Number(row.gh_additions ?? 0)
+			row.gh_deletions = Number(row.gh_deletions ?? 0)
 		})
 		stripCostForViewer(typed, c, ["cc_cents", "cu_cents", "total_cents", "trend_cents"])
 		return c.json(typed)

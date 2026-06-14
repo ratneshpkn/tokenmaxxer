@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query"
-import { Share2 } from "lucide-react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Check, Pencil, Share2, X } from "lucide-react"
 import { useState } from "react"
 import {
 	CartesianGrid,
@@ -12,6 +12,7 @@ import {
 } from "recharts"
 import { Link } from "wouter"
 import { ActivityHeatmap } from "@/components/ActivityHeatmap"
+import { GithubHeatmap } from "@/components/GithubHeatmap"
 import { Cost } from "@/components/Cost"
 import { DateRangeBar } from "@/components/DateRangeBar"
 import { FlexCardModal } from "@/components/FlexCardModal"
@@ -47,6 +48,88 @@ function StatBlock({ label, value }: { label: string; value: string }): React.JS
 	)
 }
 
+function EditableField({
+	label,
+	value,
+	onSave,
+	placeholder,
+}: {
+	label: string
+	value: string | null
+	onSave: (value: string | null) => Promise<void>
+	placeholder?: string
+}): React.JSX.Element {
+	const [editing, setEditing] = useState(false)
+	const [draft, setDraft] = useState(value ?? "")
+	const [saving, setSaving] = useState(false)
+
+	const handleSave = async (): Promise<void> => {
+		const trimmed = draft.trim()
+		const newValue = trimmed === "" ? null : trimmed
+		if (newValue === value) {
+			setEditing(false)
+			return
+		}
+		setSaving(true)
+		try {
+			await onSave(newValue)
+			setEditing(false)
+		} finally {
+			setSaving(false)
+		}
+	}
+
+	if (!editing) {
+		return (
+			<button
+				type="button"
+				onClick={() => {
+					setDraft(value ?? "")
+					setEditing(true)
+				}}
+				className="group inline-flex items-center gap-1.5 text-fg-very-dim hover:text-fg-mid transition-colors"
+			>
+				<span>{label}: {value || <span className="italic text-fg-very-dim">not set</span>}</span>
+				<Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+			</button>
+		)
+	}
+
+	return (
+		<span className="inline-flex items-center gap-1">
+			<span className="text-fg-very-dim">{label}:</span>
+			<input
+				type="text"
+				value={draft}
+				onChange={(e) => setDraft(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") handleSave()
+					if (e.key === "Escape") setEditing(false)
+				}}
+				placeholder={placeholder}
+				autoFocus
+				disabled={saving}
+				className="bg-transparent border-b border-fg-dim/40 text-fg text-[10px] tracked font-mono px-1 py-0 w-28 focus:outline-none focus:border-amber"
+			/>
+			<button
+				type="button"
+				onClick={handleSave}
+				disabled={saving}
+				className="text-mint hover:text-fg transition-colors"
+			>
+				<Check className="w-3 h-3" />
+			</button>
+			<button
+				type="button"
+				onClick={() => setEditing(false)}
+				className="text-fg-dim hover:text-rose transition-colors"
+			>
+				<X className="w-3 h-3" />
+			</button>
+		</span>
+	)
+}
+
 export function UserDetailPage({ email }: { email: string }): React.JSX.Element {
 	const [showFlexCard, setShowFlexCard] = useState(false)
 	const [privacyOn] = usePrivacyMode()
@@ -71,13 +154,32 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 		queryKey: ["users.heatmap", email, from, to],
 		queryFn: () => api.users.heatmap(email, from, to),
 	})
+	const githubHeatmapQuery = useQuery({
+		queryKey: ["users.githubHeatmap", email, from, to],
+		queryFn: () => api.users.githubHeatmap(email, from, to),
+	})
 	const isAdmin = me?.role === "admin"
 	const alertsQuery = useQuery({
 		queryKey: ["users.alerts", email],
 		queryFn: () => api.users.alertsByEmail(email, 365, 50),
 		enabled: isAdmin,
 	})
+	const queryClient = useQueryClient()
+	const updateMutation = useMutation({
+		mutationFn: (fields: { githubUsername?: string | null; name?: string | null }) =>
+			api.users.update(email, fields),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["users.detail", email] })
+		},
+	})
 	const usage = usageQuery.data
+
+	const ghDays = githubHeatmapQuery.data ?? []
+	const totalPrsOpened = ghDays.reduce((acc, r) => acc + r.prs_opened, 0)
+	const totalPrsMerged = ghDays.reduce((acc, r) => acc + r.prs_merged, 0)
+	const totalAdditions = ghDays.reduce((acc, r) => acc + (r.additions ?? 0), 0)
+	const totalDeletions = ghDays.reduce((acc, r) => acc + (r.deletions ?? 0), 0)
+	const totalLinesChanged = totalAdditions + totalDeletions
 
 	const ccRows = usage?.claude_code ?? []
 	const cuRows = usage?.cursor ?? []
@@ -106,6 +208,13 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const avgActiveCents = activeDays > 0 ? Math.round(totalHeatCents / activeDays) : 0
 	const avgActiveTokens = activeDays > 0 ? Math.round(totalHeatTokens / activeDays) : 0
 
+	const ghActiveDays = ghDays.filter((d) => d.prs_opened + d.prs_merged + d.additions + d.deletions > 0).length
+	const ghTotalDays = ghDays.length
+	const ghPctActive = ghTotalDays > 0 ? Math.round((ghActiveDays / ghTotalDays) * 100) : 0
+	const ghPeakPRs = ghDays.length > 0 ? Math.max(...ghDays.map((d) => d.prs_opened + d.prs_merged)) : 0
+	const ghTotalPRs = ghDays.reduce((acc, d) => acc + d.prs_opened + d.prs_merged, 0)
+	const ghAvgActivePRs = ghActiveDays > 0 ? Number((ghTotalPRs / ghActiveDays).toFixed(1)) : 0
+
 	return (
 		<div className="space-y-6 fade-rise">
 			<div className="flex items-center justify-between">
@@ -114,8 +223,39 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						◀ ROSTER
 					</Link>
 					<span>/</span>
-					<span className="text-fg">{detail?.name || email}</span>
-					{detail?.name ? <span className="text-fg-very-dim">{email}</span> : null}
+					{isAdmin && detail ? (
+						<>
+							<EditableField
+								label="name"
+								value={detail.name}
+								placeholder="Display name"
+								onSave={async (v) => {
+									await updateMutation.mutateAsync({ name: v })
+								}}
+							/>
+							<span className="text-fg-very-dim">{email}</span>
+						</>
+					) : (
+						<>
+							<span className="text-fg">{detail?.name || email}</span>
+							{detail?.name ? <span className="text-fg-very-dim">{email}</span> : null}
+						</>
+					)}
+					{isAdmin ? (
+						<>
+							<span className="text-fg-very-dim">·</span>
+							<EditableField
+								label="gh"
+								value={detail?.github_username ?? null}
+								placeholder="github-user"
+								onSave={async (v) => {
+									await updateMutation.mutateAsync({ githubUsername: v })
+								}}
+							/>
+						</>
+					) : detail?.github_username ? (
+						<span className="text-fg-very-dim">· gh: {detail.github_username}</span>
+					) : null}
 				</div>
 				<Button
 					variant="outline"
@@ -131,7 +271,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 
 			{/* Headline strip */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">
-				<div className="col-span-12 md:col-span-6 bg-bg p-6">
+				<div className="col-span-12 md:col-span-4 bg-bg p-6">
 					<div className="text-[10px] tracked text-fg-dim mb-3">USER · {winLabel} TOTAL</div>
 					<MetricPair
 						cents={isViewer ? null : totalCents}
@@ -142,7 +282,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 					/>
 				</div>
 
-				<div className="col-span-6 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
+				<div className="col-span-6 md:col-span-2 bg-bg p-6 flex flex-col justify-between">
 					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-amber" /> CLAUDE CODE
 					</div>
@@ -157,7 +297,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 					</div>
 				</div>
 
-				<div className="col-span-6 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
+				<div className="col-span-6 md:col-span-2 bg-bg p-6 flex flex-col justify-between">
 					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-sky" /> CURSOR
 					</div>
@@ -171,14 +311,34 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						/>
 					</div>
 				</div>
+
+				<div className="col-span-12 md:col-span-4 bg-bg p-6 flex flex-col justify-between">
+					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+						<span className="w-1.5 h-1.5 bg-mint" /> GITHUB OUTPUT
+					</div>
+					<div className="grid grid-cols-2 gap-4 mt-2">
+						<div>
+							<div className="text-[10px] tracked text-fg-dim">LINES CHANGED</div>
+							<div className="font-mono text-3xl tabular text-fg leading-none font-medium mt-1">
+								{formatNumber(totalLinesChanged)}
+							</div>
+						</div>
+						<div>
+							<div className="text-[10px] tracked text-fg-dim">PRs OPENED / MERGED</div>
+							<div className="font-mono text-3xl tabular text-fg-mid leading-none mt-1">
+								{totalPrsOpened} / {totalPrsMerged}
+							</div>
+						</div>
+					</div>
+				</div>
 			</section>
 
 			{/* Activity heatmap + stats */}
 			<section className="panel">
 				<div className="px-5 py-3 border-b border-line">
-					<span className="text-[11px] tracked text-fg">ACTIVITY · {winLabel} · PT</span>
+					<span className="text-[11px] tracked text-fg">AI ACTIVITY · {winLabel} · PT</span>
 				</div>
-				<div className="grid grid-cols-1 lg:grid-cols-[minmax(0,max-content)_1fr] divide-y lg:divide-y-0 lg:divide-x divide-line">
+				<div className="grid grid-cols-1 lg:grid-cols-[minmax(0,max-content)_1fr] divide-y lg:divide-y-0 lg:divide-x divide-line border-b border-line">
 					<div
 						className="p-4 overflow-x-auto flex items-center min-h-[190px] min-w-0"
 						style={{ filter: privacyOn && trendMode === "usd" ? "blur(6px)" : undefined }}
@@ -227,6 +387,35 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 										: "—"
 								}
 							/>
+						</div>
+					</div>
+				</div>
+				<div className="px-5 py-3 border-b border-line">
+					<span className="text-[11px] tracked text-fg">GITHUB ACTIVITY · {winLabel}</span>
+				</div>
+				<div className="grid grid-cols-1 lg:grid-cols-[minmax(0,max-content)_1fr] divide-y lg:divide-y-0 lg:divide-x divide-line">
+					<div className="p-4 overflow-x-auto flex items-center min-h-[190px] min-w-0">
+						{githubHeatmapQuery.isLoading ? (
+							<div className="text-xs text-fg-dim">── loading ──</div>
+						) : ghDays.length > 0 ? (
+							<GithubHeatmap days={ghDays} />
+						) : (
+							<div className="text-xs text-fg-dim">── no github activity in window ──</div>
+						)}
+					</div>
+
+					<div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-px bg-line">
+						<div className="p-5 flex flex-col justify-center bg-elev hover:bg-elev2/20 transition-colors duration-150">
+							<StatBlock label="ACTIVE DAYS" value={ghTotalDays > 0 ? String(ghActiveDays) : "—"} />
+						</div>
+						<div className="p-5 flex flex-col justify-center bg-elev hover:bg-elev2/20 transition-colors duration-150">
+							<StatBlock label="% ACTIVE" value={ghTotalDays > 0 ? `${ghPctActive}%` : "—"} />
+						</div>
+						<div className="p-5 flex flex-col justify-center bg-elev hover:bg-elev2/20 transition-colors duration-150">
+							<StatBlock label="PEAK PRs" value={ghActiveDays > 0 ? String(ghPeakPRs) : "—"} />
+						</div>
+						<div className="p-5 flex flex-col justify-center bg-elev hover:bg-elev2/20 transition-colors duration-150">
+							<StatBlock label="AVG PRs / ACTIVE" value={ghActiveDays > 0 ? String(ghAvgActivePRs) : "—"} />
 						</div>
 					</div>
 				</div>

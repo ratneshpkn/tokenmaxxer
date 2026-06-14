@@ -81,10 +81,10 @@ describe("resolvePreset", () => {
 		expect(r.to).toBe("2026-04-28")
 		expect(r.from).toBe("2025-10-31") // yesterday - 179
 	})
-	it("mtd on the 1st of the month returns yesterday only", () => {
+	it("mtd on the 1st of the month returns the full previous month", () => {
 		const MAY_1 = new Date("2026-05-01T12:00:00Z")
 		const r = resolvePreset("mtd", MAY_1)
-		expect(r.from).toBe("2026-04-30")
+		expect(r.from).toBe("2026-04-01")
 		expect(r.to).toBe("2026-04-30")
 	})
 })
@@ -107,8 +107,11 @@ describe("parseSearch", () => {
 		expect(r.from).toBe("2026-04-01")
 		expect(r.to).toBe("2026-04-15")
 	})
-	it("inverted from/to → falls back to 30d default", () => {
-		expect(parseSearch("?from=2026-04-15&to=2026-04-01", NOW).preset).toBe("30d")
+	it("inverted from/to → swaps them", () => {
+		const r = parseSearch("?from=2026-04-15&to=2026-04-01", NOW)
+		expect(r.preset).toBe("custom")
+		expect(r.from).toBe("2026-04-01")
+		expect(r.to).toBe("2026-04-15")
 	})
 	it("?range wins when both are present", () => {
 		const r = parseSearch("?range=7d&from=2026-04-01&to=2026-04-15", NOW)
@@ -119,10 +122,11 @@ describe("parseSearch", () => {
 		expect(r.preset).toBe("custom")
 		expect(r.to).toBe("2026-04-28")
 	})
-	it("from after the clamped to → falls back to 30d", () => {
-		// from is yesterday or later; to is in the future; after clamping to yesterday, from > to.
+	it("from after the clamped to → clamps from to yesterday as well", () => {
 		const r = parseSearch("?from=2026-04-29&to=2030-01-01", NOW)
-		expect(r.preset).toBe("30d")
+		expect(r.preset).toBe("custom")
+		expect(r.from).toBe("2026-04-28")
+		expect(r.to).toBe("2026-04-28")
 	})
 	it("partial (only `from`) → default", () => {
 		expect(parseSearch("?from=2026-04-01", NOW).preset).toBe("30d")

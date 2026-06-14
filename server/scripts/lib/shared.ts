@@ -14,6 +14,20 @@ export function ymd(d: Date, tz = "America/Los_Angeles"): string {
 	return fmt.format(d)
 }
 
+/** Parse any UTC/ISO timestamp and convert it to a local date string (YYYY-MM-DD) */
+export function toLocalDateStr(isoString: string | null | undefined, tz = "America/Los_Angeles"): string {
+	if (!isoString) return ""
+	try {
+		const d = new Date(isoString)
+		if (!isNaN(d.getTime())) {
+			return d.toLocaleDateString("en-CA", { timeZone: tz })
+		}
+	} catch (_err) {
+		// fallback
+	}
+	return isoString.slice(0, 10)
+}
+
 /** Returns yesterday's date as YYYY-MM-DD in the given tz. */
 export function yesterday(tz = "America/Los_Angeles"): string {
 	const now = new Date()

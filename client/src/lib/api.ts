@@ -3,6 +3,7 @@ import type {
 	AdminConfigResponse,
 	AlertItem,
 	AuthResponse,
+	CodeOutputItem,
 	ConfigResponse,
 	CreateInvitationResponse,
 	DashboardSummaryResponse,
@@ -14,9 +15,12 @@ import type {
 	SyncRunItem,
 	ThresholdsResponse,
 	TopSpenderItem,
+	UpdateTrackedUserRequest,
+	UpdateTrackedUserResponse,
 	UsageRow,
 	UserDetailResponse,
 	UserListItem,
+	GithubHeatmapItem,
 } from "@shared/api-types"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -63,10 +67,15 @@ export const api = {
 
 	setup: {
 		status: () => request<{ setupCompleted: boolean }>("/api/setup/status"),
-		validateKey: (provider: "anthropic" | "cursor" | "slack", key: string, channelId?: string) =>
+		validateKey: (
+			provider: "anthropic" | "cursor" | "slack" | "github",
+			key: string,
+			channelId?: string,
+			org?: string,
+		) =>
 			request<{ ok: boolean; error?: string }>("/api/setup/validate-key", {
 				method: "POST",
-				body: JSON.stringify({ provider, key, channelId }),
+				body: JSON.stringify({ provider, key, channelId, org }),
 			}),
 		save: (payload: SetupSavePayload) =>
 			request<{ ok: true }>("/api/setup", {
@@ -130,10 +139,23 @@ export const api = {
 			request<HeatmapItem[]>(
 				`/api/users/${encodeURIComponent(email)}/heatmap?from=${from}&to=${to}`,
 			),
+		githubHeatmap: (email: string, from: string, to: string) =>
+			request<GithubHeatmapItem[]>(
+				`/api/users/${encodeURIComponent(email)}/github-heatmap?from=${from}&to=${to}`,
+			),
+		codeOutput: (email: string, from: string, to: string) =>
+			request<CodeOutputItem[]>(
+				`/api/users/${encodeURIComponent(email)}/code-output?from=${from}&to=${to}`,
+			),
 		alertsByEmail: (email: string, days = 30, limit = 50) =>
 			request<AlertItem[]>(
 				`/api/users/${encodeURIComponent(email)}/alerts?days=${days}&limit=${limit}`,
 			),
+		update: (email: string, fields: UpdateTrackedUserRequest) =>
+			request<UpdateTrackedUserResponse>(`/api/users/${encodeURIComponent(email)}`, {
+				method: "PATCH",
+				body: JSON.stringify(fields),
+			}),
 	},
 
 	alerts: {
@@ -165,7 +187,7 @@ export const api = {
 
 	sync: {
 		runs: (limit = 50) => request<SyncRunItem[]>(`/api/sync/runs?limit=${limit}`),
-		run: (job: "anthropic" | "cursor" | "alerts" | "slack_digest", full = false) =>
+		run: (job: "anthropic" | "cursor" | "alerts" | "slack_digest" | "github", full = false) =>
 			request<{ ok: true; runId: string }>(
 				`/api/admin/sync/${job}/run${full ? "?full=true" : ""}`,
 				{ method: "POST" },

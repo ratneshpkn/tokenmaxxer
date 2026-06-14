@@ -80,6 +80,8 @@ export function SetupPage(): React.JSX.Element {
 	const [cursorKey, setCursorKey] = useState("")
 	const [slackToken, setSlackToken] = useState("")
 	const [slackChannel, setSlackChannel] = useState("")
+	const [githubToken, setGithubToken] = useState("")
+	const [githubOrg, setGithubOrg] = useState("")
 	const [ccThreshold, setCcThreshold] = useState(50)
 	const [cuThreshold, setCuThreshold] = useState(50)
 
@@ -114,9 +116,27 @@ export function SetupPage(): React.JSX.Element {
 		})
 		return r.json()
 	})
+	const githubFingerprint = `${githubToken}|${githubOrg}`
+	const githubVal = useDebouncedValidation(githubFingerprint, async (fp, signal) => {
+		const [token, org] = fp.split("|")
+		if (!token) return { ok: true }
+		if (!org) return { ok: false, error: "Please enter your GitHub organization" }
+		const r = await fetch("/api/setup/validate-key", {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			credentials: "include",
+			body: JSON.stringify({ provider: "github", key: token, org }),
+			signal,
+		})
+		return r.json()
+	})
 
 	const canSave =
-		orgName.trim().length > 0 && anthropicVal.state === "ok" && cursorVal.state === "ok"
+		orgName.trim().length > 0 &&
+		anthropicVal.state === "ok" &&
+		cursorVal.state === "ok" &&
+		(slackToken ? slackVal.state === "ok" : true) &&
+		(githubToken ? githubVal.state === "ok" : true)
 
 	const [phase, setPhase] = useState<"form" | "syncing" | "done">("form")
 	const [runIds, setRunIds] = useState<string[]>([])
@@ -131,6 +151,8 @@ export function SetupPage(): React.JSX.Element {
 				cursorAdminApiKey: cursorKey,
 				slackBotToken: slackToken.trim() || null,
 				slackChannelId: slackChannel.trim() || null,
+				githubAccessToken: githubToken.trim() || null,
+				githubOrg: githubOrg.trim() || null,
 				claudeCodeDailyThresholdCents: Math.round(ccThreshold * 100),
 				cursorDailyThresholdCents: Math.round(cuThreshold * 100),
 			}),
@@ -266,7 +288,44 @@ export function SetupPage(): React.JSX.Element {
 
 						<section>
 							<div className="text-[10px] tracked text-amber mb-3">
-								/ 03 · NOTIFICATIONS (OPTIONAL)
+								/ 03 · GITHUB INTEGRATION (OPTIONAL)
+							</div>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div className="md:col-span-2">
+									<div className="flex items-center justify-between mb-1">
+										<Label htmlFor="githubToken" className="text-[10px] tracked text-fg-dim">
+											GITHUB PERSONAL ACCESS TOKEN
+										</Label>
+										<StatusPip state={githubVal.state} />
+									</div>
+									<Input
+										id="githubToken"
+										value={githubToken}
+										onChange={(e) => setGithubToken(e.target.value)}
+										placeholder="ghp_... or github_pat_..."
+										type="password"
+									/>
+									{githubVal.error ? (
+										<p className="text-[10px] text-amber-hot mt-1">{githubVal.error}</p>
+									) : null}
+								</div>
+								<div className="md:col-span-2">
+									<Label htmlFor="githubOrg" className="text-[10px] tracked text-fg-dim">
+										GITHUB ORGANIZATION NAME
+									</Label>
+									<Input
+										id="githubOrg"
+										value={githubOrg}
+										onChange={(e) => setGithubOrg(e.target.value)}
+										placeholder="e.g. acme-corp"
+									/>
+								</div>
+							</div>
+						</section>
+
+						<section>
+							<div className="text-[10px] tracked text-amber mb-3">
+								/ 04 · NOTIFICATIONS (OPTIONAL)
 							</div>
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div className="md:col-span-2">
@@ -358,8 +417,8 @@ function SyncProgress({
 		<div className="mt-12 space-y-8">
 			<div>
 				<div className="text-[10px] tracked text-amber mb-3">/ PULLING INITIAL DATA</div>
-				<ul className="border border-line">
-					<li className="flex items-center justify-between px-4 py-3 border-b border-line">
+				<ul className="border border-line divide-y divide-line">
+					<li className="flex items-center justify-between px-4 py-3">
 						<span className="text-xs">Anthropic / Claude Code</span>
 						{pillFor("anthropic")}
 					</li>
@@ -367,6 +426,12 @@ function SyncProgress({
 						<span className="text-xs">Cursor</span>
 						{pillFor("cursor")}
 					</li>
+					{runs.some((x) => x.job === "github") ? (
+						<li className="flex items-center justify-between px-4 py-3">
+							<span className="text-xs">GitHub code output</span>
+							{pillFor("github")}
+						</li>
+					) : null}
 				</ul>
 			</div>
 

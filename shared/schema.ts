@@ -24,7 +24,13 @@ export const appUserRoleEnum = pgEnum("app_user_role", ["viewer", "admin"])
 export const platformEnum = pgEnum("platform", ["claude_code", "cursor"])
 export const alertScopeEnum = pgEnum("alert_scope", ["global", "user"])
 export const alertStatusEnum = pgEnum("alert_status", ["open", "acknowledged", "resolved"])
-export const syncJobEnum = pgEnum("sync_job", ["anthropic", "cursor", "alerts", "slack_digest"])
+export const syncJobEnum = pgEnum("sync_job", [
+	"anthropic",
+	"cursor",
+	"alerts",
+	"slack_digest",
+	"github",
+])
 export const syncStatusEnum = pgEnum("sync_status", ["success", "failed", "running"])
 
 // ── App auth ──────────────────────────────────────────────────────────────
@@ -56,6 +62,7 @@ export const trackedUsers = pgTable("tracked_users", {
 	name: text("name"),
 	anthropicUserId: text("anthropic_user_id"),
 	cursorUserId: text("cursor_user_id"),
+	githubUsername: text("github_username"),
 	isActive: boolean("is_active").notNull().default(true),
 	firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -334,6 +341,8 @@ export const appConfig = pgTable("app_config", {
 	// Auto-detected on first sync: the workspace_id Anthropic uses for Claude Code activity.
 	// We filter messages + cost_report data to this workspace for the dashboard.
 	claudeCodeWorkspaceId: text("claude_code_workspace_id"),
+	githubAccessTokenEnc: text("github_access_token_enc"),
+	githubOrg: text("github_org"),
 	bootstrapAdminUserId: uuid("bootstrap_admin_user_id"),
 	setupCompletedAt: timestamp("setup_completed_at", { withTimezone: true }),
 	encryptionKeyVersion: integer("encryption_key_version").notNull().default(1),
@@ -363,6 +372,46 @@ export const invitations = pgTable(
 	(t) => ({
 		tokenIdx: uniqueIndex("invitations_token_idx").on(t.token),
 		emailIdx: index("invitations_email_idx").on(t.email),
+	}),
+)
+
+// ── GitHub code output ───────────────────────────────────────────────────
+
+export const dailyGithubActivity = pgTable(
+	"daily_github_activity",
+	{
+		date: date("date").notNull(),
+		email: varchar("email", { length: 320 }).notNull(),
+		prsOpened: integer("prs_opened").notNull().default(0),
+		prsMerged: integer("prs_merged").notNull().default(0),
+		additions: integer("additions").notNull().default(0),
+		deletions: integer("deletions").notNull().default(0),
+		syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(t) => ({
+		pk: primaryKey({ columns: [t.date, t.email] }),
+		emailDateIdx: index("dga_email_date_idx").on(t.email, t.date),
+		dateIdx: index("dga_date_idx").on(t.date),
+	}),
+)
+
+export const githubPullRequests = pgTable(
+	"github_pull_requests",
+	{
+		repo: text("repo").notNull(),
+		number: integer("number").notNull(),
+		email: varchar("email", { length: 320 }).notNull(),
+		title: text("title").notNull().default(""),
+		additions: integer("additions").notNull().default(0),
+		deletions: integer("deletions").notNull().default(0),
+		mergedAt: timestamp("merged_at", { withTimezone: true }),
+		openedAt: timestamp("opened_at", { withTimezone: true }),
+		syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(t) => ({
+		pk: primaryKey({ columns: [t.repo, t.number] }),
+		emailMergedAtIdx: index("gpr_email_merged_idx").on(t.email, t.mergedAt),
+		emailOpenedAtIdx: index("gpr_email_opened_idx").on(t.email, t.openedAt),
 	}),
 )
 
@@ -406,3 +455,4 @@ export type DailyCursorUsage = typeof dailyCursorUsage.$inferSelect
 export type CursorSpendSnapshot = typeof cursorSpendSnapshots.$inferSelect
 export type AppConfig = typeof appConfig.$inferSelect
 export type Invitation = typeof invitations.$inferSelect
+export type DailyGithubActivity = typeof dailyGithubActivity.$inferSelect

@@ -27,8 +27,9 @@ import {
 import { api } from "@/lib/api"
 import { useDateRange } from "@/lib/use-date-range"
 import { useMetricMode } from "@/lib/use-metric-mode"
+import { formatNumber } from "@/lib/utils"
 
-type SortKey = "email" | "cc_cents" | "cu_cents" | "total"
+type SortKey = "email" | "cc_cents" | "cu_cents" | "total" | "gh_lines" | "prs"
 
 export function UsersPage(): React.JSX.Element {
 	const { from, to, winLabel } = useDateRange()
@@ -69,6 +70,12 @@ export function UsersPage(): React.JSX.Element {
 			if (sortKey === "cu_cents") {
 				return effectiveMode === "tokens" ? Number(r.cu_tokens) : Number(r.cu_cents)
 			}
+			if (sortKey === "gh_lines") {
+				return Number(r.gh_additions ?? 0) + Number(r.gh_deletions ?? 0)
+			}
+			if (sortKey === "prs") {
+				return Number(r.gh_prs_merged ?? 0)
+			}
 			return 0
 		}
 		return [...filtered].sort((a, b) => {
@@ -94,7 +101,13 @@ export function UsersPage(): React.JSX.Element {
 			<div className="flex items-end justify-between gap-4">
 				<div className="text-[11px] tracked text-fg-dim leading-relaxed max-w-xl">
 					{data.length} USERS TRACKED · sorted by{" "}
-					<span className="text-fg">{sortKey === "total" ? "TOTAL" : sortKey.toUpperCase()}</span>
+					<span className="text-fg">
+						{sortKey === "total"
+							? "TOTAL"
+							: sortKey === "gh_lines"
+								? "LINES CHANGED"
+								: sortKey.toUpperCase()}
+					</span>
 				</div>
 				<div className="flex items-center gap-2 max-w-xs w-full">
 					<Input
@@ -171,6 +184,21 @@ export function UsersPage(): React.JSX.Element {
 								align="right"
 							/>
 							<SortHeader
+								label={sortKey === "prs" ? "GITHUB · PRs" : "GITHUB · LINES"}
+								active={sortKey === "gh_lines" || sortKey === "prs"}
+								dir={sortDir}
+								onClick={() => {
+									if (sortKey === "gh_lines") {
+										setSortKey("prs")
+										setSortDir("desc")
+									} else {
+										setSortKey("gh_lines")
+										setSortDir("desc")
+									}
+								}}
+								align="right"
+							/>
+							<SortHeader
 								label={`TOTAL · ${winLabel}`}
 								active={sortKey === "total"}
 								dir={sortDir}
@@ -185,13 +213,13 @@ export function UsersPage(): React.JSX.Element {
 					<TableBody>
 						{isLoading ? (
 							<TableRow>
-								<TableCell colSpan={6} className="text-center text-fg-dim py-8 text-xs">
+								<TableCell colSpan={7} className="text-center text-fg-dim py-8 text-xs">
 									── loading ──
 								</TableCell>
 							</TableRow>
 						) : rows.length === 0 ? (
 							<TableRow>
-								<TableCell colSpan={6} className="text-center text-fg-dim py-8 text-xs">
+								<TableCell colSpan={7} className="text-center text-fg-dim py-8 text-xs">
 									── no users ──
 								</TableCell>
 							</TableRow>
@@ -201,19 +229,28 @@ export function UsersPage(): React.JSX.Element {
 									r.cc_cents == null || r.cu_cents == null
 										? null
 										: Number(r.cc_cents) + Number(r.cu_cents)
-								const _totalTokens = Number(r.cc_tokens) + Number(r.cu_tokens)
 								return (
 									<TableRow key={r.email}>
 										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
-											<Link
-												href={`/users/${encodeURIComponent(r.email)}`}
-												className="text-fg hover:text-amber"
-											>
-												{r.name || r.email}
-											</Link>
+											<div className="flex items-center gap-1.5">
+												<Link
+													href={`/users/${encodeURIComponent(r.email)}`}
+													className="text-fg hover:text-amber"
+												>
+													{r.name || r.email}
+												</Link>
+												{!r.github_username && (
+													<span
+														title="No GitHub username mapped"
+														className="inline-flex items-center px-1 py-0.5 text-[8px] tracked bg-amber/10 text-amber border border-amber/20 leading-none"
+													>
+														NO GH
+													</span>
+												)}
+											</div>
 											{r.name ? (
 												<div className="text-[10px] text-fg-very-dim">{r.email}</div>
 											) : null}
@@ -235,6 +272,21 @@ export function UsersPage(): React.JSX.Element {
 												primaryClassName="text-fg"
 												secondaryClassName="text-[10px] text-fg-very-dim"
 											/>
+										</TableCell>
+										<TableCell className="px-3 py-2.5 text-right select-none">
+											<span className="block font-mono text-fg font-medium">
+												{((r.gh_additions ?? 0) + (r.gh_deletions ?? 0)) > 0
+													? `${formatNumber((r.gh_additions ?? 0) + (r.gh_deletions ?? 0))} lines`
+													: "—"}
+											</span>
+											<span className="block font-mono text-mint font-medium text-[10px]">
+												{r.gh_prs_merged
+													? `${formatNumber(r.gh_prs_merged)} PR${r.gh_prs_merged === 1 ? "" : "s"}`
+													: "0 PRs"}{" "}
+												<span className="text-fg-very-dim">
+													(+{formatNumber(r.gh_additions ?? 0)}/-{formatNumber(r.gh_deletions ?? 0)})
+												</span>
+											</span>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right text-amber">
 											<MetricPair
