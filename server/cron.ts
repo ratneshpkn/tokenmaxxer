@@ -80,6 +80,7 @@ export function startCron(): void {
 			const o = { triggeredBy: "cron:hourly" }
 			await runJob("hourly anthropic", () => runAnthropicSync(range, o))
 			await runJob("hourly cursor", () => runCursorSync(range, o))
+			await runJob("hourly github", () => runGithubSync(range, o))
 			await runJob("hourly alerts", () => runComputeAlerts({ ...o, dates: [yesterday(), today()] }))
 		} finally {
 			hourlyRunning = false

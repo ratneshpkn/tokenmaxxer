@@ -46,7 +46,7 @@ export async function runCursorSync(
 			const client = new CursorAdminClient(apiKey)
 			let rowsUpserted = 0
 			const fromDay = range?.from ?? yesterday()
-			const toDay = range?.to ?? yesterday()
+			const toDay = range?.to ?? today()
 			// Cursor max date range = 30 days per call. Chunk if needed.
 			const [startMs, endMs] = dateRangeToEpochMs(fromDay, toDay)
 
