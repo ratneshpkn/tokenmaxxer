@@ -436,15 +436,15 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 					</div>
 					<div className="grid grid-cols-2 gap-4 mt-2">
 						<div>
-							<div className="text-[10px] tracked text-fg-dim">LINES CHANGED</div>
+							<div className="text-[10px] tracked text-fg-dim">PRs OPENED / MERGED</div>
 							<div className="font-mono text-3xl tabular text-fg leading-none font-medium mt-1">
-								{formatNumber(totalLinesChanged)}
+								{totalPrsOpened} / {totalPrsMerged}
 							</div>
 						</div>
 						<div>
-							<div className="text-[10px] tracked text-fg-dim">PRs OPENED / MERGED</div>
+							<div className="text-[10px] tracked text-fg-dim">LINES CHANGED</div>
 							<div className="font-mono text-3xl tabular text-fg-mid leading-none mt-1">
-								{totalPrsOpened} / {totalPrsMerged}
+								{formatNumber(totalLinesChanged)}
 							</div>
 						</div>
 					</div>

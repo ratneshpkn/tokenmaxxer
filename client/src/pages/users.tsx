@@ -87,6 +87,25 @@ export function UsersPage(): React.JSX.Element {
 		})
 	}, [data, filter, selectedEmails, sortKey, sortDir, effectiveMode])
 
+	const getSortLabel = (key: SortKey): string => {
+		switch (key) {
+			case "email":
+				return "USER"
+			case "cc_cents":
+				return effectiveMode === "tokens" ? "CLAUDE CODE TOKENS" : "CLAUDE CODE SPEND"
+			case "cu_cents":
+				return effectiveMode === "tokens" ? "CURSOR TOKENS" : "CURSOR SPEND"
+			case "total":
+				return "TOTAL"
+			case "gh_lines":
+				return "GITHUB LINES"
+			case "prs":
+				return "GITHUB PRs"
+			default:
+				return String(key).toUpperCase()
+		}
+	}
+
 	function toggle(k: SortKey): void {
 		if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
 		else {
@@ -101,13 +120,7 @@ export function UsersPage(): React.JSX.Element {
 			<div className="flex items-end justify-between gap-4">
 				<div className="text-[11px] tracked text-fg-dim leading-relaxed max-w-xl">
 					{data.length} USERS TRACKED · sorted by{" "}
-					<span className="text-fg">
-						{sortKey === "total"
-							? "TOTAL"
-							: sortKey === "gh_lines"
-								? "LINES CHANGED"
-								: sortKey.toUpperCase()}
-					</span>
+					<span className="text-fg">{getSortLabel(sortKey)}</span>
 				</div>
 				<div className="flex items-center gap-2 max-w-xs w-full">
 					<Input
@@ -184,15 +197,26 @@ export function UsersPage(): React.JSX.Element {
 								align="right"
 							/>
 							<SortHeader
-								label={sortKey === "prs" ? "GITHUB · PRs" : "GITHUB · LINES"}
+								label={sortKey === "gh_lines" ? "GITHUB · LINES" : "GITHUB · PRs"}
 								active={sortKey === "gh_lines" || sortKey === "prs"}
 								dir={sortDir}
 								onClick={() => {
-									if (sortKey === "gh_lines") {
-										setSortKey("prs")
-										setSortDir("desc")
+									if (sortKey === "prs") {
+										if (sortDir === "desc") {
+											setSortDir("asc")
+										} else {
+											setSortKey("gh_lines")
+											setSortDir("desc")
+										}
+									} else if (sortKey === "gh_lines") {
+										if (sortDir === "desc") {
+											setSortDir("asc")
+										} else {
+											setSortKey("prs")
+											setSortDir("desc")
+										}
 									} else {
-										setSortKey("gh_lines")
+										setSortKey("prs")
 										setSortDir("desc")
 									}
 								}}
@@ -275,14 +299,14 @@ export function UsersPage(): React.JSX.Element {
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right select-none">
 											<span className="block font-mono text-fg font-medium">
-												{(r.gh_additions ?? 0) + (r.gh_deletions ?? 0) > 0
-													? `${formatNumber((r.gh_additions ?? 0) + (r.gh_deletions ?? 0))} lines`
+												{r.gh_prs_merged !== null && r.gh_prs_merged !== undefined
+													? `${formatNumber(r.gh_prs_merged)} PR${r.gh_prs_merged === 1 ? "" : "s"}`
 													: "—"}
 											</span>
 											<span className="block font-mono text-mint font-medium text-[10px]">
-												{r.gh_prs_merged
-													? `${formatNumber(r.gh_prs_merged)} PR${r.gh_prs_merged === 1 ? "" : "s"}`
-													: "0 PRs"}{" "}
+												{(r.gh_additions ?? 0) + (r.gh_deletions ?? 0) > 0
+													? `${formatNumber((r.gh_additions ?? 0) + (r.gh_deletions ?? 0))} lines `
+													: "0 lines "}
 												<span className="text-fg-very-dim">
 													(+{formatNumber(r.gh_additions ?? 0)}/-{formatNumber(r.gh_deletions ?? 0)}
 													)
