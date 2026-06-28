@@ -9,7 +9,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
 export const ALERT_STATUSES = ["open", "acknowledged", "resolved"] as const
 export type AlertStatus = (typeof ALERT_STATUSES)[number]
 
-export const SYNC_JOBS = ["anthropic", "cursor", "alerts", "slack_digest"] as const
+export const SYNC_JOBS = ["anthropic", "cursor", "alerts", "slack_digest", "github"] as const
 export type SyncJob = (typeof SYNC_JOBS)[number]
 
 export const APP_USER_ROLES = ["viewer", "admin"] as const

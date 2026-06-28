@@ -16,6 +16,8 @@ const updateAdminConfigSchema = z.object({
 	cursorAdminApiKey: z.string().nullable().optional(),
 	slackBotToken: z.string().nullable().optional(),
 	slackChannelId: z.string().nullable().optional(),
+	githubAccessToken: z.string().nullable().optional(),
+	githubOrg: z.string().nullable().optional(),
 })
 
 export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
@@ -33,6 +35,8 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 			cursorAdminApiKeySet: cfg.cursorAdminApiKey != null && cfg.cursorAdminApiKey !== "",
 			slackBotTokenSet: cfg.slackBotToken != null && cfg.slackBotToken !== "",
 			googleClientSecretSet: cfg.googleClientSecret != null && cfg.googleClientSecret !== "",
+			githubOrg: cfg.githubOrg,
+			githubAccessTokenSet: cfg.githubAccessToken != null && cfg.githubAccessToken !== "",
 		})
 	})
 
@@ -58,6 +62,7 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 			googleClientId: data.googleClientId,
 			googleOauthRedirectUri: data.googleOauthRedirectUri,
 			slackChannelId: data.slackChannelId,
+			githubOrg: data.githubOrg,
 		}
 
 		if (data.googleClientSecret !== undefined) {
@@ -72,6 +77,9 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 		}
 		if (data.slackBotToken !== undefined) {
 			patch.slackBotToken = data.slackBotToken === "" ? null : data.slackBotToken
+		}
+		if (data.githubAccessToken !== undefined) {
+			patch.githubAccessToken = data.githubAccessToken === "" ? null : data.githubAccessToken
 		}
 
 		await saveConfig(patch)

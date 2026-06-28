@@ -22,6 +22,8 @@ export interface ResolvedConfig {
 	bootstrapAdminUserId: string | null
 	setupCompletedAt: Date | null
 	claudeCodeWorkspaceId: string | null
+	githubAccessToken: string | null // decrypted
+	githubOrg: string | null
 }
 
 /** Mutable fields accepted by saveConfig. Secrets are plaintext on input. */
@@ -41,6 +43,8 @@ export interface ConfigPatch {
 	cursorDailyThresholdCents?: number
 	bootstrapAdminUserId?: string | null
 	setupCompletedAt?: Date | null
+	githubAccessToken?: string | null
+	githubOrg?: string | null
 }
 
 function decryptOrThrow(v: string | null, columnName: string): string | null {
@@ -78,6 +82,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 	)
 	const cursorAdminApiKey = decryptOrThrow(row.cursorAdminApiKeyEnc, "cursorAdminApiKeyEnc")
 	const slackBotToken = decryptOrThrow(row.slackBotTokenEnc, "slackBotTokenEnc")
+	const githubAccessToken = decryptOrThrow(row.githubAccessTokenEnc, "githubAccessTokenEnc")
 
 	cached = {
 		id: 1,
@@ -97,6 +102,8 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 		bootstrapAdminUserId: row.bootstrapAdminUserId,
 		setupCompletedAt: row.setupCompletedAt,
 		claudeCodeWorkspaceId: row.claudeCodeWorkspaceId,
+		githubAccessToken,
+		githubOrg: row.githubOrg,
 	}
 	return cached
 }
@@ -127,6 +134,9 @@ export async function saveConfig(patch: ConfigPatch): Promise<ResolvedConfig> {
 	if (patch.bootstrapAdminUserId !== undefined)
 		update.bootstrapAdminUserId = patch.bootstrapAdminUserId
 	if (patch.setupCompletedAt !== undefined) update.setupCompletedAt = patch.setupCompletedAt
+	if (patch.githubAccessToken !== undefined)
+		update.githubAccessTokenEnc = encryptOrNull(patch.githubAccessToken)
+	if (patch.githubOrg !== undefined) update.githubOrg = patch.githubOrg
 
 	await db.update(appConfig).set(update).where(eq(appConfig.id, 1))
 	invalidateConfigCache()

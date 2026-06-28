@@ -1,16 +1,23 @@
 import type { AppUser } from "@shared/schema"
-import { dailyClaudeCodeAttribution, dailyCursorUsage, syncRuns } from "@shared/schema"
+import {
+	dailyClaudeCodeAttribution,
+	dailyCursorUsage,
+	dailyGithubActivity,
+	syncRuns,
+} from "@shared/schema"
 import { desc, inArray, min } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
+import { loadConfig } from "../lib/config"
 import { runComputeAlerts } from "../scripts/compute-alerts"
-import { daysAgo, startSyncRun, yesterday } from "../scripts/lib/shared"
+import { daysAgo, startSyncRun, today, yesterday } from "../scripts/lib/shared"
 import { runSlackDigest } from "../scripts/slack-digest"
 import { runAnthropicSync } from "../scripts/sync-anthropic"
 import { runCursorSync } from "../scripts/sync-cursor"
+import { runGithubSync } from "../scripts/sync-github"
 import { currentUser } from "./index"
 
 /** Manual sync button lookbacks. When the platform already has data, we re-pull just
@@ -45,18 +52,29 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 	// the dashboard isn't useless on first run.
 	app.post("/api/admin/sync/:job/run", requireAdmin, async (c) => {
 		const job = String(c.req.param("job"))
-		if (job !== "anthropic" && job !== "cursor" && job !== "alerts" && job !== "slack_digest") {
+		if (
+			job !== "anthropic" &&
+			job !== "cursor" &&
+			job !== "alerts" &&
+			job !== "slack_digest" &&
+			job !== "github"
+		) {
 			return c.json({ message: "Unknown job" }, 400)
 		}
 
 		const full = c.req.query("full") === "true"
 		let range: { from: string; to: string } | undefined
-		if (full && (job === "anthropic" || job === "cursor")) {
-			const table = job === "anthropic" ? dailyClaudeCodeAttribution : dailyCursorUsage
+		if (full && (job === "anthropic" || job === "cursor" || job === "github")) {
+			const table =
+				job === "anthropic"
+					? dailyClaudeCodeAttribution
+					: job === "cursor"
+						? dailyCursorUsage
+						: dailyGithubActivity
 			const [row] = await db.select({ earliest: min(table.date) }).from(table)
 			const hasData = row?.earliest != null
 			const lookback = hasData ? RECENT_LOOKBACK_DAYS : COLD_START_LOOKBACK_DAYS
-			range = { from: daysAgo(lookback), to: yesterday() }
+			range = { from: daysAgo(lookback), to: today() }
 		}
 
 		// Create the sync_runs row up front so we can return its id immediately.
@@ -74,7 +92,9 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 					? runCursorSync(range, opts)
 					: job === "alerts"
 						? runComputeAlerts(opts)
-						: runSlackDigest(opts)
+						: job === "slack_digest"
+							? runSlackDigest(opts)
+							: runGithubSync(range, opts)
 
 		promise.catch((err) => console.error(`[sync route] ${job} failed`, err))
 
@@ -87,10 +107,11 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 		if (!Number.isFinite(days) || days < 1 || days > 365) {
 			return c.json({ message: "days must be between 1 and 365" }, 400)
 		}
-		// PT-aware date math: yesterday is the most recent full day; from = yesterday - (days-1)
-		const to = yesterday()
+		// PT-aware date math: today is the most recent day; from = today - (days-1)
+		const to = today()
 		const from = daysAgo(days)
 
+		const cfg = await loadConfig()
 		const me = currentUser(c) as AppUser | null
 		const triggeredBy = me?.email ? `user:${me.email}` : "user"
 		const aRunId = await startSyncRun("anthropic", triggeredBy)
@@ -103,6 +124,15 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 			console.error("[sync route] cursor backfill failed", err),
 		)
 
-		return c.json({ ok: true, runIds: [aRunId, cRunId] }, 202)
+		const runIds = [aRunId, cRunId]
+		if (cfg.githubAccessToken) {
+			const gRunId = await startSyncRun("github", triggeredBy)
+			runIds.push(gRunId)
+			runGithubSync({ from, to }, { existingRunId: gRunId }).catch((err) =>
+				console.error("[sync route] github backfill failed", err),
+			)
+		}
+
+		return c.json({ ok: true, runIds }, 202)
 	})
 }

@@ -1,7 +1,7 @@
 import { PLATFORM_LABELS } from "@shared/constants"
 import { DEFAULTS } from "@shared/defaults"
 import { alerts } from "@shared/schema"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, inArray, sql } from "drizzle-orm"
 import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
 import { postDigest } from "../lib/slack"
@@ -89,11 +89,12 @@ export async function runSlackDigest(opts?: {
 
 			if (openAlerts.length > 0) {
 				const ids = openAlerts.map((a) => a.id)
-				await db.execute(sql`
-        update alerts
-           set channels_sent = channels_sent || '["slack"]'::jsonb
-         where id = any(${ids})
-      `)
+				await db
+					.update(alerts)
+					.set({
+						channelsSent: sql`channels_sent || '["slack"]'::jsonb`,
+					})
+					.where(inArray(alerts.id, ids))
 			}
 
 			console.log(

@@ -58,7 +58,7 @@ function StatTooltip({
 						<span className="text-fg-mid">{p.dataKey}</span>
 					</span>
 					<span className="text-fg">
-						{mode === "usd" ? `$${Number(p.value).toFixed(2)}` : Number(p.value).toLocaleString()}
+						{mode === "usd" ? `$${Number(p.value).toFixed(2)}` : Math.abs(Number(p.value)).toLocaleString()}
 					</span>
 				</div>
 			))}
@@ -74,6 +74,7 @@ export function DashboardPage(): React.JSX.Element {
 	const animating = useFirstRenderAnimation()
 
 	const [metricMode] = useMetricMode()
+	const [githubMetricMode, setGithubMetricMode] = useState<"lines" | "prs">("lines")
 	// Map global mode to chart's usd/tokens axis
 	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
 
@@ -108,6 +109,9 @@ export function DashboardPage(): React.JSX.Element {
 	const cuTokens = Number(totals?.cu_tokens ?? 0)
 	const totalTokens = ccTokens + cuTokens
 
+	const totalDays = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1)
+	const prsPerDay = totals != null ? ((totals.gh_prs_merged ?? 0) / totalDays).toFixed(1) : "0"
+
 	const trend = useMemo(
 		() =>
 			(summary?.trend ?? []).map((d) =>
@@ -124,6 +128,23 @@ export function DashboardPage(): React.JSX.Element {
 						},
 			),
 		[summary?.trend, trendMode],
+	)
+
+	const gitTrend = useMemo(
+		() =>
+			(summary?.trend ?? []).map((d) =>
+				githubMetricMode === "lines"
+					? {
+							date: d.date.slice(5),
+							Additions: Number(d.gh_additions ?? 0),
+							Deletions: -Number(d.gh_deletions ?? 0),
+						}
+					: {
+							date: d.date.slice(5),
+							"PRs Merged": Number(d.gh_prs_merged ?? 0),
+						},
+			),
+		[summary?.trend, githubMetricMode],
 	)
 
 	const severeAlerts = useMemo(() => {
@@ -209,7 +230,7 @@ export function DashboardPage(): React.JSX.Element {
 
 			{/* ── Headline KPI band ─────────────────────────────────────────── */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">
-				<div className={`col-span-12 ${isViewer ? "md:col-span-8" : "md:col-span-6"} bg-bg p-6`}>
+				<div className={`col-span-12 ${isViewer ? "md:col-span-6" : "md:col-span-4"} bg-bg p-6`}>
 					<div className="text-[10px] tracked text-fg-dim mb-3">
 						{isViewer ? "TOTAL TOKENS" : "TOTAL"} · {winLabel}
 					</div>
@@ -264,6 +285,23 @@ export function DashboardPage(): React.JSX.Element {
 						/>
 						<div className="text-[10px] tracked text-fg-dim mt-1">
 							{totals?.cu_users ?? 0} users
+						</div>
+					</div>
+				</div>
+
+				<div className="col-span-12 md:col-span-2 bg-bg p-6 flex flex-col justify-between">
+					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+						<span className="w-1.5 h-1.5 bg-mint" /> GITHUB
+					</div>
+					<div>
+						<div className="font-mono text-3xl tabular text-fg leading-none">
+							{totals != null ? ((totals.gh_additions ?? 0) + (totals.gh_deletions ?? 0)).toLocaleString() : "0"}
+						</div>
+						<div className="text-[10px] tracked text-fg-dim mt-2">
+							lines changed
+						</div>
+						<div className="text-[10px] tracked text-fg-very-dim mt-1">
+							{totals?.gh_prs_merged ?? 0} PRs ({prsPerDay}/day) · {totals?.gh_users ?? 0} users
 						</div>
 					</div>
 				</div>
@@ -349,6 +387,99 @@ export function DashboardPage(): React.JSX.Element {
 					Claude Code costs are pro-rated from Anthropic's daily cost_report by api_key token share,
 					then attributed to the api_key creator. Totals match the Anthropic Console to within
 					rounding; for exact invoice reconciliation, use the Console.
+				</div>
+			</section>
+
+			{/* ── GitHub Activity Trend chart ───────────────────────────────── */}
+			<section className="panel">
+				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
+					<div className="flex items-center gap-3">
+						<span className="text-[10px] tracked text-fg-dim">CHART</span>
+						<span className="text-[11px] tracked text-fg">DAILY GITHUB ACTIVITY · {winLabel}</span>
+					</div>
+					<div className="flex items-center">
+						<button
+							onClick={() => setGithubMetricMode("lines")}
+							className={`px-3 py-1 text-[10px] tracked rounded-l-md border border-line border-r-0 transition-colors ${
+								githubMetricMode === "lines"
+									? "bg-line/60 text-fg"
+									: "text-fg-dim hover:text-fg hover:bg-elev2"
+							}`}
+						>
+							LINES
+						</button>
+						<button
+							onClick={() => setGithubMetricMode("prs")}
+							className={`px-3 py-1 text-[10px] tracked rounded-r-md border border-line transition-colors ${
+								githubMetricMode === "prs"
+									? "bg-line/60 text-fg"
+									: "text-fg-dim hover:text-fg hover:bg-elev2"
+							}`}
+						>
+							PRs
+						</button>
+					</div>
+				</div>
+				<div
+					className="p-4"
+					style={{
+						height: 240,
+					}}
+				>
+					{gitTrend.length === 0 ? (
+						<div className="h-full flex items-center justify-center text-xs text-fg-dim">
+							── awaiting data ──
+						</div>
+					) : (
+						<ResponsiveContainer width="100%" height="100%">
+							<BarChart data={gitTrend} margin={{ top: 6, right: 8, bottom: 8, left: 0 }}>
+								<CartesianGrid stroke="var(--line)" strokeDasharray="2 4" vertical={false} />
+								<XAxis
+									dataKey="date"
+									axisLine={false}
+									tickLine={false}
+									tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+								/>
+								<YAxis
+									axisLine={false}
+									tickLine={false}
+									tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+									tickFormatter={(v: number) => formatCompact(Math.abs(v))}
+									width={48}
+								/>
+								<Tooltip
+									cursor={{ fill: "color-mix(in oklch, var(--fg) 4%, transparent)" }}
+									content={(p) => <StatTooltip {...p} mode="tokens" />}
+								/>
+								{githubMetricMode === "lines" && (
+									<Bar
+										dataKey="Additions"
+										stackId="s"
+										fill="var(--mint)"
+										isAnimationActive={animating}
+									/>
+								)}
+								{githubMetricMode === "lines" && (
+									<Bar
+										dataKey="Deletions"
+										stackId="s"
+										fill="var(--rose)"
+										isAnimationActive={animating}
+									/>
+								)}
+								{githubMetricMode === "prs" && (
+									<Bar
+										dataKey="PRs Merged"
+										fill="var(--amber)"
+										isAnimationActive={animating}
+									/>
+								)}
+							</BarChart>
+						</ResponsiveContainer>
+					)}
+				</div>
+				<div className="px-5 py-2 border-t border-line text-[10px] text-fg-very-dim leading-relaxed">
+					{githubMetricMode === "lines" ? "GitHub line additions and deletions aggregated daily across all tracked users." : "GitHub pull requests merged daily across all tracked users."}
 				</div>
 			</section>
 

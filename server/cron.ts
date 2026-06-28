@@ -4,6 +4,7 @@ import { daysAgo, today, yesterday } from "./scripts/lib/shared"
 import { runSlackDigest } from "./scripts/slack-digest"
 import { runAnthropicSync } from "./scripts/sync-anthropic"
 import { runCursorSync } from "./scripts/sync-cursor"
+import { runGithubSync } from "./scripts/sync-github"
 
 /** Two-cron design:
  *
@@ -91,6 +92,7 @@ export function startCron(): void {
 		const o = { triggeredBy: "cron:daily" }
 		await runJob("daily anthropic", () => runAnthropicSync(range, o))
 		await runJob("daily cursor", () => runCursorSync(range, o))
+		await runJob("daily github", () => runGithubSync(range, o))
 		await runJob("daily alerts", () => runComputeAlerts(o))
 		await runJob("daily slack", () => runSlackDigest(o))
 	})

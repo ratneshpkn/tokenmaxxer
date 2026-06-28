@@ -21,8 +21,8 @@ type ValidationState = "idle" | "checking" | "ok" | "bad"
 
 function useDebouncedValidation(
 	value: string,
-	provider: "anthropic" | "cursor" | "slack",
-	slackChannel?: string,
+	provider: "anthropic" | "cursor" | "slack" | "github",
+	slackChannelOrOrg?: string,
 	delay = 500,
 ): { state: ValidationState; error: string | null } {
 	const [state, setState] = useState<ValidationState>("idle")
@@ -47,8 +47,11 @@ function useDebouncedValidation(
 			acRef.current = ac
 			try {
 				const body: Record<string, string> = { provider, key: value }
-				if (provider === "slack" && slackChannel) {
-					body.channelId = slackChannel
+				if (provider === "slack" && slackChannelOrOrg) {
+					body.channelId = slackChannelOrOrg
+				}
+				if (provider === "github" && slackChannelOrOrg) {
+					body.org = slackChannelOrOrg
 				}
 				const r = await fetch("/api/setup/validate-key", {
 					method: "POST",
@@ -75,7 +78,7 @@ function useDebouncedValidation(
 		}, delay)
 
 		return () => clearTimeout(t)
-	}, [value, provider, slackChannel, delay])
+	}, [value, provider, slackChannelOrOrg, delay])
 
 	return { state, error }
 }
@@ -121,7 +124,7 @@ export function SettingsPage(): React.JSX.Element {
 			job,
 			full,
 		}: {
-			job: "anthropic" | "cursor" | "alerts" | "slack_digest"
+			job: "anthropic" | "cursor" | "alerts" | "slack_digest" | "github"
 			full: boolean
 		}) => api.sync.run(job, full),
 		onSuccess: () => {
@@ -175,8 +178,11 @@ export function SettingsPage(): React.JSX.Element {
 	const [cursorKey, setCursorKey] = useState("")
 	const [slackToken, setSlackToken] = useState("")
 	const [slackChannel, setSlackChannel] = useState("")
+	const [githubToken, setGithubToken] = useState("")
+	const [githubOrg, setGithubOrg] = useState("")
 
 	const [clearSlackToken, setClearSlackToken] = useState(false)
+	const [clearGithubToken, setClearGithubToken] = useState(false)
 	const [clearGoogleSecret, setClearGoogleSecret] = useState(false)
 
 	const hasInitialized = useRef(false)
@@ -194,7 +200,10 @@ export function SettingsPage(): React.JSX.Element {
 			setCursorKey("")
 			setSlackToken("")
 			setSlackChannel(adminCfg.slackChannelId || "")
+			setGithubToken("")
+			setGithubOrg(adminCfg.githubOrg || "")
 			setClearSlackToken(false)
+			setClearGithubToken(false)
 			setClearGoogleSecret(false)
 			hasInitialized.current = true
 		}
@@ -204,6 +213,7 @@ export function SettingsPage(): React.JSX.Element {
 	const anthropicVal = useDebouncedValidation(anthropicKey, "anthropic")
 	const cursorVal = useDebouncedValidation(cursorKey, "cursor")
 	const slackVal = useDebouncedValidation(slackToken, "slack", slackChannel || undefined)
+	const githubVal = useDebouncedValidation(githubToken, "github", githubOrg || undefined)
 
 	const handleCancel = (section: "org" | "oauth" | "creds") => {
 		if (adminCfg) {
@@ -222,7 +232,10 @@ export function SettingsPage(): React.JSX.Element {
 				setCursorKey("")
 				setSlackToken("")
 				setSlackChannel(adminCfg.slackChannelId || "")
+				setGithubToken("")
+				setGithubOrg(adminCfg.githubOrg || "")
 				setClearSlackToken(false)
+				setClearGithubToken(false)
 			}
 		}
 		setEditingSection(null)
@@ -265,6 +278,14 @@ export function SettingsPage(): React.JSX.Element {
 				if (slackChannel !== (adminCfg?.slackChannelId || "")) {
 					payload.slackChannelId = slackChannel.trim() || null
 				}
+				if (clearGithubToken) {
+					payload.githubAccessToken = ""
+				} else if (githubToken) {
+					payload.githubAccessToken = githubToken
+				}
+				if (githubOrg !== (adminCfg?.githubOrg || "")) {
+					payload.githubOrg = githubOrg.trim() || null
+				}
 			}
 
 			return api.updateAdminConfig(payload)
@@ -276,8 +297,10 @@ export function SettingsPage(): React.JSX.Element {
 			setAnthropicKey("")
 			setCursorKey("")
 			setSlackToken("")
+			setGithubToken("")
 			setGoogleClientSecret("")
 			setClearSlackToken(false)
+			setClearGithubToken(false)
 			setClearGoogleSecret(false)
 			setEditingSection(null)
 		},
@@ -613,6 +636,18 @@ export function SettingsPage(): React.JSX.Element {
 										{adminCfg?.slackChannelId || "—"}
 									</p>
 								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">GITHUB ACCESS TOKEN</Label>
+									<p className="mt-1 text-fg text-sm font-mono">
+										{adminCfg?.githubAccessTokenSet
+											? "•••••••••••• (configured)"
+											: "Not configured"}
+									</p>
+								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">GITHUB ORGANIZATION</Label>
+									<p className="mt-1 text-fg text-sm font-mono">{adminCfg?.githubOrg || "—"}</p>
+								</div>
 							</div>
 						) : (
 							/* Edit Credentials & API Keys */
@@ -725,6 +760,68 @@ export function SettingsPage(): React.JSX.Element {
 											className="mt-1"
 										/>
 									</div>
+
+									<div>
+										<div className="flex items-center justify-between mb-1">
+											<Label htmlFor="githubToken" className="text-[10px] tracked text-fg-dim">
+												GITHUB ACCESS TOKEN
+											</Label>
+											<div className="flex items-center gap-2">
+												{adminCfg?.githubAccessTokenSet && !clearGithubToken && (
+													<button
+														type="button"
+														onClick={() => setClearGithubToken(true)}
+														className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+													>
+														[Clear Token]
+													</button>
+												)}
+												{clearGithubToken && (
+													<button
+														type="button"
+														onClick={() => setClearGithubToken(false)}
+														className="text-[9px] text-mint uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+													>
+														[Undo Clear]
+													</button>
+												)}
+												<StatusPip state={githubVal.state} />
+											</div>
+										</div>
+										<Input
+											id="githubToken"
+											value={githubToken}
+											onChange={(e) => {
+												setGithubToken(e.target.value)
+												if (clearGithubToken) setClearGithubToken(false)
+											}}
+											placeholder={
+												clearGithubToken
+													? "Cleared (will save on Save)"
+													: adminCfg?.githubAccessTokenSet
+														? "•••••••••••• (configured)"
+														: "ghp_... or github_pat_..."
+											}
+											type="password"
+											disabled={clearGithubToken}
+										/>
+										{githubVal.error ? (
+											<p className="text-[10px] text-amber-hot mt-1">{githubVal.error}</p>
+										) : null}
+									</div>
+
+									<div>
+										<Label htmlFor="githubOrg" className="text-[10px] tracked text-fg-dim">
+											GITHUB ORGANIZATION
+										</Label>
+										<Input
+											id="githubOrg"
+											value={githubOrg}
+											onChange={(e) => setGithubOrg(e.target.value)}
+											placeholder="GitHub Org Name"
+											className="mt-1"
+										/>
+									</div>
 								</div>
 								<div className="flex justify-end gap-2 pt-2">
 									<button
@@ -743,7 +840,9 @@ export function SettingsPage(): React.JSX.Element {
 											cursorVal.state === "checking" ||
 											cursorVal.state === "bad" ||
 											slackVal.state === "checking" ||
-											slackVal.state === "bad"
+											slackVal.state === "bad" ||
+											githubVal.state === "checking" ||
+											githubVal.state === "bad"
 										}
 										className="h-7 px-3 text-xs"
 									>
@@ -944,11 +1043,12 @@ export function SettingsPage(): React.JSX.Element {
 					<span className="text-[11px] tracked text-fg">MANUAL SYNC</span>
 					<span className="text-[10px] tracked text-fg-dim">RUNS IN THE BACKGROUND</span>
 				</div>
-				<div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+				<div className="p-5 grid grid-cols-2 md:grid-cols-5 gap-3">
 					{(
 						[
 							["anthropic", "ANTHROPIC", "Pulls last 30 days. 365 if no data yet.", true],
 							["cursor", "CURSOR", "Pulls last 30 days. 365 if no data yet.", true],
+							["github", "GITHUB", "Pulls PR stats & activity.", true],
 							["alerts", "ALERTS", "Recompute threshold breaches", false],
 							["slack_digest", "SLACK", "Post daily digest now", false],
 						] as const

@@ -8,6 +8,13 @@
       "when": 1780752589113,
       "tag": "0000_tranquil_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782017066625,
+      "tag": "0001_simple_shadowcat",
+      "breakpoints": true
     }
   ]
 }

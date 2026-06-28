@@ -66,9 +66,7 @@ export function resolvePreset(preset: Preset, now: Date = new Date()): DateRange
 			// server-side conventions and avoids month-length edge cases.
 			return { from: addDays(yesterday, -179), to: yesterday, preset }
 		case "mtd": {
-			const first = firstOfMonth(today)
-			// If today is the 1st of the month, there's no MTD window yet — show yesterday only.
-			if (first > yesterday) return { from: yesterday, to: yesterday, preset }
+			const first = firstOfMonth(yesterday)
 			return { from: first, to: yesterday, preset }
 		}
 	}
@@ -100,11 +98,21 @@ export function parseSearch(search: string, now: Date = new Date()): DateRange {
 
 	const from = params.get("from")
 	const to = params.get("to")
-	if (from && to && isValidYmd(from) && isValidYmd(to) && from <= to) {
-		const yesterday = addDays(todayPT(now), -1)
-		const clampedTo = to > yesterday ? yesterday : to
-		if (from > clampedTo) return resolvePreset("30d", now) // post-clamp guard
-		return { from, to: clampedTo, preset: "custom" }
+	if (from && to && isValidYmd(from) && isValidYmd(to)) {
+		let f = from
+		let t = to
+		if (f > t) {
+			f = to
+			t = from
+		}
+
+		const today = todayPT(now)
+		const yesterday = addDays(today, -1)
+		
+		const clampedTo = t > yesterday ? yesterday : t
+		const clampedFrom = f > yesterday ? yesterday : f
+		
+		return { from: clampedFrom, to: clampedTo, preset: "custom" }
 	}
 
 	// either both missing, or partial/invalid → default

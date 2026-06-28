@@ -11,7 +11,13 @@
  * Optional `--reset` flag deletes only the demo rows first (anything @example.com).
  */
 
-import { alerts, dailyClaudeCodeAttribution, dailyCursorUsage, trackedUsers } from "@shared/schema"
+import {
+	alerts,
+	dailyClaudeCodeAttribution,
+	dailyCursorUsage,
+	dailyGithubActivity,
+	trackedUsers,
+} from "@shared/schema"
 import { like, sql } from "drizzle-orm"
 import { db, pool } from "../db"
 
@@ -139,6 +145,7 @@ async function reset(): Promise<void> {
 	await db.delete(alerts).where(like(alerts.email, pattern))
 	await db.delete(dailyClaudeCodeAttribution).where(like(dailyClaudeCodeAttribution.email, pattern))
 	await db.delete(dailyCursorUsage).where(like(dailyCursorUsage.email, pattern))
+	await db.delete(dailyGithubActivity).where(like(dailyGithubActivity.email, pattern))
 	await db.delete(trackedUsers).where(like(trackedUsers.email, pattern))
 	console.log(`[seed:demo] cleared rows for *@${DEMO_DOMAIN}`)
 }
@@ -158,16 +165,23 @@ async function seed(): Promise<void> {
 				email: u.email,
 				name: u.name,
 				isActive: true,
+				githubUsername: u.email.split("@")[0].replace(".", ""),
 			})),
 		)
 		.onConflictDoUpdate({
 			target: trackedUsers.email,
-			set: { name: sql`excluded.name`, isActive: true, updatedAt: new Date() },
+			set: {
+				name: sql`excluded.name`,
+				isActive: true,
+				githubUsername: sql`excluded.github_username`,
+				updatedAt: new Date(),
+			},
 		})
 
 	// Per-day per-user usage
 	const ccRows: Array<typeof dailyClaudeCodeAttribution.$inferInsert> = []
 	const cuRows: Array<typeof dailyCursorUsage.$inferInsert> = []
+	const ghRows: Array<typeof dailyGithubActivity.$inferInsert> = []
 
 	for (let t = startMs; t <= today.getTime(); t += 24 * 60 * 60 * 1000) {
 		const d = new Date(t)
@@ -255,21 +269,42 @@ async function seed(): Promise<void> {
 					requestCount: 1 + Math.floor(Math.random() * 20),
 				})
 			})
+
+			// GitHub activity
+			const openedChance = u.persona === "power" ? 0.35 : u.persona === "heavy" ? 0.2 : 0.08
+			const mergedChance = u.persona === "power" ? 0.3 : u.persona === "heavy" ? 0.15 : 0.06
+			const prsOpened = Math.random() < openedChance ? (Math.random() < 0.15 ? 2 : 1) : 0
+			const prsMerged = Math.random() < mergedChance ? (Math.random() < 0.15 ? 2 : 1) : 0
+
+			const baseGithubActivity = Math.floor(rand(1, 10))
+			const additions = baseGithubActivity * Math.floor(rand(25, 120))
+			const deletions = Math.floor(additions * rand(0.1, 0.4))
+
+			ghRows.push({
+				date,
+				email: u.email,
+
+				prsOpened,
+				prsMerged,
+				additions,
+				deletions,
+			})
 		}
 	}
 
 	// Batch upserts (Postgres default param limit is ~32k; chunk to be safe)
 	await batchUpsert(dailyClaudeCodeAttribution, ccRows, "claude_code")
 	await batchUpsert(dailyCursorUsage, cuRows, "cursor")
+	await batchUpsert(dailyGithubActivity, ghRows, "github")
 
 	console.log(
-		`[seed:demo] done — ${users.length} users, ${ccRows.length} claude_code rows, ${cuRows.length} cursor rows`,
+		`[seed:demo] done — ${users.length} users, ${ccRows.length} claude_code rows, ${cuRows.length} cursor rows, ${ghRows.length} github rows`,
 	)
 	console.log(`[seed:demo] open http://localhost:3003 to see the populated dashboard`)
 }
 
 async function batchUpsert<T>(
-	table: typeof dailyClaudeCodeAttribution | typeof dailyCursorUsage,
+	table: typeof dailyClaudeCodeAttribution | typeof dailyCursorUsage | typeof dailyGithubActivity,
 	rows: T[],
 	label: string,
 ): Promise<void> {
@@ -284,7 +319,9 @@ async function batchUpsert<T>(
 						dailyClaudeCodeAttribution.email,
 						dailyClaudeCodeAttribution.model,
 					]
-				: [dailyCursorUsage.date, dailyCursorUsage.email, dailyCursorUsage.model]
+				: table === dailyCursorUsage
+					? [dailyCursorUsage.date, dailyCursorUsage.email, dailyCursorUsage.model]
+					: [dailyGithubActivity.date, dailyGithubActivity.email]
 
 		await db
 			.insert(table as never)

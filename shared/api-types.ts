@@ -31,6 +31,8 @@ export interface AdminConfigResponse {
 	cursorAdminApiKeySet: boolean
 	slackBotTokenSet: boolean
 	googleClientSecretSet: boolean
+	githubOrg: string | null
+	githubAccessTokenSet: boolean
 }
 
 export interface AdminConfigPatch {
@@ -45,6 +47,8 @@ export interface AdminConfigPatch {
 	cursorAdminApiKey?: string | null
 	slackBotToken?: string | null
 	slackChannelId?: string | null
+	githubAccessToken?: string | null
+	githubOrg?: string | null
 }
 
 export interface MeResponse {
@@ -86,6 +90,12 @@ export interface DashboardSummaryResponse {
 		cu_tokens: number
 		cc_users: number
 		cu_users: number
+		gh_commits: number
+		gh_prs_opened: number
+		gh_prs_merged: number
+		gh_additions: number
+		gh_deletions: number
+		gh_users: number
 		open_alerts: number | null
 	} | null
 	trend: Array<{
@@ -94,6 +104,9 @@ export interface DashboardSummaryResponse {
 		cursor_cents: number | null
 		claude_code_tokens: number
 		cursor_tokens: number
+		gh_prs_merged: number
+		gh_additions: number
+		gh_deletions: number
 	}>
 }
 
@@ -108,6 +121,9 @@ export interface TopSpenderItem {
 	total_tokens: number
 	trend_cents: number[] | null
 	trend_tokens: number[]
+	gh_prs_merged: number
+	gh_additions: number
+	gh_deletions: number
 }
 
 export interface ModelMixItem {
@@ -122,12 +138,16 @@ export interface ModelMixItem {
 export interface UserListItem {
 	email: string
 	name: string | null
+	github_username: string | null
 	cc_cents: number | null
 	cu_cents: number | null
 	cc_tokens: number
 	cu_tokens: number
 	trend_cents: number[] | null
 	trend_tokens: number[]
+	gh_prs_merged: number
+	gh_additions: number
+	gh_deletions: number
 }
 
 export interface UserDetailResponse {
@@ -135,6 +155,7 @@ export interface UserDetailResponse {
 	name: string | null
 	anthropic_user_id: string | null
 	cursor_user_id: string | null
+	github_username: string | null
 }
 
 export interface HeatmapItem {
@@ -174,7 +195,7 @@ export interface ThresholdsResponse {
 
 export interface SyncRunItem {
 	id: string
-	job: "anthropic" | "cursor" | "alerts" | "slack_digest"
+	job: "anthropic" | "cursor" | "alerts" | "slack_digest" | "github"
 	status: "success" | "failed" | "running"
 	startedAt: string
 	completedAt: string | null
@@ -193,4 +214,32 @@ export interface SetupSavePayload {
 	slackChannelId?: string | null
 	claudeCodeDailyThresholdCents?: number
 	cursorDailyThresholdCents?: number
+	githubAccessToken?: string | null
+	githubOrg?: string | null
+}
+
+export interface CodeOutputItem {
+	date: string
+	prs_opened: number
+	prs_merged: number
+	additions: number
+	deletions: number
+}
+
+export interface UpdateTrackedUserRequest {
+	githubUsername?: string | null
+	name?: string | null
+}
+
+export interface UpdateTrackedUserResponse {
+	user: UserDetailResponse
+	backfillRunId?: string
+}
+
+export interface GithubHeatmapItem {
+	date: string
+	prs_opened: number
+	prs_merged: number
+	additions: number
+	deletions: number
 }

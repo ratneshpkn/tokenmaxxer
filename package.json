@@ -37,6 +37,7 @@
 		"seed:demo": "bun run server/scripts/seed-demo.ts",
 		"sync:anthropic": "bun run server/scripts/sync-anthropic.ts",
 		"sync:cursor": "bun run server/scripts/sync-cursor.ts",
+		"sync:github": "bun run server/scripts/sync-github.ts",
 		"backfill": "bun run server/scripts/backfill.ts",
 		"alerts:compute": "bun run server/scripts/compute-alerts.ts",
 		"slack:digest": "bun run server/scripts/slack-digest.ts",
