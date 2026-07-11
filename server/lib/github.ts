@@ -112,7 +112,7 @@ export class GitHubClient {
 
 	// ── Paginated fetch ────────────────────────────────────────────────
 
-	private async fetchJson<T>(url: string): Promise<T> {
+	async fetchJson<T>(url: string): Promise<T> {
 		const res = await this.fetchWithRetry(url)
 		if (!res.ok) {
 			const body = await res.text().catch(() => "")

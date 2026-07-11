@@ -403,38 +403,47 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 				.where(eq(trackedUsers.githubUsername, updates.githubUsername))
 
 			if (conflict && conflict.email !== email) {
-				// 1. Remove githubUsername from conflict record
-				await db
-					.update(trackedUsers)
-					.set({ githubUsername: null, updatedAt: new Date() })
-					.where(eq(trackedUsers.email, conflict.email))
-
-				// 2. If conflict user record has no other platform mapping, mark it inactive
-				if (!conflict.anthropicUserId && !conflict.cursorUserId) {
-					await db
+				await db.transaction(async (tx) => {
+					// 1. Remove githubUsername from conflict record
+					await tx
 						.update(trackedUsers)
-						.set({ isActive: false, updatedAt: new Date() })
+						.set({ githubUsername: null, updatedAt: new Date() })
 						.where(eq(trackedUsers.email, conflict.email))
-				}
 
-				// 3. Merge conflict user's daily_github_activity into this user
-				await db.execute(sql`
-					insert into daily_github_activity (date, email, prs_opened, prs_merged, additions, deletions, synced_at)
-					select date, ${email}, prs_opened, prs_merged, additions, deletions, synced_at
-					from daily_github_activity
-					where email = ${conflict.email}
-					on conflict (date, email) do update set
-						prs_opened = daily_github_activity.prs_opened + excluded.prs_opened,
-						prs_merged = daily_github_activity.prs_merged + excluded.prs_merged,
-						additions = daily_github_activity.additions + excluded.additions,
-						deletions = daily_github_activity.deletions + excluded.deletions,
-						synced_at = excluded.synced_at
-				`)
+					// 2. If conflict user record has no other platform mapping, mark it inactive
+					if (!conflict.anthropicUserId && !conflict.cursorUserId) {
+						await tx
+							.update(trackedUsers)
+							.set({ isActive: false, updatedAt: new Date() })
+							.where(eq(trackedUsers.email, conflict.email))
+					}
 
-				// 4. Delete old activity under conflict email
-				await db.execute(sql`
-					delete from daily_github_activity where email = ${conflict.email}
-				`)
+					// 3. Merge conflict user's daily_github_activity into this user
+					await tx.execute(sql`
+						insert into daily_github_activity (date, email, prs_opened, prs_merged, additions, deletions, synced_at)
+						select date, ${email}, prs_opened, prs_merged, additions, deletions, synced_at
+						from daily_github_activity
+						where email = ${conflict.email}
+						on conflict (date, email) do update set
+							prs_opened = daily_github_activity.prs_opened + excluded.prs_opened,
+							prs_merged = daily_github_activity.prs_merged + excluded.prs_merged,
+							additions = daily_github_activity.additions + excluded.additions,
+							deletions = daily_github_activity.deletions + excluded.deletions,
+							synced_at = excluded.synced_at
+					`)
+
+					// 4. Delete old activity under conflict email
+					await tx.execute(sql`
+						delete from daily_github_activity where email = ${conflict.email}
+					`)
+
+					// 5. Update pull requests from the conflict user to point to this user's email
+					await tx.execute(sql`
+						update github_pull_requests
+						set email = ${email}, synced_at = now()
+						where email = ${conflict.email}
+					`)
+				})
 			}
 		}
 

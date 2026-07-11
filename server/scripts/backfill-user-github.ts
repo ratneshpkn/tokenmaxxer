@@ -1,5 +1,5 @@
 import { dailyGithubActivity, githubPullRequests } from "@shared/schema"
-import { sql } from "drizzle-orm"
+import { and, eq, gte, lte, sql } from "drizzle-orm"
 import { db } from "../db"
 import { loadConfig } from "../lib/config"
 import { GitHubClient, sleep } from "../lib/github"
@@ -97,8 +97,9 @@ export async function backfillUserGithub(
 						}
 						accum.prsMerged += 1
 
-						accum.additions += stats.additions ?? 0
-						accum.deletions += stats.deletions ?? 0
+						const PR_LINE_CAP = 10_000
+						accum.additions += Math.min(stats.additions ?? 0, PR_LINE_CAP)
+						accum.deletions += Math.min(stats.deletions ?? 0, PR_LINE_CAP)
 
 						rawPrsToInsert.push({
 							repo: pr.repo,
@@ -124,10 +125,15 @@ export async function backfillUserGithub(
 
 		await db.transaction(async (tx) => {
 			// Clear existing activity in the date range before upserting the backfilled records
-			await tx.execute(sql`
-				delete from daily_github_activity
-				where email = ${email} and date >= ${fromDay}::date and date <= ${toDay}::date
-			`)
+			await tx
+				.delete(dailyGithubActivity)
+				.where(
+					and(
+						eq(dailyGithubActivity.email, email),
+						gte(dailyGithubActivity.date, fromDay),
+						lte(dailyGithubActivity.date, toDay),
+					),
+				)
 
 			// 4. Upsert
 			if (agg.size > 0) {
