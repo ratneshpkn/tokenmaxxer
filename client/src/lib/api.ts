@@ -12,6 +12,9 @@ import type {
 	InvitationItem,
 	MeResponse,
 	ModelMixItem,
+	ModelProfileResponse,
+	ModelTrendItem,
+	ModelUserItem,
 	SetupSavePayload,
 	SyncRunItem,
 	ThresholdsResponse,
@@ -197,5 +200,37 @@ export const api = {
 				method: "POST",
 			}),
 		runsByIds: (ids: string[]) => request<SyncRunItem[]>(`/api/sync/runs?ids=${ids.join(",")}`),
+	},
+
+	models: {
+		profile: (
+			model: string,
+			from: string,
+			to: string,
+			platform: "all" | "claude_code" | "cursor" = "all",
+		) =>
+			request<ModelProfileResponse>(
+				`/api/models/${encodeURIComponent(model)}?from=${from}&to=${to}&platform=${platform}`,
+			),
+		topUsers: (
+			model: string,
+			from: string,
+			to: string,
+			platform: "all" | "claude_code" | "cursor" = "all",
+			limit = 50,
+			metric: "cost" | "tokens" = "cost",
+		) =>
+			request<ModelUserItem[]>(
+				`/api/models/${encodeURIComponent(model)}/top-users?from=${from}&to=${to}&platform=${platform}&limit=${limit}&metric=${metric}`,
+			),
+		trend: (
+			model: string,
+			from: string,
+			to: string,
+			platform: "all" | "claude_code" | "cursor" = "all",
+		) =>
+			request<ModelTrendItem[]>(
+				`/api/models/${encodeURIComponent(model)}/trend?from=${from}&to=${to}&platform=${platform}`,
+			),
 	},
 }

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Filter } from "lucide-react"
 import { useMemo, useState } from "react"
+import { Link } from "wouter"
 import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
 import { SortHeader } from "@/components/SortHeader"
@@ -203,10 +204,15 @@ export function ModelsPage(): React.JSX.Element {
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
-											<span className="flex items-center gap-2 min-w-0">
+											<Link
+												href={`/models/${encodeURIComponent(m.model)}?platform=${m.platform}`}
+												className="flex items-center gap-2 min-w-0 group"
+											>
 												<span className={`inline-block w-2 h-2 shrink-0 ${pipColor}`} />
-												<span className="text-fg truncate">{m.model}</span>
-											</span>
+												<span className="text-fg truncate group-hover:text-amber transition-colors">
+													{m.model}
+												</span>
+											</Link>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-[10px] tracked text-fg-mid">
 											{platformLabel(m.platform)}

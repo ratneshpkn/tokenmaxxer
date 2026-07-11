@@ -6,6 +6,7 @@ import { AlertsPage } from "@/pages/alerts"
 import { DashboardPage } from "@/pages/dashboard"
 import { HomePage } from "@/pages/home"
 import { LoginPage } from "@/pages/login"
+import { ModelDetailPage } from "@/pages/model-detail"
 import { ModelsPage } from "@/pages/models"
 import { SettingsPage } from "@/pages/settings"
 import { SetupPage } from "@/pages/setup"
@@ -89,6 +90,13 @@ export default function App(): React.JSX.Element {
 				{() => (
 					<AuthGate>
 						<ModelsPage />
+					</AuthGate>
+				)}
+			</Route>
+			<Route path="/models/:model">
+				{(params) => (
+					<AuthGate>
+						<ModelDetailPage model={decodeURIComponent(params.model)} />
 					</AuthGate>
 				)}
 			</Route>

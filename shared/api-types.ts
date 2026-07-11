@@ -243,3 +243,33 @@ export interface GithubHeatmapItem {
 	additions: number
 	deletions: number
 }
+
+export interface ModelProfileResponse {
+	model: string
+	platforms: ("claude_code" | "cursor")[]
+	cc_cents: number | null
+	cu_cents: number | null
+	cc_tokens: number
+	cu_tokens: number
+	total_cents: number | null
+	total_tokens: number
+	active_users: number
+}
+
+export interface ModelUserItem {
+	email: string
+	name: string | null
+	cents: number | null
+	tokens: number
+	share_pct: number
+	trend_cents: number[] | null
+	trend_tokens: number[]
+}
+
+export interface ModelTrendItem {
+	date: string
+	cc_cents: number | null
+	cu_cents: number | null
+	cc_tokens: number
+	cu_tokens: number
+}
