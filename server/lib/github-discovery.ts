@@ -6,7 +6,7 @@ import { type GitHubClient, sleep } from "./github"
 export async function discoverGithubUsernames(
 	client: GitHubClient,
 	org: string,
-	token: string,
+	_token: string,
 ): Promise<Map<string, string>> {
 	const newlyMapped = new Map<string, string>() // login -> email
 
@@ -45,13 +45,6 @@ export async function discoverGithubUsernames(
 	const cleanNameToUser = new Map(
 		unmapped.filter((u) => u.name).map((u) => [u.name?.toLowerCase().replace(/\s+/g, ""), u]),
 	)
-
-	const headers = {
-		Authorization: `Bearer ${token}`,
-		Accept: "application/vnd.github+json",
-		"X-GitHub-Api-Version": "2022-11-28",
-		"User-Agent": "tokenmaxxer/1.0",
-	}
 
 	const orgMembers = await client.listOrgMembers(org)
 	const availableMembers = orgMembers.filter((m) => !takenLogins.has(m.login.toLowerCase()))
@@ -107,9 +100,9 @@ export async function discoverGithubUsernames(
 		if (takenLogins.has(login) || newlyMapped.has(login)) continue
 
 		try {
-			const res = await fetch(`https://api.github.com/users/${member.login}`, { headers })
-			if (!res.ok) continue
-			const profile = (await res.json()) as { email?: string }
+			const profile = await client.fetchJson<{ email?: string }>(
+				`https://api.github.com/users/${member.login}`,
+			)
 			if (profile.email) {
 				const pubEmail = profile.email.toLowerCase()
 				if (unmappedEmails.has(pubEmail) && !Array.from(newlyMapped.values()).includes(pubEmail)) {
@@ -147,12 +140,13 @@ export async function discoverGithubUsernames(
 				try {
 					const since = sixMonthsAgo.toISOString()
 					const url = `https://api.github.com/repos/${org}/${repo.name}/commits?since=${since}&per_page=100`
-					const res = await fetch(url, { headers })
-					if (!res.ok) continue
-					const commits = (await res.json()) as Array<{
-						author?: { login: string }
-						commit: { author?: { email?: string } }
-					}>
+					const commits =
+						await client.fetchJson<
+							Array<{
+								author?: { login: string }
+								commit: { author?: { email?: string } }
+							}>
+						>(url)
 
 					for (const c of commits) {
 						const login = c.author?.login
