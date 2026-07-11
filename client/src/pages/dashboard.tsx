@@ -58,7 +58,9 @@ function StatTooltip({
 						<span className="text-fg-mid">{p.dataKey}</span>
 					</span>
 					<span className="text-fg">
-						{mode === "usd" ? `$${Number(p.value).toFixed(2)}` : Math.abs(Number(p.value)).toLocaleString()}
+						{mode === "usd"
+							? `$${Number(p.value).toFixed(2)}`
+							: Math.abs(Number(p.value)).toLocaleString()}
 					</span>
 				</div>
 			))}
@@ -109,7 +111,10 @@ export function DashboardPage(): React.JSX.Element {
 	const cuTokens = Number(totals?.cu_tokens ?? 0)
 	const totalTokens = ccTokens + cuTokens
 
-	const totalDays = Math.max(1, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1)
+	const totalDays = Math.max(
+		1,
+		Math.round((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1,
+	)
 	const prsPerDay = totals != null ? ((totals.gh_prs_merged ?? 0) / totalDays).toFixed(1) : "0"
 
 	const trend = useMemo(
@@ -295,11 +300,11 @@ export function DashboardPage(): React.JSX.Element {
 					</div>
 					<div>
 						<div className="font-mono text-3xl tabular text-fg leading-none">
-							{totals != null ? ((totals.gh_additions ?? 0) + (totals.gh_deletions ?? 0)).toLocaleString() : "0"}
+							{totals != null
+								? ((totals.gh_additions ?? 0) + (totals.gh_deletions ?? 0)).toLocaleString()
+								: "0"}
 						</div>
-						<div className="text-[10px] tracked text-fg-dim mt-2">
-							lines changed
-						</div>
+						<div className="text-[10px] tracked text-fg-dim mt-2">lines changed</div>
 						<div className="text-[10px] tracked text-fg-very-dim mt-1">
 							{totals?.gh_prs_merged ?? 0} PRs ({prsPerDay}/day) · {totals?.gh_users ?? 0} users
 						</div>
@@ -399,6 +404,7 @@ export function DashboardPage(): React.JSX.Element {
 					</div>
 					<div className="flex items-center">
 						<button
+							type="button"
 							onClick={() => setGithubMetricMode("lines")}
 							className={`px-3 py-1 text-[10px] tracked rounded-l-md border border-line border-r-0 transition-colors ${
 								githubMetricMode === "lines"
@@ -409,6 +415,7 @@ export function DashboardPage(): React.JSX.Element {
 							LINES
 						</button>
 						<button
+							type="button"
 							onClick={() => setGithubMetricMode("prs")}
 							className={`px-3 py-1 text-[10px] tracked rounded-r-md border border-line transition-colors ${
 								githubMetricMode === "prs"
@@ -468,18 +475,16 @@ export function DashboardPage(): React.JSX.Element {
 									/>
 								)}
 								{githubMetricMode === "prs" && (
-									<Bar
-										dataKey="PRs Merged"
-										fill="var(--amber)"
-										isAnimationActive={animating}
-									/>
+									<Bar dataKey="PRs Merged" fill="var(--amber)" isAnimationActive={animating} />
 								)}
 							</BarChart>
 						</ResponsiveContainer>
 					)}
 				</div>
 				<div className="px-5 py-2 border-t border-line text-[10px] text-fg-very-dim leading-relaxed">
-					{githubMetricMode === "lines" ? "GitHub line additions and deletions aggregated daily across all tracked users." : "GitHub pull requests merged daily across all tracked users."}
+					{githubMetricMode === "lines"
+						? "GitHub line additions and deletions aggregated daily across all tracked users."
+						: "GitHub pull requests merged daily across all tracked users."}
 				</div>
 			</section>
 

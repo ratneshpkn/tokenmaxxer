@@ -108,10 +108,10 @@ export function parseSearch(search: string, now: Date = new Date()): DateRange {
 
 		const today = todayPT(now)
 		const yesterday = addDays(today, -1)
-		
+
 		const clampedTo = t > yesterday ? yesterday : t
 		const clampedFrom = f > yesterday ? yesterday : f
-		
+
 		return { from: clampedFrom, to: clampedTo, preset: "custom" }
 	}
 

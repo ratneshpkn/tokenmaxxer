@@ -1,7 +1,7 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import type { GithubHeatmapItem } from "@shared/api-types"
-import { computeQuartileBuckets } from "./ActivityHeatmap"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatNumber } from "@/lib/utils"
+import { computeQuartileBuckets } from "./ActivityHeatmap"
 
 const BUCKET_CLASS: Record<number, string> = {
 	0: "bg-line/20 dark:bg-line/15",
@@ -23,8 +23,8 @@ interface GithubHeatmapProps {
 }
 
 export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
-	// The user requested PR count over lines changed for coloring. 
-	// We use PRs as the dominant factor, but include lines changed so that days with 
+	// The user requested PR count over lines changed for coloring.
+	// We use PRs as the dominant factor, but include lines changed so that days with
 	// commits but 0 PRs still show some heat (and don't render as entirely empty).
 	const values = days.map((d) => {
 		const prs = d.prs_opened + d.prs_merged
@@ -82,7 +82,10 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 
 	return (
 		<div className="flex flex-col select-none mx-auto">
-			<div className="flex mb-2 text-[9px] font-mono text-fg-dim/80" style={{ paddingLeft: "24px" }}>
+			<div
+				className="flex mb-2 text-[9px] font-mono text-fg-dim/80"
+				style={{ paddingLeft: "24px" }}
+			>
 				{weeks.map((week, wi) => {
 					const label = monthLabels[wi]
 					const firstActive = week.find((cell) => cell !== null)?.day
@@ -117,7 +120,9 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 								{week.map((cell, di) => {
 									const keyVal = cell ? cell.day.date : `empty-${di}`
 									if (!cell) {
-										return <div key={keyVal} className="w-[20px] h-[20px] bg-transparent" aria-hidden />
+										return (
+											<div key={keyVal} className="w-[20px] h-[20px] bg-transparent" aria-hidden />
+										)
 									}
 									const { day, bucket } = cell
 									const prCount = day.prs_opened + day.prs_merged
@@ -135,10 +140,12 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 											<TooltipContent className="font-mono text-[10px] tracked bg-bg border border-line-strong px-2.5 py-1.5 shadow-md">
 												<div className="font-semibold text-fg">{formatLabel(day.date)}</div>
 												<div className="text-fg-mid font-medium mt-1">
-													{prCount} {prCount === 1 ? "PR" : "PRs"} ({day.prs_opened} opened, {day.prs_merged} merged)
+													{prCount} {prCount === 1 ? "PR" : "PRs"} ({day.prs_opened} opened,{" "}
+													{day.prs_merged} merged)
 												</div>
 												<div className="text-fg-dim text-[9px] mt-0.5">
-													{formatNumber(linesChanged)} lines (+{formatNumber(day.additions)} / -{formatNumber(day.deletions)})
+													{formatNumber(linesChanged)} lines (+{formatNumber(day.additions)} / -
+													{formatNumber(day.deletions)})
 												</div>
 											</TooltipContent>
 										</Tooltip>

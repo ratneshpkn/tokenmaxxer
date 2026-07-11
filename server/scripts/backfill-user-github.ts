@@ -1,16 +1,9 @@
 import { dailyGithubActivity, githubPullRequests } from "@shared/schema"
 import { sql } from "drizzle-orm"
 import { db } from "../db"
-import { GitHubClient, sleep } from "../lib/github"
 import { loadConfig } from "../lib/config"
-import {
-	bumpSyncRunRows,
-	daysAgo,
-	finishSyncRun,
-	startSyncRun,
-	toLocalDateStr,
-	yesterday,
-} from "./lib/shared"
+import { GitHubClient, sleep } from "../lib/github"
+import { bumpSyncRunRows, daysAgo, finishSyncRun, startSyncRun, yesterday } from "./lib/shared"
 
 interface BackfillOpts {
 	existingRunId?: string
@@ -53,7 +46,7 @@ export async function backfillUserGithub(
 			deletions: number
 		}
 		const agg = new Map<string, CommitAgg>()
-		const rawPrsToInsert: any[] = []
+		const rawPrsToInsert: (typeof githubPullRequests.$inferInsert)[] = []
 
 		try {
 			const openedDates = await client.getPRsOpenedDates(org, githubUsername, fromDay, toDay)
@@ -83,7 +76,10 @@ export async function backfillUserGithub(
 							const stats = await client.getPullRequestStats(org, pr.repo, pr.number)
 							return { pr, stats }
 						} catch (err) {
-							console.error(`[backfill-github] Failed to get PR stats for ${pr.repo}#${pr.number}`, err)
+							console.error(
+								`[backfill-github] Failed to get PR stats for ${pr.repo}#${pr.number}`,
+								err,
+							)
 							return { pr, stats: { additions: 0, deletions: 0 } }
 						}
 					}),

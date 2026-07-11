@@ -275,7 +275,7 @@ export function UsersPage(): React.JSX.Element {
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right select-none">
 											<span className="block font-mono text-fg font-medium">
-												{((r.gh_additions ?? 0) + (r.gh_deletions ?? 0)) > 0
+												{(r.gh_additions ?? 0) + (r.gh_deletions ?? 0) > 0
 													? `${formatNumber((r.gh_additions ?? 0) + (r.gh_deletions ?? 0))} lines`
 													: "—"}
 											</span>
@@ -284,7 +284,8 @@ export function UsersPage(): React.JSX.Element {
 													? `${formatNumber(r.gh_prs_merged)} PR${r.gh_prs_merged === 1 ? "" : "s"}`
 													: "0 PRs"}{" "}
 												<span className="text-fg-very-dim">
-													(+{formatNumber(r.gh_additions ?? 0)}/-{formatNumber(r.gh_deletions ?? 0)})
+													(+{formatNumber(r.gh_additions ?? 0)}/-{formatNumber(r.gh_deletions ?? 0)}
+													)
 												</span>
 											</span>
 										</TableCell>

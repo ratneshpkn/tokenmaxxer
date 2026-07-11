@@ -15,11 +15,14 @@ export function ymd(d: Date, tz = "America/Los_Angeles"): string {
 }
 
 /** Parse any UTC/ISO timestamp and convert it to a local date string (YYYY-MM-DD) */
-export function toLocalDateStr(isoString: string | null | undefined, tz = "America/Los_Angeles"): string {
+export function toLocalDateStr(
+	isoString: string | null | undefined,
+	tz = "America/Los_Angeles",
+): string {
 	if (!isoString) return ""
 	try {
 		const d = new Date(isoString)
-		if (!isNaN(d.getTime())) {
+		if (!Number.isNaN(d.getTime())) {
 			return d.toLocaleDateString("en-CA", { timeZone: tz })
 		}
 	} catch (_err) {

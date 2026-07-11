@@ -7,6 +7,7 @@ import type {
 	ConfigResponse,
 	CreateInvitationResponse,
 	DashboardSummaryResponse,
+	GithubHeatmapItem,
 	HeatmapItem,
 	InvitationItem,
 	MeResponse,
@@ -20,7 +21,6 @@ import type {
 	UsageRow,
 	UserDetailResponse,
 	UserListItem,
-	GithubHeatmapItem,
 } from "@shared/api-types"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

@@ -1,9 +1,13 @@
 import { trackedUsers } from "@shared/schema"
 import { and, eq, isNull } from "drizzle-orm"
 import { db } from "../db"
-import { GitHubClient, sleep } from "./github"
+import { type GitHubClient, sleep } from "./github"
 
-export async function discoverGithubUsernames(client: GitHubClient, org: string, token: string): Promise<Map<string, string>> {
+export async function discoverGithubUsernames(
+	client: GitHubClient,
+	org: string,
+	token: string,
+): Promise<Map<string, string>> {
 	const newlyMapped = new Map<string, string>() // login -> email
 
 	const unmapped = await db
@@ -15,18 +19,32 @@ export async function discoverGithubUsernames(client: GitHubClient, org: string,
 		return newlyMapped
 	}
 
-	console.log(`[github-discovery] ${unmapped.length} active users missing github_username — starting discovery...`)
+	console.log(
+		`[github-discovery] ${unmapped.length} active users missing github_username — starting discovery...`,
+	)
 
 	const alreadyMapped = await db
 		.select({ githubUsername: trackedUsers.githubUsername })
 		.from(trackedUsers)
 		.where(eq(trackedUsers.isActive, true))
 
-	const takenLogins = new Set(alreadyMapped.filter((r) => r.githubUsername).map((r) => r.githubUsername!.toLowerCase()))
+	const takenLogins = new Set(
+		alreadyMapped.filter((r) => r.githubUsername).map((r) => r.githubUsername?.toLowerCase()),
+	)
 	const unmappedEmails = new Set(unmapped.map((u) => u.email.toLowerCase()))
-	const emailToUser = new Map(unmapped.map((u) => [u.email.toLowerCase(), u]))
-	const emailPrefixToUser = new Map(unmapped.map((u) => [u.email.split("@")[0].toLowerCase().replace(/[._+-]/g, ""), u]))
-	const cleanNameToUser = new Map(unmapped.filter(u => u.name).map(u => [u.name!.toLowerCase().replace(/\s+/g, ""), u]))
+	const _emailToUser = new Map(unmapped.map((u) => [u.email.toLowerCase(), u]))
+	const emailPrefixToUser = new Map(
+		unmapped.map((u) => [
+			u.email
+				.split("@")[0]
+				.toLowerCase()
+				.replace(/[._+-]/g, ""),
+			u,
+		]),
+	)
+	const cleanNameToUser = new Map(
+		unmapped.filter((u) => u.name).map((u) => [u.name?.toLowerCase().replace(/\s+/g, ""), u]),
+	)
 
 	const headers = {
 		Authorization: `Bearer ${token}`,
@@ -44,7 +62,7 @@ export async function discoverGithubUsernames(client: GitHubClient, org: string,
 		if (takenLogins.has(login) || newlyMapped.has(login)) continue
 
 		const cleanLogin = login.replace(/[._-]/g, "")
-		
+
 		const byPrefix = emailPrefixToUser.get(cleanLogin)
 		if (byPrefix && !newlyMapped.has(login)) {
 			newlyMapped.set(member.login, byPrefix.email)
@@ -105,16 +123,22 @@ export async function discoverGithubUsernames(client: GitHubClient, org: string,
 
 	// ── 3. Slow match: Commit history scanning ──
 	// Scan repos for actual commit email -> author login mapping
-	const remainingEmails = new Set(Array.from(unmappedEmails).filter(e => !Array.from(newlyMapped.values()).includes(e)))
+	const remainingEmails = new Set(
+		Array.from(unmappedEmails).filter((e) => !Array.from(newlyMapped.values()).includes(e)),
+	)
 	if (remainingEmails.size > 0) {
-		console.log(`[github-discovery] ${remainingEmails.size} users still unmapped. Scanning recent commits...`)
+		console.log(
+			`[github-discovery] ${remainingEmails.size} users still unmapped. Scanning recent commits...`,
+		)
 		try {
 			const allRepos = await client.listOrgRepos(org)
 			const sixMonthsAgo = new Date()
 			sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
 			const cutoff = sixMonthsAgo.toISOString().slice(0, 10)
 
-			const activeRepos = allRepos.filter((r) => !r.archived && r.pushedAt && r.pushedAt.slice(0, 10) >= cutoff)
+			const activeRepos = allRepos.filter(
+				(r) => !r.archived && r.pushedAt && r.pushedAt.slice(0, 10) >= cutoff,
+			)
 
 			// Try to find exact email -> login mapping from commits
 			for (const repo of activeRepos) {
@@ -134,8 +158,12 @@ export async function discoverGithubUsernames(client: GitHubClient, org: string,
 						const login = c.author?.login
 						const email = c.commit?.author?.email?.toLowerCase()
 						if (!login || !email) continue
-						
-						if (remainingEmails.has(email) && !takenLogins.has(login.toLowerCase()) && !newlyMapped.has(login)) {
+
+						if (
+							remainingEmails.has(email) &&
+							!takenLogins.has(login.toLowerCase()) &&
+							!newlyMapped.has(login)
+						) {
 							newlyMapped.set(login, email)
 							remainingEmails.delete(email)
 						}
@@ -146,7 +174,9 @@ export async function discoverGithubUsernames(client: GitHubClient, org: string,
 				await sleep(100)
 			}
 		} catch (err) {
-			console.warn(`[github-discovery] Deep commit scan failed: ${err instanceof Error ? err.message : err}`)
+			console.warn(
+				`[github-discovery] Deep commit scan failed: ${err instanceof Error ? err.message : err}`,
+			)
 		}
 	}
 

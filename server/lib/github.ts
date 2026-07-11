@@ -186,7 +186,8 @@ export class GitHubClient {
 	/** Search PRs matching a query and return their dates. Handles pagination. */
 	async searchPRDates(query: string, type: "created" | "merged"): Promise<string[]> {
 		const results: string[] = []
-		let nextUrl: string | null = `${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}&per_page=100`
+		let nextUrl: string | null =
+			`${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}&per_page=100`
 
 		while (nextUrl) {
 			const res = await this.fetchWithRetry(nextUrl)
@@ -194,8 +195,14 @@ export class GitHubClient {
 				const body = await res.text().catch(() => "")
 				throw new GitHubApiError(res.status, res.statusText, body)
 			}
-			const data = await res.json() as { items?: Array<{ created_at: string; closed_at: string | null; pull_request?: { merged_at: string | null } }> }
-			
+			const data = (await res.json()) as {
+				items?: Array<{
+					created_at: string
+					closed_at: string | null
+					pull_request?: { merged_at: string | null }
+				}>
+			}
+
 			if (!data.items) break
 
 			for (const item of data.items) {
@@ -248,10 +255,25 @@ export class GitHubClient {
 		username: string,
 		from: string,
 		to: string,
-	): Promise<Array<{ repo: string; number: number; title: string; mergedAtDateStr: string; mergedAtIso: string }>> {
+	): Promise<
+		Array<{
+			repo: string
+			number: number
+			title: string
+			mergedAtDateStr: string
+			mergedAtIso: string
+		}>
+	> {
 		const query = `type:pr author:${username} org:${org} is:merged merged:${from}..${to}`
-		const results: Array<{ repo: string; number: number; title: string; mergedAtDateStr: string; mergedAtIso: string }> = []
-		let nextUrl: string | null = `${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}&per_page=100`
+		const results: Array<{
+			repo: string
+			number: number
+			title: string
+			mergedAtDateStr: string
+			mergedAtIso: string
+		}> = []
+		let nextUrl: string | null =
+			`${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}&per_page=100`
 
 		while (nextUrl) {
 			const res = await this.fetchWithRetry(nextUrl)
@@ -259,8 +281,15 @@ export class GitHubClient {
 				const body = await res.text().catch(() => "")
 				throw new GitHubApiError(res.status, res.statusText, body)
 			}
-			const data = await res.json() as { items?: Array<{ repository_url: string; number: number; title: string; pull_request?: { merged_at: string | null } }> }
-			
+			const data = (await res.json()) as {
+				items?: Array<{
+					repository_url: string
+					number: number
+					title: string
+					pull_request?: { merged_at: string | null }
+				}>
+			}
+
 			if (!data.items) break
 
 			for (const item of data.items) {
