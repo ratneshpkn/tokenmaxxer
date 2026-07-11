@@ -1,7 +1,7 @@
-import { db, pool } from "../db"
 import { dailyGithubActivity } from "@shared/schema"
-import { runGithubSync } from "./sync-github"
+import { db, pool } from "../db"
 import { daysAgo } from "./lib/shared"
+import { runGithubSync } from "./sync-github"
 
 async function main() {
 	console.log("[reset-github] Clearing all rows in daily_github_activity...")
@@ -13,7 +13,7 @@ async function main() {
 	const from = daysAgo(lookback)
 	const to = daysAgo(1) // yesterday
 	console.log(`[reset-github] Running full 365-day backfill: ${from} .. ${to}`)
-	
+
 	const res = await runGithubSync({ from, to })
 	console.log(`[reset-github] Backfill completed! Upserted ${res.rowsUpserted} rows.`)
 }

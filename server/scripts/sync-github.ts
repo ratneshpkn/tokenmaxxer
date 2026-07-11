@@ -1,18 +1,10 @@
-import { dailyGithubActivity, githubPullRequests, syncRuns, trackedUsers } from "@shared/schema"
+import { dailyGithubActivity, githubPullRequests, trackedUsers } from "@shared/schema"
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm"
 import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
 import { GitHubClient, sleep } from "../lib/github"
 import { discoverGithubUsernames } from "../lib/github-discovery"
-import {
-	bumpSyncRunRows,
-	listDays,
-	parseDateRangeArgs,
-	toLocalDateStr,
-	today,
-	withSyncRun,
-	yesterday,
-} from "./lib/shared"
+import { bumpSyncRunRows, parseDateRangeArgs, today, withSyncRun, yesterday } from "./lib/shared"
 
 export interface SyncRange {
 	from: string
@@ -29,8 +21,6 @@ interface CommitAgg {
 function aggKey(date: string, email: string): string {
 	return `${date}|${email}`
 }
-
-
 
 export async function runGithubSync(
 	range?: SyncRange,
@@ -82,14 +72,16 @@ export async function runGithubSync(
 					usernameToEmail.set(login.toLowerCase(), email.toLowerCase())
 				}
 			} catch (err) {
-				console.warn(`[sync-github] auto-discovery failed: ${err instanceof Error ? err.message : err}`)
+				console.warn(
+					`[sync-github] auto-discovery failed: ${err instanceof Error ? err.message : err}`,
+				)
 			}
 
 			// ── 2. PR data via search API (throttled) ────────────────────────
 			// For each tracked user with a GitHub username, query PRs opened/merged
 			// in the date range. We query the full range at once and map them exactly.
 			const dailyAgg = new Map<string, CommitAgg>()
-			const rawPrsToInsert: any[] = []
+			const rawPrsToInsert: (typeof githubPullRequests.$inferInsert)[] = []
 
 			const usersWithGithub = Array.from(usernameToEmail.entries())
 			const successfulEmails: string[] = []
@@ -104,7 +96,12 @@ export async function runGithubSync(
 					for (const date of openedDates) {
 						if (date >= fromDay && date <= toDay) {
 							const key = aggKey(date, email)
-							const accum = dailyAgg.get(key) ?? { prsOpened: 0, prsMerged: 0, additions: 0, deletions: 0 }
+							const accum = dailyAgg.get(key) ?? {
+								prsOpened: 0,
+								prsMerged: 0,
+								additions: 0,
+								deletions: 0,
+							}
 							accum.prsOpened = (accum.prsOpened || 0) + 1
 							dailyAgg.set(key, accum)
 						}
@@ -119,7 +116,10 @@ export async function runGithubSync(
 									const stats = await client.getPullRequestStats(org, pr.repo, pr.number)
 									return { pr, stats }
 								} catch (err) {
-									console.error(`[sync-github] Failed to get PR stats for ${pr.repo}#${pr.number}`, err)
+									console.error(
+										`[sync-github] Failed to get PR stats for ${pr.repo}#${pr.number}`,
+										err,
+									)
 									return { pr, stats: { additions: 0, deletions: 0 } }
 								}
 							}),
@@ -247,7 +247,6 @@ export async function runGithubSync(
 			if (rowsUpserted > 0) {
 				await bumpSyncRunRows(runId, rowsUpserted)
 			}
-
 
 			console.log(`[sync-github] upserted ${rowsUpserted} rows for ${fromDay}..${toDay}`)
 			return { rowsUpserted }

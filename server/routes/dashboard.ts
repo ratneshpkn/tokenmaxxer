@@ -166,7 +166,6 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 		const totalsRow: Record<string, unknown> | null =
 			(totals.rows?.[0] as Record<string, unknown>) ?? null
 		if (totalsRow) {
-
 			totalsRow.gh_prs_opened = Number(totalsRow.gh_prs_opened ?? 0)
 			totalsRow.gh_prs_merged = Number(totalsRow.gh_prs_merged ?? 0)
 			totalsRow.gh_additions = Number(totalsRow.gh_additions ?? 0)

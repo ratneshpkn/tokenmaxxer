@@ -12,10 +12,10 @@ import {
 } from "recharts"
 import { Link } from "wouter"
 import { ActivityHeatmap } from "@/components/ActivityHeatmap"
-import { GithubHeatmap } from "@/components/GithubHeatmap"
 import { Cost } from "@/components/Cost"
 import { DateRangeBar } from "@/components/DateRangeBar"
 import { FlexCardModal } from "@/components/FlexCardModal"
+import { GithubHeatmap } from "@/components/GithubHeatmap"
 import { MetricPair } from "@/components/MetricPair"
 import { Button } from "@/components/ui/button"
 import {
@@ -89,7 +89,9 @@ function EditableField({
 				}}
 				className="group inline-flex items-center gap-1.5 text-fg-very-dim hover:text-fg-mid transition-colors"
 			>
-				<span>{label}: {value || <span className="italic text-fg-very-dim">not set</span>}</span>
+				<span>
+					{label}: {value || <span className="italic text-fg-very-dim">not set</span>}
+				</span>
 				<Pencil className="w-2.5 h-2.5 opacity-0 group-hover:opacity-100 transition-opacity" />
 			</button>
 		)
@@ -107,7 +109,6 @@ function EditableField({
 					if (e.key === "Escape") setEditing(false)
 				}}
 				placeholder={placeholder}
-				autoFocus
 				disabled={saving}
 				className="bg-transparent border-b border-fg-dim/40 text-fg text-[10px] tracked font-mono px-1 py-0 w-28 focus:outline-none focus:border-amber"
 			/>
@@ -208,10 +209,13 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const avgActiveCents = activeDays > 0 ? Math.round(totalHeatCents / activeDays) : 0
 	const avgActiveTokens = activeDays > 0 ? Math.round(totalHeatTokens / activeDays) : 0
 
-	const ghActiveDays = ghDays.filter((d) => d.prs_opened + d.prs_merged + d.additions + d.deletions > 0).length
+	const ghActiveDays = ghDays.filter(
+		(d) => d.prs_opened + d.prs_merged + d.additions + d.deletions > 0,
+	).length
 	const ghTotalDays = ghDays.length
 	const ghPctActive = ghTotalDays > 0 ? Math.round((ghActiveDays / ghTotalDays) * 100) : 0
-	const ghPeakPRs = ghDays.length > 0 ? Math.max(...ghDays.map((d) => d.prs_opened + d.prs_merged)) : 0
+	const ghPeakPRs =
+		ghDays.length > 0 ? Math.max(...ghDays.map((d) => d.prs_opened + d.prs_merged)) : 0
 	const ghTotalPRs = ghDays.reduce((acc, d) => acc + d.prs_opened + d.prs_merged, 0)
 	const ghAvgActivePRs = ghActiveDays > 0 ? Number((ghTotalPRs / ghActiveDays).toFixed(1)) : 0
 
@@ -415,7 +419,10 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 							<StatBlock label="PEAK PRs" value={ghActiveDays > 0 ? String(ghPeakPRs) : "—"} />
 						</div>
 						<div className="p-5 flex flex-col justify-center bg-elev hover:bg-elev2/20 transition-colors duration-150">
-							<StatBlock label="AVG PRs / ACTIVE" value={ghActiveDays > 0 ? String(ghAvgActivePRs) : "—"} />
+							<StatBlock
+								label="AVG PRs / ACTIVE"
+								value={ghActiveDays > 0 ? String(ghAvgActivePRs) : "—"}
+							/>
 						</div>
 					</div>
 				</div>

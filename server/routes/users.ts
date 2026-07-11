@@ -1,12 +1,12 @@
-import { eq, sql } from "drizzle-orm"
 import { trackedUsers } from "@shared/schema"
-import { startSyncRun } from "../scripts/lib/shared"
+import { eq, sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
 import { coerceTrendArrays, stripCostForViewer } from "../lib/route-helpers"
+import { startSyncRun } from "../scripts/lib/shared"
 import { currentRole } from "./index"
 
 const usageQuery = z.object({
@@ -231,7 +231,6 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			cu_cents: number
 			cc_tokens: number
 			cu_tokens: number
-
 		}>(sql`
       with dates as (
         select generate_series(${from}::date, ${to}::date, '1 day')::date as d
@@ -271,7 +270,6 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			cu_cents: isViewer ? null : Number(r.cu_cents),
 			cc_tokens: Number(r.cc_tokens),
 			cu_tokens: Number(r.cu_tokens),
-
 		}))
 		return c.json(rows)
 	})
@@ -449,11 +447,12 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 
 		// If githubUsername was set to a new non-null value, trigger a backfill
 		let backfillRunId: string | undefined
+		const githubUsername = updates.githubUsername
 		const ghChanged =
-			updates.githubUsername !== undefined &&
-			updates.githubUsername !== null &&
-			updates.githubUsername !== existing.githubUsername
-		if (ghChanged) {
+			githubUsername !== undefined &&
+			githubUsername !== null &&
+			githubUsername !== existing.githubUsername
+		if (ghChanged && githubUsername) {
 			try {
 				const { backfillUserGithub } = await import("../scripts/backfill-user-github")
 				const hasData = await db.execute<{ c: number }>(sql`
@@ -461,11 +460,9 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 				`)
 				const lookback = (hasData.rows?.[0]?.c ?? 0) > 0 ? 30 : 365
 				backfillRunId = await startSyncRun("github", `user-mapping:${email}`)
-				backfillUserGithub(email, updates.githubUsername!, lookback, {
+				backfillUserGithub(email, githubUsername, lookback, {
 					existingRunId: backfillRunId,
-				}).catch((err) =>
-					console.error(`[users] backfill for ${email} failed`, err),
-				)
+				}).catch((err) => console.error(`[users] backfill for ${email} failed`, err))
 			} catch (err) {
 				console.warn(`[users] failed to trigger backfill for ${email}:`, err)
 			}
