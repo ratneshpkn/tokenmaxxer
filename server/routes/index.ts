@@ -8,6 +8,7 @@ import { registerAlertRoutes } from "./alerts"
 import { registerAuthPasswordRoutes } from "./auth-password"
 import { registerDashboardRoutes } from "./dashboard"
 import { registerInvitationRoutes } from "./invitations"
+import { registerModelRoutes } from "./models"
 import { registerSetupRoutes } from "./setup"
 import { registerSyncRoutes } from "./sync"
 import { registerThresholdRoutes } from "./thresholds"
@@ -58,4 +59,5 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 	registerInvitationRoutes(app)
 	registerSetupRoutes(app)
 	registerAdminConfigRoutes(app)
+	registerModelRoutes(app)
 }
