@@ -11,7 +11,7 @@ import { db, pool } from "../db"
 import { AnthropicAdminClient, decimalCentsToCents } from "../lib/anthropic-admin"
 import { invalidateConfigCache, loadConfig } from "../lib/config"
 import { deriveAttribution } from "./lib/derive-attribution"
-import { bumpSyncRunRows, parseDateRangeArgs, withSyncRun, yesterday } from "./lib/shared"
+import { bumpSyncRunRows, parseDateRangeArgs, today, withSyncRun, yesterday } from "./lib/shared"
 
 export interface SyncRange {
 	from: string // YYYY-MM-DD inclusive
@@ -58,7 +58,7 @@ export async function runAnthropicSync(
 			const client = new AnthropicAdminClient(apiKey)
 			let rowsUpserted = 0
 			const fromDay = range?.from ?? yesterday()
-			const toDay = range?.to ?? yesterday()
+			const toDay = range?.to ?? today()
 
 			// ── 1. Users snapshot ────────────────────────────────────────────────
 			for await (const batch of client.listUsers()) {
