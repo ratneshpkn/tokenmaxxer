@@ -1,15 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Check, Pencil, Share2, X } from "lucide-react"
-import { useState } from "react"
-import {
-	CartesianGrid,
-	Line,
-	LineChart,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts"
+import { Check, Pencil, Search, Share2, X } from "lucide-react"
+import { useMemo, useState } from "react"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Link } from "wouter"
 import { ActivityHeatmap } from "@/components/ActivityHeatmap"
 import { Cost } from "@/components/Cost"
@@ -17,6 +9,8 @@ import { DateRangeBar } from "@/components/DateRangeBar"
 import { FlexCardModal } from "@/components/FlexCardModal"
 import { GithubHeatmap } from "@/components/GithubHeatmap"
 import { MetricPair } from "@/components/MetricPair"
+import { SortHeader } from "@/components/SortHeader"
+import { Sparkline } from "@/components/Sparkline"
 import { Button } from "@/components/ui/button"
 import {
 	Table,
@@ -36,6 +30,8 @@ import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
 import { useMetricMode } from "@/lib/use-metric-mode"
 import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { formatCompact, formatDate, formatNumber } from "@/lib/utils"
+
+type ModelSortKey = "model" | "value" | "share"
 
 function StatBlock({ label, value }: { label: string; value: string }): React.JSX.Element {
 	return (
@@ -136,6 +132,9 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const [privacyOn] = usePrivacyMode()
 	const [metricMode] = useMetricMode()
 	const animating = useFirstRenderAnimation()
+	const [modelFilter, setModelFilter] = useState("")
+	const [modelSortKey, setModelSortKey] = useState<"model" | "value" | "share">("value")
+	const [modelSortDir, setModelSortDir] = useState<"asc" | "desc">("desc")
 	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
 	const isViewer = me ? me.role !== "admin" : false
 	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
@@ -193,6 +192,121 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const totalCents = ccCents + cuCents
 
 	const { chartModels, topModels, modelTrendsData } = buildModelTrends(ccRows, cuRows, trendMode)
+
+	const leaderboardData = useMemo(() => {
+		if (!usage) return []
+
+		const modelMap = new Map<
+			string,
+			{
+				model: string
+				platforms: Set<"claude_code" | "cursor">
+				cents: number
+				tokens: number
+				dailyValues: Map<string, number>
+			}
+		>()
+
+		// Union of all dates in chronological order
+		const ccDates = ccRows.map((r) => r.date)
+		const cuDates = cuRows.map((r) => r.date)
+		const allDates = [...new Set([...ccDates, ...cuDates])].sort()
+
+		const getOrCreate = (modelName: string) => {
+			let entry = modelMap.get(modelName)
+			if (!entry) {
+				entry = {
+					model: modelName,
+					platforms: new Set(),
+					cents: 0,
+					tokens: 0,
+					dailyValues: new Map<string, number>(),
+				}
+				modelMap.set(modelName, entry)
+			}
+			return entry
+		}
+
+		ccRows.forEach((r) => {
+			const m = r.model ?? "unknown"
+			const entry = getOrCreate(m)
+			entry.platforms.add("claude_code")
+			entry.cents += Number(r.estimated_cost_cents ?? 0)
+			const tokens = totalTokens(r)
+			entry.tokens += tokens
+
+			const val = trendMode === "tokens" ? tokens : Number(r.estimated_cost_cents ?? 0)
+			entry.dailyValues.set(r.date, (entry.dailyValues.get(r.date) ?? 0) + val)
+		})
+
+		cuRows.forEach((r) => {
+			const m = r.model ?? "unknown"
+			const entry = getOrCreate(m)
+			entry.platforms.add("cursor")
+			entry.cents += Number(r.charged_cents ?? 0)
+			const tokens = totalTokens(r)
+			entry.tokens += tokens
+
+			const val = trendMode === "tokens" ? tokens : Number(r.charged_cents ?? 0)
+			entry.dailyValues.set(r.date, (entry.dailyValues.get(r.date) ?? 0) + val)
+		})
+
+		const totalTokensSum = ccTokens + cuTokens
+
+		return [...modelMap.values()].map((item) => {
+			const trend = allDates.map((date) => item.dailyValues.get(date) ?? 0)
+			const share =
+				trendMode === "tokens"
+					? totalTokensSum > 0
+						? (item.tokens / totalTokensSum) * 100
+						: 0
+					: totalCents > 0
+						? (item.cents / totalCents) * 100
+						: 0
+			return {
+				model: item.model,
+				platforms: [...item.platforms],
+				cents: item.cents,
+				tokens: item.tokens,
+				share,
+				trend,
+			}
+		})
+	}, [ccRows, cuRows, usage, trendMode, ccTokens, cuTokens, totalCents])
+
+	const modelRows = useMemo(() => {
+		const f = modelFilter.trim().toLowerCase()
+		const filtered = f
+			? leaderboardData.filter((m) => m.model.toLowerCase().includes(f))
+			: leaderboardData
+
+		const sortVal = (m: (typeof filtered)[number]): string | number => {
+			switch (modelSortKey) {
+				case "model":
+					return m.model
+				case "value":
+					return trendMode === "tokens" ? m.tokens : m.cents
+				case "share":
+					return m.share
+			}
+		}
+
+		return [...filtered].sort((a, b) => {
+			const av = sortVal(a)
+			const bv = sortVal(b)
+			const cmp =
+				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+			return modelSortDir === "asc" ? cmp : -cmp
+		})
+	}, [leaderboardData, modelFilter, modelSortKey, modelSortDir, trendMode])
+
+	function toggleModelSort(k: ModelSortKey): void {
+		if (modelSortKey === k) setModelSortDir((d) => (d === "asc" ? "desc" : "asc"))
+		else {
+			setModelSortKey(k)
+			setModelSortDir(k === "model" ? "asc" : "desc")
+		}
+	}
 
 	const heatDays = heatmapQuery.data ?? []
 	const activeDays = heatDays.filter((d) => d.cc_tokens + d.cu_tokens > 0).length
@@ -448,7 +562,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						</div>
 					) : (
 						<ResponsiveContainer width="100%" height="100%">
-							<LineChart data={modelTrendsData} margin={{ top: 6, right: 8, bottom: 8, left: 0 }}>
+							<BarChart data={modelTrendsData} margin={{ top: 6, right: 8, bottom: 8, left: 0 }}>
 								<CartesianGrid stroke="var(--line)" strokeDasharray="2 4" vertical={false} />
 								<XAxis
 									dataKey="date"
@@ -466,7 +580,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 									width={56}
 								/>
 								<Tooltip
-									cursor={{ stroke: "var(--amber)", strokeDasharray: "2 2" }}
+									cursor={{ fill: "var(--elev2)", opacity: 0.4 }}
 									contentStyle={{
 										background: "var(--bg)",
 										border: "1px solid var(--line-strong)",
@@ -478,21 +592,126 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 									}
 								/>
 								{chartModels.map((model) => (
-									<Line
+									<Bar
 										key={model}
-										type="monotone"
 										dataKey={model}
-										stroke={colorForModel(model, topModels)}
-										strokeWidth={1.5}
-										dot={false}
-										activeDot={{ r: 3 }}
+										stackId="a"
+										fill={colorForModel(model, topModels)}
 										isAnimationActive={animating}
 									/>
 								))}
-							</LineChart>
+							</BarChart>
 						</ResponsiveContainer>
 					)}
 				</div>
+			</section>
+
+			{/* Model Usage Leaderboard */}
+			<section className="panel overflow-hidden">
+				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
+					<span className="text-[11px] tracked text-fg">TOP MODELS · {winLabel}</span>
+					<div className="flex items-center gap-2 w-48">
+						<Search className="w-3.5 h-3.5 text-fg-dim" />
+						<input
+							type="text"
+							placeholder="filter..."
+							value={modelFilter}
+							onChange={(e) => setModelFilter(e.target.value)}
+							className="bg-transparent text-[11px] outline-none text-fg placeholder:text-fg-very-dim w-full"
+						/>
+					</div>
+				</div>
+				<Table className="w-full tabular text-xs table-fixed">
+					<TableHeader className="border-b border-line bg-elev2/40">
+						<TableRow>
+							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
+								#
+							</TableHead>
+							<SortHeader
+								label="MODEL"
+								active={modelSortKey === "model"}
+								dir={modelSortDir}
+								onClick={() => toggleModelSort("model")}
+							/>
+							<SortHeader
+								label={`VALUE · ${winLabel}`}
+								active={modelSortKey === "value"}
+								dir={modelSortDir}
+								onClick={() => toggleModelSort("value")}
+								align="right"
+							/>
+							<SortHeader
+								label="SHARE"
+								active={modelSortKey === "share"}
+								dir={modelSortDir}
+								onClick={() => toggleModelSort("share")}
+								align="right"
+							/>
+							<TableHead className="h-9 px-3 w-[140px] text-[10px] tracked text-fg-dim text-left">
+								TREND · {winLabel}
+							</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{usageQuery.isLoading ? (
+							<TableRow>
+								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
+									── loading ──
+								</TableCell>
+							</TableRow>
+						) : modelRows.length === 0 ? (
+							<TableRow>
+								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
+									── no models in window ──
+								</TableCell>
+							</TableRow>
+						) : (
+							modelRows.map((m, i) => {
+								return (
+									<TableRow key={m.model}>
+										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+											{String(i + 1).padStart(3, "0")}
+										</TableCell>
+										<TableCell className="px-3 py-2.5">
+											<Link
+												href={`/models/${encodeURIComponent(m.model)}`}
+												className="flex items-center min-w-0 group"
+											>
+												<span className="flex items-center gap-1.5 min-w-0">
+													<span className="flex items-center gap-1 flex-shrink-0">
+														{m.platforms.includes("claude_code") && (
+															<span className="w-1.5 h-1.5 bg-amber" />
+														)}
+														{m.platforms.includes("cursor") && (
+															<span className="w-1.5 h-1.5 bg-sky" />
+														)}
+													</span>
+													<span className="text-fg truncate group-hover:text-amber transition-colors">
+														{m.model}
+													</span>
+												</span>
+											</Link>
+										</TableCell>
+										<TableCell className="px-3 py-2.5 text-right text-fg">
+											<MetricPair
+												cents={isViewer ? null : m.cents}
+												tokens={m.tokens}
+												digits={2}
+												secondaryClassName="text-[10px] text-fg-dim"
+											/>
+										</TableCell>
+										<TableCell className="px-3 py-2.5 text-right text-fg-dim text-[11px]">
+											{m.share.toFixed(1)}%
+										</TableCell>
+										<TableCell className="px-3 py-2.5">
+											<Sparkline data={m.trend} color="var(--fg-mid)" height={22} />
+										</TableCell>
+									</TableRow>
+								)
+							})
+						)}
+					</TableBody>
+				</Table>
 			</section>
 
 			{/* Alert history (admin-only) */}
