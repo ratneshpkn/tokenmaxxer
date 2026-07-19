@@ -18,6 +18,7 @@ import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
 import { SortHeader } from "@/components/SortHeader"
 import { Sparkline } from "@/components/Sparkline"
+import { Badge } from "@/components/ui/badge"
 import {
 	Table,
 	TableBody,
@@ -34,6 +35,7 @@ import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { formatCompact, formatNumber } from "@/lib/utils"
 
 type SortKey = "email" | "cents" | "tokens" | "share"
+type RawSortKey = "raw_model" | "cents" | "tokens" | "share"
 
 export function ModelDetailPage({ model }: { model: string }): React.JSX.Element {
 	const searchString = useSearch()
@@ -66,13 +68,23 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 		queryFn: () => api.models.trend(model, from, to, platformFilter),
 	})
 
+	const rawModelsQuery = useQuery({
+		queryKey: ["models.rawModels", model, from, to, platformFilter],
+		queryFn: () => api.models.rawModels(model, from, to, platformFilter),
+	})
+
 	const profile = profileQuery.data
 	const topUsers = topUsersQuery.data ?? []
 	const trendData = trendQuery.data ?? []
+	const rawModels = rawModelsQuery.data ?? []
 
 	const [filter, setFilter] = useState("")
 	const [sortKey, setSortKey] = useState<SortKey>(isViewer ? "tokens" : "cents")
 	const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+
+	const [rawFilter, setRawFilter] = useState("")
+	const [rawSortKey, setRawSortKey] = useState<RawSortKey>(isViewer ? "tokens" : "cents")
+	const [rawSortDir, setRawSortDir] = useState<"asc" | "desc">("desc")
 
 	const rows = useMemo(() => {
 		const f = filter.trim().toLowerCase()
@@ -109,6 +121,40 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 		else {
 			setSortKey(k)
 			setSortDir(k === "email" ? "asc" : "desc")
+		}
+	}
+
+	const rawModelRows = useMemo(() => {
+		const f = rawFilter.trim().toLowerCase()
+		const filtered = f ? rawModels.filter((u) => u.raw_model.toLowerCase().includes(f)) : rawModels
+
+		const sortVal = (u: (typeof filtered)[number]): string | number => {
+			switch (rawSortKey) {
+				case "raw_model":
+					return u.raw_model
+				case "cents":
+					return Number(u.cents ?? 0)
+				case "tokens":
+					return Number(u.tokens)
+				case "share":
+					return Number(u.share_pct)
+			}
+		}
+
+		return [...filtered].sort((a, b) => {
+			const av = sortVal(a)
+			const bv = sortVal(b)
+			const cmp =
+				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+			return rawSortDir === "asc" ? cmp : -cmp
+		})
+	}, [rawModels, rawFilter, rawSortKey, rawSortDir])
+
+	function toggleRawSort(k: RawSortKey): void {
+		if (rawSortKey === k) setRawSortDir((d) => (d === "asc" ? "desc" : "asc"))
+		else {
+			setRawSortKey(k)
+			setRawSortDir(k === "raw_model" ? "asc" : "desc")
 		}
 	}
 
@@ -159,6 +205,16 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 					</span>
 				</div>
 			</div>
+
+			{profile?.raw_models && profile.raw_models.length > 0 && (
+				<div className="flex flex-wrap gap-1.5">
+					{profile.raw_models.map((rm) => (
+						<Badge key={rm} variant="secondary" className="font-mono text-[10px]">
+							{rm}
+						</Badge>
+					))}
+				</div>
+			)}
 
 			<DateRangeBar updatedAt={profileQuery.dataUpdatedAt} />
 
@@ -262,8 +318,8 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 										}}
 										formatter={(v: TooltipValueType | undefined) =>
 											trendMode === "cost"
-												? `$${(((v ?? 0) as number) / 100).toFixed(2)}`
-												: formatNumber((v ?? 0) as number)
+												? `$${(Number(v ?? 0) / 100).toFixed(2)}`
+												: formatNumber(Number(v ?? 0))
 										}
 									/>
 									<Area
@@ -304,8 +360,8 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 										}}
 										formatter={(v: TooltipValueType | undefined) =>
 											trendMode === "cost"
-												? `$${(((v ?? 0) as number) / 100).toFixed(2)}`
-												: formatNumber((v ?? 0) as number)
+												? `$${(Number(v ?? 0) / 100).toFixed(2)}`
+												: formatNumber(Number(v ?? 0))
 										}
 									/>
 									<Line
@@ -410,6 +466,109 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 													{u.name || u.email}
 												</span>
 											</Link>
+										</TableCell>
+										<TableCell className="px-3 py-2.5 text-right text-fg">
+											<MetricPair
+												cents={isViewer ? null : u.cents}
+												tokens={u.tokens}
+												digits={2}
+												secondaryClassName="text-[10px] text-fg-dim"
+											/>
+										</TableCell>
+										<TableCell className="px-3 py-2.5 text-right text-fg-dim text-[11px]">
+											{Number(u.share_pct).toFixed(1)}%
+										</TableCell>
+										<TableCell className="px-3 py-2.5">
+											<Sparkline
+												data={
+													isViewer
+														? u.trend_tokens
+														: metricMode === "cost"
+															? (u.trend_cents ?? u.trend_tokens)
+															: u.trend_tokens
+												}
+												color="var(--fg-mid)"
+												height={22}
+											/>
+										</TableCell>
+									</TableRow>
+								)
+							})
+						)}
+					</TableBody>
+				</Table>
+			</section>
+
+			{/* Raw Models Breakdown table */}
+			<section className="panel overflow-hidden">
+				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
+					<span className="text-[11px] tracked text-fg">RAW MODELS BREAKDOWN · {winLabel}</span>
+					<div className="flex items-center gap-2 w-48">
+						<Search className="w-3.5 h-3.5 text-fg-dim" />
+						<input
+							type="text"
+							placeholder="filter..."
+							value={rawFilter}
+							onChange={(e) => setRawFilter(e.target.value)}
+							className="bg-transparent text-[11px] outline-none text-fg placeholder:text-fg-very-dim w-full"
+						/>
+					</div>
+				</div>
+				<Table className="w-full tabular text-xs table-fixed">
+					<TableHeader className="border-b border-line bg-elev2/40">
+						<TableRow>
+							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
+								#
+							</TableHead>
+							<SortHeader
+								label="RAW MODEL"
+								active={rawSortKey === "raw_model"}
+								dir={rawSortDir}
+								onClick={() => toggleRawSort("raw_model")}
+							/>
+							<SortHeader
+								label={`VALUE · ${winLabel}`}
+								active={rawSortKey === "cents" || rawSortKey === "tokens"}
+								dir={rawSortDir}
+								onClick={() => toggleRawSort(trendMode === "cost" ? "cents" : "tokens")}
+								align="right"
+							/>
+							<SortHeader
+								label="SHARE"
+								active={rawSortKey === "share"}
+								dir={rawSortDir}
+								onClick={() => toggleRawSort("share")}
+								align="right"
+							/>
+							<TableHead className="h-9 px-3 w-[140px] text-[10px] tracked text-fg-dim text-left">
+								TREND · {winLabel}
+							</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{rawModelsQuery.isLoading ? (
+							<TableRow>
+								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
+									── loading ──
+								</TableCell>
+							</TableRow>
+						) : rawModelRows.length === 0 ? (
+							<TableRow>
+								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
+									── no raw models in window ──
+								</TableCell>
+							</TableRow>
+						) : (
+							rawModelRows.map((u, i) => {
+								return (
+									<TableRow key={u.raw_model}>
+										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+											{String(i + 1).padStart(3, "0")}
+										</TableCell>
+										<TableCell className="px-3 py-2.5">
+											<div className="flex items-center min-w-0">
+												<span className="text-fg truncate font-mono">{u.raw_model}</span>
+											</div>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right text-fg">
 											<MetricPair

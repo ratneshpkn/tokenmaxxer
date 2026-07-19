@@ -144,6 +144,9 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const [modelFilter, setModelFilter] = useState("")
 	const [modelSortKey, setModelSortKey] = useState<"model" | "value" | "share">("value")
 	const [modelSortDir, setModelSortDir] = useState<"asc" | "desc">("desc")
+	const [rawModelFilter, setRawModelFilter] = useState("")
+	const [rawModelSortKey, setRawModelSortKey] = useState<ModelSortKey>("value")
+	const [rawModelSortDir, setRawModelSortDir] = useState<"asc" | "desc">("desc")
 	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
 	const isViewer = me ? me.role !== "admin" : false
 	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
@@ -158,6 +161,10 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const usageQuery = useQuery({
 		queryKey: ["users.usage", email, from, to],
 		queryFn: () => api.users.usage(email, from, to, "all"),
+	})
+	const rawModelsQuery = useQuery({
+		queryKey: ["users.rawModels", email, from, to],
+		queryFn: () => api.users.rawModels(email, from, to),
 	})
 	const heatmapQuery = useQuery({
 		queryKey: ["users.heatmap", email, from, to],
@@ -282,6 +289,106 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 			}
 		})
 	}, [ccRows, cuRows, usage, trendMode, ccTokens, cuTokens, totalCents])
+
+	const rawModelData = useMemo(() => {
+		if (!rawModelsQuery.data) return []
+		const modelMap = new Map<
+			string,
+			{
+				model: string
+				platforms: Set<"claude_code" | "cursor">
+				cents: number
+				tokens: number
+			}
+		>()
+
+		const getOrCreate = (modelName: string) => {
+			let entry = modelMap.get(modelName)
+			if (!entry) {
+				entry = {
+					model: modelName,
+					platforms: new Set(),
+					cents: 0,
+					tokens: 0,
+				}
+				modelMap.set(modelName, entry)
+			}
+			return entry
+		}
+
+		rawModelsQuery.data.claude_code.forEach((r) => {
+			const m = r.model ?? "unknown"
+			const entry = getOrCreate(m)
+			entry.platforms.add("claude_code")
+			entry.cents += Number(r.estimated_cost_cents ?? 0)
+			const tokens =
+				r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_creation_tokens
+			entry.tokens += tokens
+		})
+
+		rawModelsQuery.data.cursor.forEach((r) => {
+			const m = r.model ?? "unknown"
+			const entry = getOrCreate(m)
+			entry.platforms.add("cursor")
+			entry.cents += Number(r.charged_cents ?? 0)
+			const tokens = r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens
+			entry.tokens += tokens
+		})
+
+		const totalTokensSum = ccTokens + cuTokens
+
+		return [...modelMap.values()].map((item) => {
+			const share =
+				trendMode === "tokens"
+					? totalTokensSum > 0
+						? (item.tokens / totalTokensSum) * 100
+						: 0
+					: totalCents > 0
+						? (item.cents / totalCents) * 100
+						: 0
+			return {
+				model: item.model,
+				platforms: [...item.platforms],
+				cents: item.cents,
+				tokens: item.tokens,
+				share,
+			}
+		})
+	}, [rawModelsQuery.data, trendMode, ccTokens, cuTokens, totalCents])
+
+	const rawModelRows = useMemo(() => {
+		const f = rawModelFilter.trim().toLowerCase()
+		const filtered = f
+			? rawModelData.filter((m) => m.model.toLowerCase().includes(f))
+			: rawModelData
+
+		const sortVal = (m: (typeof filtered)[number]): string | number => {
+			switch (rawModelSortKey) {
+				case "model":
+					return m.model
+				case "value":
+					return trendMode === "tokens" ? m.tokens : m.cents
+				case "share":
+					return m.share
+			}
+		}
+
+		return [...filtered].sort((a, b) => {
+			const av = sortVal(a)
+			const bv = sortVal(b)
+			const cmp =
+				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
+			return rawModelSortDir === "asc" ? cmp : -cmp
+		})
+	}, [rawModelData, rawModelFilter, rawModelSortKey, rawModelSortDir, trendMode])
+
+	function toggleRawModelSort(k: ModelSortKey): void {
+		if (rawModelSortKey === k) setRawModelSortDir((d) => (d === "asc" ? "desc" : "asc"))
+		else {
+			setRawModelSortKey(k)
+			setRawModelSortDir(k === "model" ? "asc" : "desc")
+		}
+	}
 
 	const modelRows = useMemo(() => {
 		const f = modelFilter.trim().toLowerCase()
@@ -598,8 +705,8 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 									}}
 									formatter={(v: TooltipValueType | undefined) =>
 										trendMode === "usd"
-											? `$${((v ?? 0) as number).toFixed(2)}`
-											: formatNumber((v ?? 0) as number)
+											? `$${Number(v ?? 0).toFixed(2)}`
+											: formatNumber(Number(v ?? 0))
 									}
 								/>
 								{chartModels.map((model) => (
@@ -716,6 +823,103 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<Sparkline data={m.trend} color="var(--fg-mid)" height={22} />
+										</TableCell>
+									</TableRow>
+								)
+							})
+						)}
+					</TableBody>
+				</Table>
+			</section>
+
+			{/* Raw Models Breakdown */}
+			<section className="panel overflow-hidden">
+				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
+					<span className="text-[11px] tracked text-fg">RAW MODELS BREAKDOWN · {winLabel}</span>
+					<div className="flex items-center gap-2 w-48">
+						<Search className="w-3.5 h-3.5 text-fg-dim" />
+						<input
+							type="text"
+							placeholder="filter..."
+							value={rawModelFilter}
+							onChange={(e) => setRawModelFilter(e.target.value)}
+							className="bg-transparent text-[11px] outline-none text-fg placeholder:text-fg-very-dim w-full"
+						/>
+					</div>
+				</div>
+				<Table className="w-full tabular text-xs table-fixed">
+					<TableHeader className="border-b border-line bg-elev2/40">
+						<TableRow>
+							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
+								#
+							</TableHead>
+							<SortHeader
+								label="RAW MODEL"
+								active={rawModelSortKey === "model"}
+								dir={rawModelSortDir}
+								onClick={() => toggleRawModelSort("model")}
+							/>
+							<SortHeader
+								label={`VALUE · ${winLabel}`}
+								active={rawModelSortKey === "value"}
+								dir={rawModelSortDir}
+								onClick={() => toggleRawModelSort("value")}
+								align="right"
+							/>
+							<SortHeader
+								label="SHARE"
+								active={rawModelSortKey === "share"}
+								dir={rawModelSortDir}
+								onClick={() => toggleRawModelSort("share")}
+								align="right"
+							/>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{rawModelsQuery.isLoading ? (
+							<TableRow>
+								<TableCell colSpan={4} className="text-center text-fg-dim py-8 text-xs">
+									── loading ──
+								</TableCell>
+							</TableRow>
+						) : rawModelRows.length === 0 ? (
+							<TableRow>
+								<TableCell colSpan={4} className="text-center text-fg-dim py-8 text-xs">
+									── no raw models in window ──
+								</TableCell>
+							</TableRow>
+						) : (
+							rawModelRows.map((m, i) => {
+								return (
+									<TableRow key={m.model}>
+										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+											{String(i + 1).padStart(3, "0")}
+										</TableCell>
+										<TableCell className="px-3 py-2.5">
+											<div className="flex items-center min-w-0">
+												<span className="flex items-center gap-1.5 min-w-0">
+													<span className="flex items-center gap-1 flex-shrink-0">
+														{m.platforms.includes("claude_code") && (
+															<span className="w-1.5 h-1.5 bg-amber" />
+														)}
+														{m.platforms.includes("cursor") && (
+															<span className="w-1.5 h-1.5 bg-sky" />
+														)}
+													</span>
+													<span className="text-fg truncate font-mono">{m.model}</span>
+												</span>
+											</div>
+										</TableCell>
+										<TableCell className="px-3 py-2.5 text-right text-fg">
+											<MetricPair
+												cents={isViewer ? null : m.cents}
+												tokens={m.tokens}
+												digits={2}
+												secondaryClassName="text-[10px] text-fg-dim"
+											/>
+										</TableCell>
+										<TableCell className="px-3 py-2.5 text-right text-fg-dim text-[11px]">
+											{m.share.toFixed(1)}%
 										</TableCell>
 									</TableRow>
 								)

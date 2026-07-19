@@ -36,11 +36,9 @@ const TREND_COLORS = [
 	CU_SHADES[3],
 ] as const
 
-/** Color for a model entry in the platform-segmented mix bar chart. */
-export function colorForModelInMix(platform: "claude_code" | "cursor", idx: number): string {
-	return platform === "claude_code"
-		? CC_SHADES[idx % CC_SHADES.length]
-		: CU_SHADES[idx % CU_SHADES.length]
+/** Color for a model entry in the model mix bar chart. */
+export function colorForModelInMix(idx: number): string {
+	return TREND_COLORS[idx % TREND_COLORS.length]
 }
 
 /**

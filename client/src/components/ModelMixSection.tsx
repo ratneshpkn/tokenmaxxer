@@ -1,12 +1,11 @@
 import { MetricPair } from "@/components/MetricPair"
 import { Sparkline } from "@/components/Sparkline"
 import { colorForModelInMix } from "@/lib/model-color"
-import { platformColor, platformShort } from "@/lib/platform"
+
 import { useMetricMode } from "@/lib/use-metric-mode"
 
 type ModelMixItem = {
 	model: string
-	platform: "claude_code" | "cursor"
 	cents: number | null
 	tokens: number
 	trend_cents: number[] | null
@@ -34,12 +33,11 @@ export function ModelMixSection({
 	const effectiveMode = isViewer ? "tokens" : metricMode
 	const denom = effectiveMode === "cost" ? totalCents : totalTokens
 
-	let ccIdx = 0
-	let cuIdx = 0
+	let colorIdx = 0
 	const segments = modelMix.map((m) => {
 		const value = effectiveMode === "cost" ? Number(m.cents ?? 0) : Number(m.tokens)
 		const pct = denom > 0 ? (value / denom) * 100 : 0
-		const color = colorForModelInMix(m.platform, m.platform === "claude_code" ? ccIdx++ : cuIdx++)
+		const color = colorForModelInMix(colorIdx++)
 		return { ...m, pct, color, value }
 	})
 
@@ -55,9 +53,9 @@ export function ModelMixSection({
 			<div className="mx-5 mt-4 mb-3 h-[22px] border border-line flex overflow-hidden">
 				{segments.map((s) => (
 					<div
-						key={`${s.platform}-${s.model}`}
+						key={s.model}
 						style={{ background: s.color, width: `${s.pct}%` }}
-						title={`${s.model} (${platformShort(s.platform)}) · ${s.pct.toFixed(1)}%`}
+						title={`${s.model} · ${s.pct.toFixed(1)}%`}
 					/>
 				))}
 			</div>
@@ -66,7 +64,7 @@ export function ModelMixSection({
 			<ol className="divide-y divide-line/60">
 				{topN.map((s, i) => (
 					<li
-						key={`${s.platform}-${s.model}`}
+						key={s.model}
 						className="grid grid-cols-12 items-center gap-3 px-5 py-2.5 hover:bg-elev2/40 transition-colors"
 					>
 						<span className="col-span-1 font-display text-2xl tabular text-fg-very-dim leading-none">
@@ -99,7 +97,7 @@ export function ModelMixSection({
 											? (s.trend_cents ?? s.trend_tokens)
 											: s.trend_tokens
 								}
-								color={platformColor(s.platform)}
+								color={s.color}
 								height={22}
 							/>
 						</div>

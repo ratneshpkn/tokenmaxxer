@@ -9,11 +9,13 @@ import { coerceTrendArrays, stripCostForViewer } from "../lib/route-helpers"
 import { startSyncRun } from "../scripts/lib/shared"
 import { currentRole } from "./index"
 
-const usageQuery = z.object({
-	from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-	to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-	platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
-})
+const usageQuery = z
+	.object({
+		from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+		to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+		platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
+	})
+	.refine((q) => q.from <= q.to, { message: "from must be <= to" })
 
 const listQuery = z
 	.object({
@@ -159,32 +161,34 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		const ccQuery =
 			platform === "claude_code" || platform === "all"
 				? db.execute(sql`
-          select date, model,
-                 sum(uncached_input_tokens)::bigint as input_tokens,
-                 sum(output_tokens)::bigint as output_tokens,
-                 sum(cache_read_input_tokens)::bigint as cache_read_tokens,
-                 sum(cache_creation_5m_tokens + cache_creation_1h_tokens)::bigint as cache_creation_tokens,
-                 sum(attributed_cents)::int as estimated_cost_cents
-            from daily_claude_code_attribution
-           where email = ${email} and date between ${from} and ${to}
-           group by date, model
-           order by date asc, model asc
+          select d.date, coalesce(ma.base_model, d.model) as model,
+                 sum(d.uncached_input_tokens)::bigint as input_tokens,
+                 sum(d.output_tokens)::bigint as output_tokens,
+                 sum(d.cache_read_input_tokens)::bigint as cache_read_tokens,
+                 sum(d.cache_creation_5m_tokens + d.cache_creation_1h_tokens)::bigint as cache_creation_tokens,
+                 sum(d.attributed_cents)::int as estimated_cost_cents
+            from daily_claude_code_attribution d
+            left join model_aliases ma on ma.raw_model = d.model
+           where d.email = ${email} and d.date between ${from} and ${to}
+           group by d.date, coalesce(ma.base_model, d.model)
+           order by d.date asc, model asc
         `)
 				: null
 		const cuQuery =
 			platform === "cursor" || platform === "all"
 				? db.execute(sql`
-          select date, model,
-                 sum(input_tokens)::bigint as input_tokens,
-                 sum(output_tokens)::bigint as output_tokens,
-                 sum(cache_read_tokens)::bigint as cache_read_tokens,
-                 sum(cache_write_tokens)::bigint as cache_write_tokens,
-                 sum(charged_cents)::int as charged_cents,
-                 sum(request_count)::int as request_count
-            from daily_cursor_usage
-           where email = ${email} and date between ${from} and ${to}
-           group by date, model
-           order by date asc, model asc
+          select d.date, coalesce(ma.base_model, d.model) as model,
+                 sum(d.input_tokens)::bigint as input_tokens,
+                 sum(d.output_tokens)::bigint as output_tokens,
+                 sum(d.cache_read_tokens)::bigint as cache_read_tokens,
+                 sum(d.cache_write_tokens)::bigint as cache_write_tokens,
+                 sum(d.charged_cents)::int as charged_cents,
+                 sum(d.request_count)::int as request_count
+            from daily_cursor_usage d
+            left join model_aliases ma on ma.raw_model = d.model
+           where d.email = ${email} and d.date between ${from} and ${to}
+           group by d.date, coalesce(ma.base_model, d.model)
+           order by d.date asc, model asc
         `)
 				: null
 
@@ -498,5 +502,87 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		const row = r.rows?.[0]
 		if (!row) return c.json({ message: "User not found" }, 404)
 		return c.json(row)
+	})
+
+	app.get("/api/users/:email/raw-models", isAuthenticated, async (c) => {
+		const parse = usageQuery.safeParse(c.req.query())
+		if (!parse.success) {
+			return c.json({ message: "Invalid query", issues: parse.error.issues }, 400)
+		}
+		const { from, to, platform } = parse.data
+		const email = String(c.req.param("email")).toLowerCase()
+		const isViewer = currentRole(c) !== "admin"
+
+		const ccQuery =
+			platform === "claude_code" || platform === "all"
+				? db.execute(sql`
+					select d.model as model,
+								 coalesce(sum(d.uncached_input_tokens), 0)::bigint as input_tokens,
+								 coalesce(sum(d.output_tokens), 0)::bigint as output_tokens,
+								 coalesce(sum(d.cache_read_input_tokens), 0)::bigint as cache_read_tokens,
+								 coalesce(sum(d.cache_creation_5m_tokens + d.cache_creation_1h_tokens), 0)::bigint as cache_creation_tokens,
+								 coalesce(sum(d.attributed_cents), 0)::int as estimated_cost_cents
+					from daily_claude_code_attribution d
+					where d.email = ${email} and d.date between ${from} and ${to}
+					group by d.model
+					order by model asc
+				`)
+				: null
+
+		const cuQuery =
+			platform === "cursor" || platform === "all"
+				? db.execute(sql`
+					select d.model as model,
+								 coalesce(sum(d.input_tokens), 0)::bigint as input_tokens,
+								 coalesce(sum(d.output_tokens), 0)::bigint as output_tokens,
+								 coalesce(sum(d.cache_read_tokens), 0)::bigint as cache_read_tokens,
+								 coalesce(sum(d.cache_write_tokens), 0)::bigint as cache_write_tokens,
+								 coalesce(sum(d.charged_cents), 0)::int as charged_cents,
+								 coalesce(sum(d.request_count), 0)::int as request_count
+					from daily_cursor_usage d
+					where d.email = ${email} and d.date between ${from} and ${to}
+					group by d.model
+					order by model asc
+				`)
+				: null
+
+		const [cc, cu] = await Promise.all([ccQuery, cuQuery])
+
+		const claude_code = cc
+			? (cc.rows ?? []).map((row: Record<string, unknown>) => {
+					const r = {
+						model: String(row.model),
+						input_tokens: Number(row.input_tokens),
+						output_tokens: Number(row.output_tokens),
+						cache_read_tokens: Number(row.cache_read_tokens),
+						cache_creation_tokens: Number(row.cache_creation_tokens),
+						estimated_cost_cents: Number(row.estimated_cost_cents) as number | undefined,
+					}
+					if (isViewer) {
+						delete r.estimated_cost_cents
+					}
+					return r
+				})
+			: []
+
+		const cursor = cu
+			? (cu.rows ?? []).map((row: Record<string, unknown>) => {
+					const r = {
+						model: String(row.model),
+						input_tokens: Number(row.input_tokens),
+						output_tokens: Number(row.output_tokens),
+						cache_read_tokens: Number(row.cache_read_tokens),
+						cache_write_tokens: Number(row.cache_write_tokens),
+						charged_cents: Number(row.charged_cents) as number | undefined,
+						request_count: Number(row.request_count),
+					}
+					if (isViewer) {
+						delete r.charged_cents
+					}
+					return r
+				})
+			: []
+
+		return c.json({ claude_code, cursor })
 	})
 }

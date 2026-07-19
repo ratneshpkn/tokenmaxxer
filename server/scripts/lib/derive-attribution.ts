@@ -1,6 +1,7 @@
 import { anthropicApiKeys, anthropicUsers, dailyClaudeCodeAttribution } from "@shared/schema"
 import { sql } from "drizzle-orm"
 import { db } from "../../db"
+import { ensureModelAliases } from "../../lib/model-aliases"
 
 /**
  * Pro-rate cost_report buckets across api_keys (by token share within each
@@ -274,6 +275,9 @@ export async function deriveAttribution(
 	// might shift if api_keys move between owners, so we delete-then-insert
 	// rather than upsert.
 	const CHUNK = 500
+
+	await ensureModelAliases(rows.map((r) => r.model))
+
 	await db.transaction(async (tx) => {
 		await tx.execute(sql`
       delete from daily_claude_code_attribution
