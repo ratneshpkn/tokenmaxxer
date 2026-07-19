@@ -1,7 +1,16 @@
 import { useQuery } from "@tanstack/react-query"
 import { Share2 } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import {
+	Bar,
+	BarChart,
+	CartesianGrid,
+	ResponsiveContainer,
+	Tooltip,
+	type TooltipPayloadEntry,
+	XAxis,
+	YAxis,
+} from "recharts"
 import { Link } from "wouter"
 import { Cost } from "@/components/Cost"
 import { DateRangeBar } from "@/components/DateRangeBar"
@@ -37,33 +46,29 @@ function StatTooltip({
 	mode,
 }: {
 	active?: boolean
-	payload?: {
-		fill?: string
-		dataKey?: string | number
-		value?: string | number | (string | number)[]
-		payload?: {
-			date?: string
-		}
-	}[]
+	payload?: readonly TooltipPayloadEntry[]
 	mode: "usd" | "tokens"
 }): React.JSX.Element | null {
 	if (!active || !payload?.length) return null
 	return (
 		<div className="bg-bg/95 border border-line-strong px-3 py-2 text-[11px] tabular">
 			<div className="text-fg-dim tracked-sm text-[9px] mb-1">{payload[0].payload?.date ?? ""}</div>
-			{payload.map((p) => (
-				<div key={p.dataKey ?? ""} className="flex items-center justify-between gap-4">
-					<span className="flex items-center gap-1.5">
-						<span className="w-2 h-2" style={{ background: p.fill }} />
-						<span className="text-fg-mid">{p.dataKey}</span>
-					</span>
-					<span className="text-fg">
-						{mode === "usd"
-							? `$${Number(p.value).toFixed(2)}`
-							: Math.abs(Number(p.value)).toLocaleString()}
-					</span>
-				</div>
-			))}
+			{payload.map((p) => {
+				const dataKeyStr = typeof p.dataKey === "function" ? "" : (p.dataKey ?? "")
+				return (
+					<div key={dataKeyStr} className="flex items-center justify-between gap-4">
+						<span className="flex items-center gap-1.5">
+							<span className="w-2 h-2" style={{ background: p.fill }} />
+							<span className="text-fg-mid">{dataKeyStr}</span>
+						</span>
+						<span className="text-fg">
+							{mode === "usd"
+								? `$${Number(p.value).toFixed(2)}`
+								: Math.abs(Number(p.value)).toLocaleString()}
+						</span>
+					</div>
+				)
+			})}
 		</div>
 	)
 }
