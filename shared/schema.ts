@@ -204,6 +204,11 @@ export const dailyCursorUsage = pgTable(
 	}),
 )
 
+export const modelAliases = pgTable("model_aliases", {
+	rawModel: text("raw_model").primaryKey(),
+	baseModel: text("base_model").notNull(),
+})
+
 export const cursorSpendSnapshots = pgTable(
 	"cursor_spend_snapshots",
 	{

@@ -171,6 +171,11 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 			totalsRow.gh_additions = Number(totalsRow.gh_additions ?? 0)
 			totalsRow.gh_deletions = Number(totalsRow.gh_deletions ?? 0)
 			totalsRow.gh_users = Number(totalsRow.gh_users ?? 0)
+			if (currentRole(c) !== "admin") {
+				totalsRow.cc_cents = null
+				totalsRow.cu_cents = null
+				totalsRow.open_alerts = null
+			}
 		}
 
 		for (const row of trendRows) {
@@ -345,29 +350,36 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 		const result = await db.execute(sql`
       with
       cc as (
-        select model,
+        select coalesce(ma.base_model, d.model) as model,
                coalesce(sum(attributed_cents),0)::bigint as cents,
                coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
-          from daily_claude_code_attribution
+          from daily_claude_code_attribution d
+          left join model_aliases ma on ma.raw_model = d.model
          where date between ${effFrom} and ${effTo}
-         group by model
+         group by coalesce(ma.base_model, d.model)
       ),
       cu as (
-        select model,
+        select coalesce(ma.base_model, d.model) as model,
                coalesce(sum(charged_cents),0)::bigint as cents,
                coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
-          from daily_cursor_usage
+          from daily_cursor_usage d
+          left join model_aliases ma on ma.raw_model = d.model
          where date between ${effFrom} and ${effTo}
-         group by model
+         group by coalesce(ma.base_model, d.model)
       ),
       totals as (
-        select 'claude_code'::text as platform, model, cents, tokens from cc
+        select model, cents, tokens from cc
         union all
-        select 'cursor'::text as platform, model, cents, tokens from cu
+        select model, cents, tokens from cu
+      ),
+      grouped_totals as (
+        select model, sum(cents)::bigint as cents, sum(tokens)::bigint as tokens
+        from totals
+        group by model
       ),
       ranked as (
-        select platform, model, cents, tokens
-          from totals
+        select model, cents, tokens
+          from grouped_totals
          order by ${sortBy} desc
          limit ${limit}
       ),
@@ -375,53 +387,39 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
         select generate_series(${effFrom}::date, ${effTo}::date, '1 day')::date as d
       ),
       daily_cc as (
-        select model, date,
+        select coalesce(ma.base_model, d.model) as model, date,
                coalesce(sum(attributed_cents),0)::bigint as cents,
                coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
-          from daily_claude_code_attribution
+          from daily_claude_code_attribution d
+          left join model_aliases ma on ma.raw_model = d.model
          where date between ${effFrom} and ${effTo}
-           and model in (select model from ranked where platform = 'claude_code')
-         group by model, date
+           and coalesce(ma.base_model, d.model) in (select model from ranked)
+         group by coalesce(ma.base_model, d.model), date
       ),
       daily_cu as (
-        select model, date,
+        select coalesce(ma.base_model, d.model) as model, date,
                coalesce(sum(charged_cents),0)::bigint as cents,
                coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
-          from daily_cursor_usage
+          from daily_cursor_usage d
+          left join model_aliases ma on ma.raw_model = d.model
          where date between ${effFrom} and ${effTo}
-           and model in (select model from ranked where platform = 'cursor')
-         group by model, date
+           and coalesce(ma.base_model, d.model) in (select model from ranked)
+         group by coalesce(ma.base_model, d.model), date
       ),
-      trends_cc as (
+      trends as (
         select r.model, d.d as date,
-               coalesce(dcc.cents, 0)::bigint as cents,
-               coalesce(dcc.tokens, 0)::bigint as tokens
+               coalesce(dcc.cents, 0)::bigint + coalesce(dcu.cents, 0)::bigint as cents,
+               coalesce(dcc.tokens, 0)::bigint + coalesce(dcu.tokens, 0)::bigint as tokens
           from ranked r
           cross join days d
           left join daily_cc dcc on dcc.model = r.model and dcc.date = d.d
-         where r.platform = 'claude_code'
-      ),
-      trends_cu as (
-        select r.model, d.d as date,
-               coalesce(dcu.cents, 0)::bigint as cents,
-               coalesce(dcu.tokens, 0)::bigint as tokens
-          from ranked r
-          cross join days d
           left join daily_cu dcu on dcu.model = r.model and dcu.date = d.d
-         where r.platform = 'cursor'
       )
-      select r.platform,
-             r.model,
+      select r.model,
              r.cents,
              r.tokens,
-             case when r.platform = 'claude_code'
-                  then (select array_agg(cents order by date) from trends_cc where model = r.model)
-                  else (select array_agg(cents order by date) from trends_cu where model = r.model)
-             end as trend_cents,
-             case when r.platform = 'claude_code'
-                  then (select array_agg(tokens order by date) from trends_cc where model = r.model)
-                  else (select array_agg(tokens order by date) from trends_cu where model = r.model)
-             end as trend_tokens
+             (select array_agg(cents order by date) from trends t where t.model = r.model) as trend_cents,
+             (select array_agg(tokens order by date) from trends t where t.model = r.model) as trend_tokens
         from ranked r
        order by ${sortBy} desc
     `)

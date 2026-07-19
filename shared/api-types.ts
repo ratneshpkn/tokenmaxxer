@@ -128,7 +128,6 @@ export interface TopSpenderItem {
 
 export interface ModelMixItem {
 	model: string
-	platform: "claude_code" | "cursor"
 	cents: number | null
 	tokens: number
 	trend_cents: number[] | null
@@ -246,6 +245,8 @@ export interface GithubHeatmapItem {
 
 export interface ModelProfileResponse {
 	model: string
+	base_model?: string
+	raw_models: string[]
 	platforms: ("claude_code" | "cursor")[]
 	cc_cents: number | null
 	cu_cents: number | null
@@ -272,4 +273,37 @@ export interface ModelTrendItem {
 	cu_cents: number | null
 	cc_tokens: number
 	cu_tokens: number
+}
+
+export interface ModelRawModelItem {
+	raw_model: string
+	cents: number | null
+	tokens: number
+	share_pct: number
+	trend_cents: number[] | null
+	trend_tokens: number[]
+}
+
+export interface UserRawModelClaudeCodeItem {
+	model: string
+	input_tokens: number
+	output_tokens: number
+	cache_read_tokens: number
+	cache_creation_tokens: number
+	estimated_cost_cents?: number
+}
+
+export interface UserRawModelCursorItem {
+	model: string
+	input_tokens: number
+	output_tokens: number
+	cache_read_tokens: number
+	cache_write_tokens: number
+	charged_cents?: number
+	request_count: number
+}
+
+export interface UserRawModelsResponse {
+	claude_code: UserRawModelClaudeCodeItem[]
+	cursor: UserRawModelCursorItem[]
 }

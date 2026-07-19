@@ -10,6 +10,7 @@ import { eq, sql } from "drizzle-orm"
 import { db, pool } from "../db"
 import { AnthropicAdminClient, decimalCentsToCents } from "../lib/anthropic-admin"
 import { invalidateConfigCache, loadConfig } from "../lib/config"
+import { ensureModelAliases } from "../lib/model-aliases"
 import { deriveAttribution } from "./lib/derive-attribution"
 import { bumpSyncRunRows, parseDateRangeArgs, today, withSyncRun, yesterday } from "./lib/shared"
 
@@ -187,6 +188,9 @@ export async function runAnthropicSync(
 						const CHUNK = 500
 						for (let i = 0; i < rows.length; i += CHUNK) {
 							const slice = rows.slice(i, i + CHUNK)
+
+							await ensureModelAliases(slice.map((r) => r.model as string))
+
 							await db
 								.insert(dailyMessageUsage)
 								.values(slice)

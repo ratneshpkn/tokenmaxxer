@@ -13,6 +13,7 @@ import type {
 	MeResponse,
 	ModelMixItem,
 	ModelProfileResponse,
+	ModelRawModelItem,
 	ModelTrendItem,
 	ModelUserItem,
 	SetupSavePayload,
@@ -24,6 +25,7 @@ import type {
 	UsageRow,
 	UserDetailResponse,
 	UserListItem,
+	UserRawModelsResponse,
 } from "@shared/api-types"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -159,6 +161,10 @@ export const api = {
 				method: "PATCH",
 				body: JSON.stringify(fields),
 			}),
+		rawModels: (email: string, from: string, to: string) =>
+			request<UserRawModelsResponse>(
+				`/api/users/${encodeURIComponent(email)}/raw-models?from=${from}&to=${to}`,
+			),
 	},
 
 	alerts: {
@@ -231,6 +237,15 @@ export const api = {
 		) =>
 			request<ModelTrendItem[]>(
 				`/api/models/${encodeURIComponent(model)}/trend?from=${from}&to=${to}&platform=${platform}`,
+			),
+		rawModels: (
+			model: string,
+			from: string,
+			to: string,
+			platform: "all" | "claude_code" | "cursor" = "all",
+		) =>
+			request<ModelRawModelItem[]>(
+				`/api/models/${encodeURIComponent(model)}/raw-models?from=${from}&to=${to}&platform=${platform}`,
 			),
 	},
 }
