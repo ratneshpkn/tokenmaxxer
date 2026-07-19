@@ -9,6 +9,7 @@ import {
 	LineChart,
 	ResponsiveContainer,
 	Tooltip,
+	type TooltipValueType,
 	XAxis,
 	YAxis,
 } from "recharts"
@@ -259,8 +260,10 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 											fontFamily: "JetBrains Mono",
 											fontSize: 11,
 										}}
-										formatter={(v: number) =>
-											trendMode === "cost" ? `$${(v / 100).toFixed(2)}` : formatNumber(v)
+										formatter={(v: TooltipValueType | undefined) =>
+											trendMode === "cost"
+												? `$${(((v ?? 0) as number) / 100).toFixed(2)}`
+												: formatNumber((v ?? 0) as number)
 										}
 									/>
 									<Area
@@ -299,8 +302,10 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 											fontFamily: "JetBrains Mono",
 											fontSize: 11,
 										}}
-										formatter={(v: number) =>
-											trendMode === "cost" ? `$${(v / 100).toFixed(2)}` : formatNumber(v)
+										formatter={(v: TooltipValueType | undefined) =>
+											trendMode === "cost"
+												? `$${(((v ?? 0) as number) / 100).toFixed(2)}`
+												: formatNumber((v ?? 0) as number)
 										}
 									/>
 									<Line

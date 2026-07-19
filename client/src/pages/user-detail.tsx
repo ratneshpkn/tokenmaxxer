@@ -1,7 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Pencil, Search, Share2, X } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import {
+	Bar,
+	BarChart,
+	CartesianGrid,
+	ResponsiveContainer,
+	Tooltip,
+	type TooltipValueType,
+	XAxis,
+	YAxis,
+} from "recharts"
 import { Link } from "wouter"
 import { ActivityHeatmap } from "@/components/ActivityHeatmap"
 import { Cost } from "@/components/Cost"
@@ -587,8 +596,10 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 										fontFamily: "JetBrains Mono",
 										fontSize: 11,
 									}}
-									formatter={(v: number) =>
-										trendMode === "usd" ? `$${v.toFixed(2)}` : formatNumber(v)
+									formatter={(v: TooltipValueType | undefined) =>
+										trendMode === "usd"
+											? `$${((v ?? 0) as number).toFixed(2)}`
+											: formatNumber((v ?? 0) as number)
 									}
 								/>
 								{chartModels.map((model) => (
