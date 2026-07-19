@@ -2,9 +2,9 @@
  * Date-range presets and URL-parameter helpers.
  * Pure functions only — no React, no DOM.
  *
- * Preset semantics: "yesterday" is `today_PT − 1 day` everywhere. "today_PT"
+ * Preset semantics: "today" is `today_PT` everywhere. "today_PT"
  * is the current calendar date in America/Los_Angeles. Matches existing
- * server-side `yesterday()` in server/scripts/lib/shared.ts.
+ * server-side date conventions.
  */
 
 export const PRESETS = ["7d", "30d", "90d", "mtd", "6m"] as const
@@ -53,21 +53,20 @@ export function firstOfMonth(ymd: string): string {
 /** Resolve a preset to {from, to} relative to a "now" instant (defaults to real now). */
 export function resolvePreset(preset: Preset, now: Date = new Date()): DateRange {
 	const today = todayPT(now)
-	const yesterday = addDays(today, -1)
 	switch (preset) {
 		case "7d":
-			return { from: addDays(yesterday, -6), to: yesterday, preset }
+			return { from: addDays(today, -6), to: today, preset }
 		case "30d":
-			return { from: addDays(yesterday, -29), to: yesterday, preset }
+			return { from: addDays(today, -29), to: today, preset }
 		case "90d":
-			return { from: addDays(yesterday, -89), to: yesterday, preset }
+			return { from: addDays(today, -89), to: today, preset }
 		case "6m":
 			// 6m is approximated as 180 days (not calendar months) — matches existing
 			// server-side conventions and avoids month-length edge cases.
-			return { from: addDays(yesterday, -179), to: yesterday, preset }
+			return { from: addDays(today, -179), to: today, preset }
 		case "mtd": {
-			const first = firstOfMonth(yesterday)
-			return { from: first, to: yesterday, preset }
+			const first = firstOfMonth(today)
+			return { from: first, to: today, preset }
 		}
 	}
 }
@@ -107,10 +106,9 @@ export function parseSearch(search: string, now: Date = new Date()): DateRange {
 		}
 
 		const today = todayPT(now)
-		const yesterday = addDays(today, -1)
 
-		const clampedTo = t > yesterday ? yesterday : t
-		const clampedFrom = f > yesterday ? yesterday : f
+		const clampedTo = t > today ? today : t
+		const clampedFrom = f > today ? today : f
 
 		return { from: clampedFrom, to: clampedTo, preset: "custom" }
 	}
