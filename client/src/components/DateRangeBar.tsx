@@ -102,23 +102,15 @@ export function DateRangeBar({ updatedAt }: DateRangeBarProps): React.JSX.Elemen
 
 				<Popover open={open} onOpenChange={handleOpenChange}>
 					<PopoverTrigger asChild>
-						<button
-							type="button"
-							className={
-								"h-7 px-2.5 inline-flex items-center gap-1.5 border text-[10px] tracked font-medium transition-colors outline-none focus-visible:border-amber " +
-								(isCustom
-									? "bg-amber text-black border-amber"
-									: "border-line text-fg-mid hover:text-fg hover:border-line-strong")
-							}
-						>
+						<Button variant={isCustom ? "default" : "outline"} size="sm">
 							<span>CUSTOM</span>
 							{isCustom ? (
 								<span className="font-mono">
 									{formatLabelDate(from)} → {formatLabelDate(to)}
 								</span>
 							) : null}
-							<ChevronDown className="h-3 w-3" strokeWidth={1.5} />
-						</button>
+							<ChevronDown className="size-3" strokeWidth={1.5} />
+						</Button>
 					</PopoverTrigger>
 					<PopoverContent className="w-auto p-0">
 						<Calendar

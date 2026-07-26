@@ -1,12 +1,15 @@
 import { useQuery } from "@tanstack/react-query"
 import { Filter } from "lucide-react"
 import { useMemo, useState } from "react"
-import { Link } from "wouter"
 import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
+import { SearchInput } from "@/components/SearchInput"
 import { SortHeader } from "@/components/SortHeader"
 import { Sparkline } from "@/components/Sparkline"
+import { TableStateRow } from "@/components/TableStateRow"
+import { UserLink } from "@/components/UserLink"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import {
 	DropdownMenu,
 	DropdownMenuCheckboxItem,
@@ -15,7 +18,6 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
 	Table,
 	TableBody,
@@ -123,10 +125,10 @@ export function UsersPage(): React.JSX.Element {
 					<span className="text-fg">{getSortLabel(sortKey)}</span>
 				</div>
 				<div className="flex items-center gap-2 max-w-xs w-full">
-					<Input
+					<SearchInput
 						placeholder="filter by email or name…"
 						value={filter}
-						onChange={(e) => setFilter(e.target.value)}
+						onChange={setFilter}
 						className="flex-1"
 					/>
 					<DropdownMenu>
@@ -169,7 +171,7 @@ export function UsersPage(): React.JSX.Element {
 				</div>
 			</div>
 
-			<div className="panel overflow-hidden">
+			<Card className="overflow-hidden">
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
@@ -235,18 +237,8 @@ export function UsersPage(): React.JSX.Element {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{isLoading ? (
-							<TableRow>
-								<TableCell colSpan={7} className="text-center text-fg-dim py-8 text-xs">
-									── loading ──
-								</TableCell>
-							</TableRow>
-						) : rows.length === 0 ? (
-							<TableRow>
-								<TableCell colSpan={7} className="text-center text-fg-dim py-8 text-xs">
-									── no users ──
-								</TableCell>
-							</TableRow>
+						{isLoading || rows.length === 0 ? (
+							<TableStateRow colSpan={7} isLoading={isLoading} emptyText="no users in window" />
 						) : (
 							rows.map((r, i) => {
 								const total =
@@ -260,12 +252,7 @@ export function UsersPage(): React.JSX.Element {
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<div className="flex items-center gap-1.5">
-												<Link
-													href={`/users/${encodeURIComponent(r.email)}`}
-													className="text-fg hover:text-amber"
-												>
-													{r.name || r.email}
-												</Link>
+												<UserLink email={r.email} name={r.name} />
 												{!r.github_username && (
 													<span
 														title="No GitHub username mapped"
@@ -340,7 +327,7 @@ export function UsersPage(): React.JSX.Element {
 						)}
 					</TableBody>
 				</Table>
-			</div>
+			</Card>
 		</div>
 	)
 }

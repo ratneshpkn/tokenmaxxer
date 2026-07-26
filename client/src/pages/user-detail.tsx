@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Check, Pencil, Search, Share2, X } from "lucide-react"
+import { Check, Pencil, Share2, X } from "lucide-react"
 import { useMemo, useState } from "react"
 import {
 	Bar,
@@ -18,9 +18,13 @@ import { DateRangeBar } from "@/components/DateRangeBar"
 import { FlexCardModal } from "@/components/FlexCardModal"
 import { GithubHeatmap } from "@/components/GithubHeatmap"
 import { MetricPair } from "@/components/MetricPair"
+import { SearchInput } from "@/components/SearchInput"
+import { SectionHeader } from "@/components/SectionHeader"
 import { SortHeader } from "@/components/SortHeader"
 import { Sparkline } from "@/components/Sparkline"
+import { TableStateRow } from "@/components/TableStateRow"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import {
 	Table,
 	TableBody,
@@ -568,10 +572,8 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 			</section>
 
 			{/* Activity heatmap + stats */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line">
-					<span className="text-[11px] tracked text-fg">AI ACTIVITY · {winLabel} · PT</span>
-				</div>
+			<Card>
+				<SectionHeader title="AI ACTIVITY" subtitle={`${winLabel} · PT`} />
 				<div className="grid grid-cols-1 lg:grid-cols-[minmax(0,max-content)_1fr] divide-y lg:divide-y-0 lg:divide-x divide-line border-b border-line">
 					<div
 						className="p-4 overflow-x-auto flex items-center min-h-[190px] min-w-0"
@@ -656,15 +658,14 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						</div>
 					</div>
 				</div>
-			</section>
+			</Card>
 
 			{/* Model trends */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line">
-					<span className="text-[11px] tracked text-fg">
-						MODEL TRENDS · {winLabel} · {trendMode === "usd" ? "USD" : "TOKENS"}
-					</span>
-				</div>
+			<Card>
+				<SectionHeader
+					title="MODEL TRENDS"
+					subtitle={`${winLabel} · ${trendMode === "usd" ? "USD" : "TOKENS"}`}
+				/>
 				<div
 					className="p-4"
 					style={{
@@ -722,23 +723,17 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						</ResponsiveContainer>
 					)}
 				</div>
-			</section>
+			</Card>
 
 			{/* Model Usage Leaderboard */}
-			<section className="panel overflow-hidden">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">TOP MODELS · {winLabel}</span>
-					<div className="flex items-center gap-2 w-48">
-						<Search className="w-3.5 h-3.5 text-fg-dim" />
-						<input
-							type="text"
-							placeholder="filter..."
-							value={modelFilter}
-							onChange={(e) => setModelFilter(e.target.value)}
-							className="bg-transparent text-[11px] outline-none text-fg placeholder:text-fg-very-dim w-full"
-						/>
-					</div>
-				</div>
+			<Card className="overflow-hidden">
+				<SectionHeader
+					title="TOP MODELS"
+					subtitle={winLabel}
+					action={
+						<SearchInput value={modelFilter} onChange={setModelFilter} placeholder="filter…" />
+					}
+				/>
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
@@ -771,18 +766,12 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{usageQuery.isLoading ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── loading ──
-								</TableCell>
-							</TableRow>
-						) : modelRows.length === 0 ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── no models in window ──
-								</TableCell>
-							</TableRow>
+						{usageQuery.isLoading || modelRows.length === 0 ? (
+							<TableStateRow
+								colSpan={5}
+								isLoading={usageQuery.isLoading}
+								emptyText="no models in window"
+							/>
 						) : (
 							modelRows.map((m, i) => {
 								return (
@@ -830,23 +819,21 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						)}
 					</TableBody>
 				</Table>
-			</section>
+			</Card>
 
 			{/* Raw Models Breakdown */}
-			<section className="panel overflow-hidden">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">RAW MODELS BREAKDOWN · {winLabel}</span>
-					<div className="flex items-center gap-2 w-48">
-						<Search className="w-3.5 h-3.5 text-fg-dim" />
-						<input
-							type="text"
-							placeholder="filter..."
+			<Card className="overflow-hidden">
+				<SectionHeader
+					title="RAW MODELS BREAKDOWN"
+					subtitle={winLabel}
+					action={
+						<SearchInput
 							value={rawModelFilter}
-							onChange={(e) => setRawModelFilter(e.target.value)}
-							className="bg-transparent text-[11px] outline-none text-fg placeholder:text-fg-very-dim w-full"
+							onChange={setRawModelFilter}
+							placeholder="filter…"
 						/>
-					</div>
-				</div>
+					}
+				/>
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
@@ -876,18 +863,12 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{rawModelsQuery.isLoading ? (
-							<TableRow>
-								<TableCell colSpan={4} className="text-center text-fg-dim py-8 text-xs">
-									── loading ──
-								</TableCell>
-							</TableRow>
-						) : rawModelRows.length === 0 ? (
-							<TableRow>
-								<TableCell colSpan={4} className="text-center text-fg-dim py-8 text-xs">
-									── no raw models in window ──
-								</TableCell>
-							</TableRow>
+						{rawModelsQuery.isLoading || rawModelRows.length === 0 ? (
+							<TableStateRow
+								colSpan={4}
+								isLoading={rawModelsQuery.isLoading}
+								emptyText="no raw models in window"
+							/>
 						) : (
 							rawModelRows.map((m, i) => {
 								return (
@@ -927,11 +908,11 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						)}
 					</TableBody>
 				</Table>
-			</section>
+			</Card>
 
 			{/* Alert history (admin-only) */}
 			{isAdmin ? (
-				<section className="panel">
+				<Card>
 					<div className="px-5 py-3 border-b border-line flex items-center justify-between">
 						<span className="text-[11px] tracked text-fg">ALERT HISTORY · 365D</span>
 					</div>
@@ -1002,7 +983,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 							</TableBody>
 						</Table>
 					)}
-				</section>
+				</Card>
 			) : null}
 
 			<FlexCardModal

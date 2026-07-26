@@ -17,6 +17,7 @@ import {
 import type { ReactNode } from "react"
 import { Link, useLocation } from "wouter"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -138,8 +139,9 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 					<SidebarTrigger className="text-fg-mid hover:text-fg" />
 					<div className="flex items-center gap-2">
 						{isAdmin ? (
-							<button
-								type="button"
+							<Button
+								variant={metricMode === "tokens" ? "amber" : "outline"}
+								size="icon"
 								onClick={toggleMetric}
 								title={
 									metricMode === "cost"
@@ -147,53 +149,39 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 										: "Switch to cost-primary view"
 								}
 								aria-label="Toggle primary metric"
-								className={cn(
-									"flex items-center justify-center w-8 h-8 border transition-colors outline-none focus-visible:border-amber",
-									metricMode === "tokens"
-										? "border-amber text-amber bg-amber/[0.06]"
-										: "border-line text-fg-mid hover:text-fg hover:border-line-strong",
-								)}
 							>
 								{metricMode === "cost" ? (
-									<DollarSign className="h-4 w-4" strokeWidth={1.5} />
+									<DollarSign className="size-4" strokeWidth={1.5} />
 								) : (
-									<Hash className="h-4 w-4" strokeWidth={1.5} />
+									<Hash className="size-4" strokeWidth={1.5} />
 								)}
-							</button>
+							</Button>
 						) : null}
 						{isAdmin ? (
-							<button
-								type="button"
+							<Button
+								variant={privacyOn ? "amber" : "outline"}
+								size="icon"
 								onClick={togglePrivacy}
 								title={privacyOn ? "Reveal cost numbers" : "Blur cost numbers (for screen-sharing)"}
 								aria-label="Toggle cost privacy"
-								className={cn(
-									"flex items-center justify-center w-8 h-8 border transition-colors outline-none focus-visible:border-amber",
-									privacyOn
-										? "border-amber text-amber bg-amber/[0.06]"
-										: "border-line text-fg-mid hover:text-fg hover:border-line-strong",
-								)}
 							>
 								{privacyOn ? (
-									<EyeOff className="h-4 w-4" strokeWidth={1.5} />
+									<EyeOff className="size-4" strokeWidth={1.5} />
 								) : (
-									<Eye className="h-4 w-4" strokeWidth={1.5} />
+									<Eye className="size-4" strokeWidth={1.5} />
 								)}
-							</button>
+							</Button>
 						) : null}
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
-								<button
-									type="button"
-									className="flex items-center gap-2 px-2 h-8 border border-line hover:border-amber text-fg-mid hover:text-fg transition-colors outline-none focus-visible:border-amber"
-								>
+								<Button variant="outline" size="sm" className="h-8 px-2 gap-2">
 									<Avatar>
 										<AvatarFallback>{initials(me?.email)}</AvatarFallback>
 									</Avatar>
 									<span className="text-[10px] tracked hidden sm:inline">
 										{me?.email?.split("@")[0]}
 									</span>
-								</button>
+								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent>
 								<DropdownMenuLabel>SIGNED IN AS</DropdownMenuLabel>

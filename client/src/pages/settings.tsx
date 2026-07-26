@@ -2,9 +2,20 @@ import type { AdminConfigPatch } from "@shared/api-types"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Edit2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { SectionHeader } from "@/components/SectionHeader"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select"
 import {
 	Table,
 	TableBody,
@@ -15,7 +26,7 @@ import {
 } from "@/components/ui/table"
 import { api } from "@/lib/api"
 import { platformLabel } from "@/lib/platform"
-import { formatCents, formatDate } from "@/lib/utils"
+import { formatCents, formatDate, formatDuration } from "@/lib/utils"
 
 type ValidationState = "idle" | "checking" | "ok" | "bad"
 
@@ -329,7 +340,7 @@ export function SettingsPage(): React.JSX.Element {
 	return (
 		<div className="space-y-8 fade-rise">
 			{/* Workspace Configuration */}
-			<section className="panel">
+			<Card>
 				<div className="px-5 py-3 border-b border-line flex justify-between items-center">
 					<span className="text-[11px] tracked text-fg">WORKSPACE CONFIGURATION</span>
 					{updateConfig.isPending && (
@@ -412,33 +423,35 @@ export function SettingsPage(): React.JSX.Element {
 									</div>
 									<div>
 										<Label className="text-[10px] tracked text-fg-dim">SELF-SIGNUP</Label>
-										<label className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none cursor-pointer">
-											<input
-												type="checkbox"
+										<div className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none">
+											<Checkbox
+												id="openSignup"
 												checked={openSignup}
-												onChange={(e) => setOpenSignup(e.target.checked)}
+												onCheckedChange={(checked) => setOpenSignup(Boolean(checked))}
 											/>
-											<span>
+											<label htmlFor="openSignup" className="cursor-pointer">
 												Allow self-signup for{" "}
 												{allowedDomain ? `@${allowedDomain}` : "the allowed domain"} addresses
-											</span>
-										</label>
+											</label>
+										</div>
 									</div>
 									<div>
 										<Label className="text-[10px] tracked text-fg-dim">SPEND VISIBILITY</Label>
-										<select
+										<Select
 											value={spendVisibility}
-											onChange={(e) =>
-												setSpendVisibility(
-													e.target.value as "admin_only" | "viewer_own" | "viewer_all",
-												)
+											onValueChange={(val) =>
+												setSpendVisibility(val as "admin_only" | "viewer_own" | "viewer_all")
 											}
-											className="mt-1 w-full h-9 bg-transparent border border-line text-fg text-sm px-3 rounded-md"
 										>
-											<option value="admin_only">Admin Only</option>
-											<option value="viewer_own">Viewer Own Spend</option>
-											<option value="viewer_all">Viewer All Spend</option>
-										</select>
+											<SelectTrigger className="mt-1 w-full h-9 bg-transparent border border-line text-fg text-sm">
+												<SelectValue placeholder="Select visibility mode" />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="admin_only">Admin Only</SelectItem>
+												<SelectItem value="viewer_own">Viewer Own Spend</SelectItem>
+												<SelectItem value="viewer_all">Viewer All Spend</SelectItem>
+											</SelectContent>
+										</Select>
 									</div>
 								</div>
 								<div className="flex justify-end gap-2 pt-2">
@@ -520,14 +533,16 @@ export function SettingsPage(): React.JSX.Element {
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
 										<Label className="text-[10px] tracked text-fg-dim">STATUS</Label>
-										<label className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none cursor-pointer">
-											<input
-												type="checkbox"
+										<div className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none">
+											<Checkbox
+												id="googleOauthEnabled"
 												checked={googleOauthEnabled}
-												onChange={(e) => setGoogleOauthEnabled(e.target.checked)}
+												onCheckedChange={(checked) => setGoogleOauthEnabled(Boolean(checked))}
 											/>
-											<span>Enable Google OAuth login</span>
-										</label>
+											<label htmlFor="googleOauthEnabled" className="cursor-pointer">
+												Enable Google OAuth login
+											</label>
+										</div>
 									</div>
 
 									{googleOauthEnabled && (
@@ -896,16 +911,18 @@ export function SettingsPage(): React.JSX.Element {
 						)}
 					</div>
 				</div>
-			</section>
+			</Card>
 
 			{/* Active Accounts */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">ACTIVE ACCOUNTS</span>
-					<span className="text-[10px] tracked text-fg-dim">
-						{appUsers.length} ACCOUNT{appUsers.length === 1 ? "" : "S"}
-					</span>
-				</div>
+			<Card>
+				<SectionHeader
+					title="ACTIVE ACCOUNTS"
+					action={
+						<span className="text-[10px] tracked text-fg-dim">
+							{appUsers.length} ACCOUNT{appUsers.length === 1 ? "" : "S"}
+						</span>
+					}
+				/>
 				<Table className="w-full tabular text-xs">
 					<TableHeader>
 						<TableRow>
@@ -932,22 +949,28 @@ export function SettingsPage(): React.JSX.Element {
 								</TableCell>
 								<TableCell className="px-5 py-3">
 									{me?.role === "admin" && me?.id !== u.id ? (
-										<select
+										<Select
 											value={u.role}
-											onChange={(e) =>
+											onValueChange={(role) =>
 												updateRoleMut.mutate({
 													id: u.id,
-													role: e.target.value as "viewer" | "admin",
+													role: role as "viewer" | "admin",
 												})
 											}
 											disabled={updateRoleMut.isPending}
-											className="w-full h-8 bg-transparent border border-line text-fg text-xs px-2"
 										>
-											<option value="viewer">VIEWER</option>
-											<option value="admin">ADMIN</option>
-										</select>
+											<SelectTrigger className="w-32 h-8 bg-transparent border border-line text-fg text-xs">
+												<SelectValue placeholder="Role" />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="viewer">VIEWER</SelectItem>
+												<SelectItem value="admin">ADMIN</SelectItem>
+											</SelectContent>
+										</Select>
 									) : (
-										<span className="text-fg-mid uppercase text-[10px] tracked">{u.role}</span>
+										<Badge variant="secondary" className="uppercase text-[10px] tracked font-mono">
+											{u.role}
+										</Badge>
 									)}
 								</TableCell>
 								<TableCell className="px-5 py-3 text-right text-fg-dim">
@@ -960,13 +983,11 @@ export function SettingsPage(): React.JSX.Element {
 						))}
 					</TableBody>
 				</Table>
-			</section>
+			</Card>
 
 			{/* Invitations */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line">
-					<span className="text-[11px] tracked text-fg">INVITATIONS</span>
-				</div>
+			<Card>
+				<SectionHeader title="INVITATIONS" />
 				<div className="p-5 space-y-4">
 					<div className="flex gap-2 items-end">
 						<div className="flex-1">
@@ -980,14 +1001,18 @@ export function SettingsPage(): React.JSX.Element {
 						</div>
 						<div className="w-32">
 							<Label className="text-[10px] tracked text-fg-dim">ROLE</Label>
-							<select
+							<Select
 								value={inviteRole}
-								onChange={(e) => setInviteRole(e.target.value as "viewer" | "admin")}
-								className="mt-1 w-full h-8 bg-transparent border border-line text-fg text-xs px-2"
+								onValueChange={(val) => setInviteRole(val as "viewer" | "admin")}
 							>
-								<option value="viewer">VIEWER</option>
-								<option value="admin">ADMIN</option>
-							</select>
+								<SelectTrigger className="mt-1 w-full h-8">
+									<SelectValue placeholder="Role" />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="viewer">VIEWER</SelectItem>
+									<SelectItem value="admin">ADMIN</SelectItem>
+								</SelectContent>
+							</Select>
 						</div>
 						<Button
 							onClick={() => createInvite.mutate({ email: inviteEmail, role: inviteRole })}
@@ -1023,13 +1048,13 @@ export function SettingsPage(): React.JSX.Element {
 											{new Date(i.expiresAt).toLocaleDateString()}
 										</TableCell>
 										<TableCell className="px-2 py-2 text-right">
-											<button
-												type="button"
-												className="text-[10px] tracked text-fg-mid hover:text-amber-hot"
+											<Button
+												variant="destructive"
+												size="xs"
 												onClick={() => deleteInviteMut.mutate(i.id)}
 											>
 												REVOKE
-											</button>
+											</Button>
 										</TableCell>
 									</TableRow>
 								))}
@@ -1039,64 +1064,82 @@ export function SettingsPage(): React.JSX.Element {
 						<p className="text-xs text-fg-dim">— no pending invitations —</p>
 					)}
 				</div>
-			</section>
+			</Card>
 
 			{/* Thresholds */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">GLOBAL DAILY THRESHOLDS</span>
-					<span className="text-[10px] tracked text-fg-dim">PER USER · PER PLATFORM</span>
-				</div>
+			<Card>
+				<SectionHeader
+					title="GLOBAL DAILY THRESHOLDS"
+					action={<span className="text-[10px] tracked text-fg-dim">PER USER · PER PLATFORM</span>}
+				/>
 				<div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-line">
 					<div className="p-5 space-y-3">
 						<div className="flex items-center gap-2 text-[10px] tracked">
 							<span className="w-1.5 h-1.5 bg-amber" />
-							<span className="text-fg-dim">CLAUDE CODE · DAILY $</span>
+							<span className="text-fg-dim">CLAUDE CODE · DAILY $ THRESHOLD</span>
 						</div>
-						<div className="flex items-end gap-3">
-							<span className="text-fg-very-dim font-mono text-2xl">$</span>
-							<Input
-								type="number"
-								value={ccDollars}
-								onChange={(e) => setCcDollars(parseFloat(e.target.value || "0"))}
-								className="text-2xl h-12 max-w-[160px]"
-							/>
+						<div className="flex items-center gap-2">
+							<div className="relative flex-1 max-w-[180px]">
+								<span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-dim font-mono text-xs pointer-events-none">
+									$
+								</span>
+								<Input
+									type="number"
+									min="0"
+									step="1"
+									value={ccDollars}
+									onChange={(e) => setCcDollars(parseFloat(e.target.value || "0"))}
+									className="pl-7 h-9 text-xs font-mono"
+								/>
+							</div>
 							<Button
+								size="sm"
+								disabled={setGlobal.isPending}
 								onClick={() =>
 									setGlobal.mutate({ platform: "claude_code", cents: Math.round(ccDollars * 100) })
 								}
 							>
-								COMMIT
+								SAVE
 							</Button>
 						</div>
 						<div className="text-[10px] tracked text-fg-dim">
-							ACTIVE: {formatCents(ccGlobalCents)}
+							ACTIVE THRESHOLD:{" "}
+							<span className="text-fg font-mono">{formatCents(ccGlobalCents)}</span>
 						</div>
 					</div>
 
 					<div className="p-5 space-y-3">
 						<div className="flex items-center gap-2 text-[10px] tracked">
 							<span className="w-1.5 h-1.5 bg-sky" />
-							<span className="text-fg-dim">CURSOR · DAILY $</span>
+							<span className="text-fg-dim">CURSOR · DAILY $ THRESHOLD</span>
 						</div>
-						<div className="flex items-end gap-3">
-							<span className="text-fg-very-dim font-mono text-2xl">$</span>
-							<Input
-								type="number"
-								value={cuDollars}
-								onChange={(e) => setCuDollars(parseFloat(e.target.value || "0"))}
-								className="text-2xl h-12 max-w-[160px]"
-							/>
+						<div className="flex items-center gap-2">
+							<div className="relative flex-1 max-w-[180px]">
+								<span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-dim font-mono text-xs pointer-events-none">
+									$
+								</span>
+								<Input
+									type="number"
+									min="0"
+									step="1"
+									value={cuDollars}
+									onChange={(e) => setCuDollars(parseFloat(e.target.value || "0"))}
+									className="pl-7 h-9 text-xs font-mono"
+								/>
+							</div>
 							<Button
+								size="sm"
+								disabled={setGlobal.isPending}
 								onClick={() =>
 									setGlobal.mutate({ platform: "cursor", cents: Math.round(cuDollars * 100) })
 								}
 							>
-								COMMIT
+								SAVE
 							</Button>
 						</div>
 						<div className="text-[10px] tracked text-fg-dim">
-							ACTIVE: {formatCents(cuGlobalCents)}
+							ACTIVE THRESHOLD:{" "}
+							<span className="text-fg font-mono">{formatCents(cuGlobalCents)}</span>
 						</div>
 					</div>
 				</div>
@@ -1142,14 +1185,14 @@ export function SettingsPage(): React.JSX.Element {
 						</Table>
 					</div>
 				) : null}
-			</section>
+			</Card>
 
 			{/* Manual sync */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">MANUAL SYNC</span>
-					<span className="text-[10px] tracked text-fg-dim">RUNS IN THE BACKGROUND</span>
-				</div>
+			<Card>
+				<SectionHeader
+					title="MANUAL SYNC"
+					action={<span className="text-[10px] tracked text-fg-dim">RUNS IN THE BACKGROUND</span>}
+				/>
 				<div className="p-5 grid grid-cols-2 md:grid-cols-5 gap-3">
 					{(
 						[
@@ -1160,25 +1203,23 @@ export function SettingsPage(): React.JSX.Element {
 							["slack_digest", "SLACK", "Post daily digest now", false],
 						] as const
 					).map(([job, label, sub, full]) => (
-						<button
+						<Button
 							key={job}
-							type="button"
+							variant="outline"
 							onClick={() => triggerSync.mutate({ job, full })}
-							className="text-left border border-line p-3 hover:border-amber hover:bg-amber/[0.04] transition-colors"
+							className="h-auto text-left p-3 flex-col items-start justify-start border-line hover:border-amber hover:bg-amber/[0.04]"
 						>
 							<div className="text-[10px] tracked text-fg-dim">▶ RUN</div>
 							<div className="font-mono text-sm tracked text-fg mt-1">{label}</div>
 							<div className="text-[10px] text-fg-very-dim mt-1">{sub}</div>
-						</button>
+						</Button>
 					))}
 				</div>
-			</section>
+			</Card>
 
 			{/* Sync runs */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line">
-					<span className="text-[11px] tracked text-fg">RECENT SYNC RUNS</span>
-				</div>
+			<Card>
+				<SectionHeader title="RECENT SYNC RUNS" />
 				<Table className="w-full tabular text-xs">
 					<TableHeader>
 						<TableRow>
@@ -1195,6 +1236,9 @@ export function SettingsPage(): React.JSX.Element {
 								STARTED
 							</TableHead>
 							<TableHead className="h-8 px-3 text-right text-[10px] tracked text-fg-dim">
+								DURATION
+							</TableHead>
+							<TableHead className="h-8 px-3 text-right text-[10px] tracked text-fg-dim">
 								ROWS
 							</TableHead>
 							<TableHead className="h-8 px-3 text-left text-[10px] tracked text-fg-dim">
@@ -1205,7 +1249,7 @@ export function SettingsPage(): React.JSX.Element {
 					<TableBody>
 						{runs.length === 0 ? (
 							<TableRow>
-								<TableCell colSpan={6} className="text-center text-fg-dim py-6 text-xs">
+								<TableCell colSpan={7} className="text-center text-fg-dim py-6 text-xs">
 									── no runs ──
 								</TableCell>
 							</TableRow>
@@ -1224,6 +1268,9 @@ export function SettingsPage(): React.JSX.Element {
 									<TableCell className="px-3 py-2 text-fg-dim text-[11px]">
 										{formatDate(r.startedAt)}
 									</TableCell>
+									<TableCell className="px-3 py-2 text-right text-fg-mid text-[11px]">
+										{formatDuration(r.startedAt, r.completedAt)}
+									</TableCell>
 									<TableCell className="px-3 py-2 text-right text-fg">
 										{r.rowsUpserted.toLocaleString()}
 									</TableCell>
@@ -1235,7 +1282,7 @@ export function SettingsPage(): React.JSX.Element {
 						)}
 					</TableBody>
 				</Table>
-			</section>
+			</Card>
 		</div>
 	)
 }
