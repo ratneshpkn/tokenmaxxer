@@ -5,9 +5,10 @@ import { z } from "zod"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
+import { loadConfig } from "../lib/config"
 import { coerceTrendArrays, stripCostForViewer } from "../lib/route-helpers"
 import { startSyncRun } from "../scripts/lib/shared"
-import { currentRole } from "./index"
+import { currentRole, currentUser } from "./index"
 
 const usageQuery = z
 	.object({
@@ -145,7 +146,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			row.gh_deletions = Number(row.gh_deletions ?? 0)
 			row.github_username = (row.github_username as string) ?? null
 		})
-		stripCostForViewer(typed, c, ["cc_cents", "cu_cents", "trend_cents"])
+		await stripCostForViewer(typed, c, ["cc_cents", "cu_cents", "trend_cents"])
 		return c.json(typed)
 	})
 
@@ -194,10 +195,16 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 
 		const [cc, cu] = await Promise.all([ccQuery, cuQuery])
 		const isViewer = currentRole(c) !== "admin"
+		const cfg = await loadConfig()
+		const hideCosts = isViewer && cfg.spendVisibility === "admin_only"
+		// If viewer_own, we show it because this route is specific to an email, but we should verify the email!
+		const isOwn = email === currentUser(c)?.email
+		const effectivelyHideCosts =
+			hideCosts || (isViewer && cfg.spendVisibility === "viewer_own" && !isOwn)
 
 		const out: { claude_code?: unknown[]; cursor?: unknown[] } = {}
 		if (cc) {
-			out.claude_code = isViewer
+			out.claude_code = effectivelyHideCosts
 				? (cc.rows ?? []).map((row) => {
 						const r = { ...(row as Record<string, unknown>) }
 						delete r.estimated_cost_cents
@@ -206,7 +213,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 				: (cc.rows ?? [])
 		}
 		if (cu) {
-			out.cursor = isViewer
+			out.cursor = effectivelyHideCosts
 				? (cu.rows ?? []).map((row) => {
 						const r = { ...(row as Record<string, unknown>) }
 						delete r.charged_cents
@@ -268,10 +275,16 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 
 		// Cast bigints from pg (returned as strings) back to numbers. Values are
 		// bounded by per-day spend × tokens which always fit in a JS number.
+		const cfg = await loadConfig()
+		const isOwn = email === currentUser(c)?.email
+		const effectivelyHideCosts =
+			isViewer &&
+			(cfg.spendVisibility === "admin_only" || (cfg.spendVisibility === "viewer_own" && !isOwn))
+
 		const rows = (result.rows ?? []).map((r) => ({
 			date: r.date,
-			cc_cents: isViewer ? null : Number(r.cc_cents),
-			cu_cents: isViewer ? null : Number(r.cu_cents),
+			cc_cents: effectivelyHideCosts ? null : Number(r.cc_cents),
+			cu_cents: effectivelyHideCosts ? null : Number(r.cu_cents),
 			cc_tokens: Number(r.cc_tokens),
 			cu_tokens: Number(r.cu_tokens),
 		}))
@@ -548,6 +561,12 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 
 		const [cc, cu] = await Promise.all([ccQuery, cuQuery])
 
+		const cfg = await loadConfig()
+		const isOwn = email === currentUser(c)?.email
+		const effectivelyHideCosts =
+			isViewer &&
+			(cfg.spendVisibility === "admin_only" || (cfg.spendVisibility === "viewer_own" && !isOwn))
+
 		const claude_code = cc
 			? (cc.rows ?? []).map((row: Record<string, unknown>) => {
 					const r = {
@@ -558,7 +577,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 						cache_creation_tokens: Number(row.cache_creation_tokens),
 						estimated_cost_cents: Number(row.estimated_cost_cents) as number | undefined,
 					}
-					if (isViewer) {
+					if (effectivelyHideCosts) {
 						delete r.estimated_cost_cents
 					}
 					return r
@@ -576,7 +595,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 						charged_cents: Number(row.charged_cents) as number | undefined,
 						request_count: Number(row.request_count),
 					}
-					if (isViewer) {
+					if (effectivelyHideCosts) {
 						delete r.charged_cents
 					}
 					return r

@@ -24,6 +24,11 @@ export const appUserRoleEnum = pgEnum("app_user_role", ["viewer", "admin"])
 export const platformEnum = pgEnum("platform", ["claude_code", "cursor"])
 export const alertScopeEnum = pgEnum("alert_scope", ["global", "user"])
 export const alertStatusEnum = pgEnum("alert_status", ["open", "acknowledged", "resolved"])
+export const spendVisibilityEnum = pgEnum("spend_visibility", [
+	"admin_only",
+	"viewer_own",
+	"viewer_all",
+])
 export const syncJobEnum = pgEnum("sync_job", [
 	"anthropic",
 	"cursor",
@@ -350,6 +355,7 @@ export const appConfig = pgTable("app_config", {
 	githubOrg: text("github_org"),
 	bootstrapAdminUserId: uuid("bootstrap_admin_user_id"),
 	setupCompletedAt: timestamp("setup_completed_at", { withTimezone: true }),
+	spendVisibility: spendVisibilityEnum("spend_visibility").notNull().default("admin_only"),
 	encryptionKeyVersion: integer("encryption_key_version").notNull().default(1),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

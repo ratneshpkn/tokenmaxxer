@@ -35,6 +35,7 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 			openSignupEnabled: cfg.openSignupEnabled,
 			setupCompleted: cfg.setupCompletedAt != null,
 			bootstrapNeeded: cfg.bootstrapAdminUserId == null,
+			spendVisibility: cfg.spendVisibility,
 		})
 	})
 

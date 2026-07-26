@@ -4,6 +4,7 @@ import { z } from "zod"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
 import { db } from "../db"
+import { loadConfig } from "../lib/config"
 import { coerceTrendArrays, resolveWindow, stripCostForViewer } from "../lib/route-helpers"
 import { currentRole } from "./index"
 
@@ -165,13 +166,16 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 
 		const totalsRow: Record<string, unknown> | null =
 			(totals.rows?.[0] as Record<string, unknown>) ?? null
+		const cfg = await loadConfig()
+		const hideCosts = currentRole(c) !== "admin" && cfg.spendVisibility !== "viewer_all"
+
 		if (totalsRow) {
 			totalsRow.gh_prs_opened = Number(totalsRow.gh_prs_opened ?? 0)
 			totalsRow.gh_prs_merged = Number(totalsRow.gh_prs_merged ?? 0)
 			totalsRow.gh_additions = Number(totalsRow.gh_additions ?? 0)
 			totalsRow.gh_deletions = Number(totalsRow.gh_deletions ?? 0)
 			totalsRow.gh_users = Number(totalsRow.gh_users ?? 0)
-			if (currentRole(c) !== "admin") {
+			if (hideCosts) {
 				totalsRow.cc_cents = null
 				totalsRow.cu_cents = null
 				totalsRow.open_alerts = null
@@ -184,7 +188,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 			r.gh_prs_merged = Number(r.gh_prs_merged ?? 0)
 			r.gh_additions = Number(r.gh_additions ?? 0)
 			r.gh_deletions = Number(r.gh_deletions ?? 0)
-			if (currentRole(c) !== "admin") {
+			if (hideCosts) {
 				r.claude_code_cents = null
 				r.cursor_cents = null
 			}
@@ -330,7 +334,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 			row.gh_additions = Number(row.gh_additions ?? 0)
 			row.gh_deletions = Number(row.gh_deletions ?? 0)
 		})
-		stripCostForViewer(typed, c, ["cc_cents", "cu_cents", "total_cents", "trend_cents"])
+		await stripCostForViewer(typed, c, ["cc_cents", "cu_cents", "total_cents", "trend_cents"])
 		return c.json(typed)
 	})
 
@@ -428,7 +432,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 		typed.forEach((row) => {
 			coerceTrendArrays(row, ["trend_cents", "trend_tokens"])
 		})
-		stripCostForViewer(typed, c, ["cents", "trend_cents"])
+		await stripCostForViewer(typed, c, ["cents", "trend_cents"])
 		return c.json(typed)
 	})
 }

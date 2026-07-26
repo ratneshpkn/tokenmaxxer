@@ -170,6 +170,9 @@ export function SettingsPage(): React.JSX.Element {
 	const [orgName, setOrgName] = useState("")
 	const [allowedDomain, setAllowedDomain] = useState("")
 	const [openSignup, setOpenSignup] = useState(false)
+	const [spendVisibility, setSpendVisibility] = useState<
+		"admin_only" | "viewer_own" | "viewer_all"
+	>("admin_only")
 	const [googleOauthEnabled, setGoogleOauthEnabled] = useState(false)
 	const [googleClientId, setGoogleClientId] = useState("")
 	const [googleClientSecret, setGoogleClientSecret] = useState("")
@@ -192,6 +195,7 @@ export function SettingsPage(): React.JSX.Element {
 			setOrgName(adminCfg.orgName || "")
 			setAllowedDomain(adminCfg.allowedEmailDomain || "")
 			setOpenSignup(adminCfg.openSignupEnabled || false)
+			setSpendVisibility(adminCfg.spendVisibility || "admin_only")
 			setGoogleOauthEnabled(adminCfg.googleOauthEnabled || false)
 			setGoogleClientId(adminCfg.googleClientId || "")
 			setGoogleClientSecret("")
@@ -221,6 +225,7 @@ export function SettingsPage(): React.JSX.Element {
 				setOrgName(adminCfg.orgName || "")
 				setAllowedDomain(adminCfg.allowedEmailDomain || "")
 				setOpenSignup(adminCfg.openSignupEnabled || false)
+				setSpendVisibility(adminCfg.spendVisibility || "admin_only")
 			} else if (section === "oauth") {
 				setGoogleOauthEnabled(adminCfg.googleOauthEnabled || false)
 				setGoogleClientId(adminCfg.googleClientId || "")
@@ -251,6 +256,9 @@ export function SettingsPage(): React.JSX.Element {
 				}
 				if (openSignup !== adminCfg?.openSignupEnabled) {
 					payload.openSignupEnabled = openSignup
+				}
+				if (spendVisibility !== adminCfg?.spendVisibility) {
+					payload.spendVisibility = spendVisibility
 				}
 			} else if (section === "oauth") {
 				if (googleOauthEnabled !== adminCfg?.googleOauthEnabled) {
@@ -354,6 +362,16 @@ export function SettingsPage(): React.JSX.Element {
 										{adminCfg?.openSignupEnabled ? "Enabled (domain-gated)" : "Invite-only"}
 									</p>
 								</div>
+								<div>
+									<Label className="text-[10px] tracked text-fg-dim">SPEND VISIBILITY</Label>
+									<p className="mt-1 text-fg text-sm">
+										{adminCfg?.spendVisibility === "admin_only"
+											? "Admin Only"
+											: adminCfg?.spendVisibility === "viewer_own"
+												? "Viewer Own Spend"
+												: "Viewer All Spend"}
+									</p>
+								</div>
 							</div>
 						) : (
 							/* Edit Org Details */
@@ -396,6 +414,22 @@ export function SettingsPage(): React.JSX.Element {
 												{allowedDomain ? `@${allowedDomain}` : "the allowed domain"} addresses
 											</span>
 										</label>
+									</div>
+									<div>
+										<Label className="text-[10px] tracked text-fg-dim">SPEND VISIBILITY</Label>
+										<select
+											value={spendVisibility}
+											onChange={(e) =>
+												setSpendVisibility(
+													e.target.value as "admin_only" | "viewer_own" | "viewer_all",
+												)
+											}
+											className="mt-1 w-full h-9 bg-transparent border border-line text-fg text-sm px-3 rounded-md"
+										>
+											<option value="admin_only">Admin Only</option>
+											<option value="viewer_own">Viewer Own Spend</option>
+											<option value="viewer_all">Viewer All Spend</option>
+										</select>
 									</div>
 								</div>
 								<div className="flex justify-end gap-2 pt-2">

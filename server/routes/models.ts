@@ -4,6 +4,7 @@ import { z } from "zod"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
 import { db } from "../db"
+import { loadConfig } from "../lib/config"
 import { coerceTrendArrays, resolveWindow, stripCostForViewer } from "../lib/route-helpers"
 import { currentRole } from "./index"
 
@@ -58,6 +59,8 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 
 		const role = currentRole(c)
 		const isViewer = role !== "admin"
+		const cfg = await loadConfig()
+		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
@@ -163,7 +166,7 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 			data.total_tokens = data.cu_tokens
 		}
 
-		if (isViewer) {
+		if (hideCosts) {
 			data.cc_cents = null as unknown as number
 			data.cu_cents = null as unknown as number
 			data.total_cents = null as unknown as number
@@ -181,8 +184,10 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 
 		const role = currentRole(c)
 		const isViewer = role !== "admin"
+		const cfg = await loadConfig()
+		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
 
-		const sortBy = sql.raw(isViewer || metric === "tokens" ? "tokens" : "cents")
+		const sortBy = sql.raw(hideCosts || metric === "tokens" ? "tokens" : "cents")
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
@@ -287,11 +292,11 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 			coerceTrendArrays(row, ["trend_cents", "trend_tokens"])
 			row.cents = Number(row.cents)
 			row.tokens = Number(row.tokens)
-			row.share_pct = isViewer || metric === "tokens" ? row.share_pct_tokens : row.share_pct_cost
+			row.share_pct = hideCosts || metric === "tokens" ? row.share_pct_tokens : row.share_pct_cost
 			delete row.share_pct_tokens
 			delete row.share_pct_cost
 		})
-		stripCostForViewer(typed, c, ["cents", "trend_cents"])
+		await stripCostForViewer(typed, c, ["cents", "trend_cents"])
 		return c.json(typed)
 	})
 
@@ -304,6 +309,8 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 
 		const role = currentRole(c)
 		const isViewer = role !== "admin"
+		const cfg = await loadConfig()
+		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
@@ -349,8 +356,8 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 
 		const rows = (result.rows ?? []).map((r: Record<string, unknown>) => ({
 			date: r.date,
-			cc_cents: isViewer ? null : Number(r.cc_cents),
-			cu_cents: isViewer ? null : Number(r.cu_cents),
+			cc_cents: hideCosts ? null : Number(r.cc_cents),
+			cu_cents: hideCosts ? null : Number(r.cu_cents),
 			cc_tokens: Number(r.cc_tokens),
 			cu_tokens: Number(r.cu_tokens),
 		}))
@@ -367,6 +374,8 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 
 		const role = currentRole(c)
 		const isViewer = role !== "admin"
+		const cfg = await loadConfig()
+		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
@@ -502,13 +511,13 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 		const typed = (result.rows ?? []) as Record<string, unknown>[]
 		const data = typed.map((row) => {
 			coerceTrendArrays(row, ["trend_cents", "trend_tokens"])
-			const cents = isViewer ? null : Number(row.cents)
-			const trend_cents = isViewer ? null : (row.trend_cents as number[])
+			const cents = hideCosts ? null : Number(row.cents)
+			const trend_cents = hideCosts ? null : (row.trend_cents as number[])
 			return {
 				raw_model: String(row.raw_model),
 				cents,
 				tokens: Number(row.tokens),
-				share_pct: isViewer ? Number(row.share_pct_tokens || 0) : Number(row.share_pct_cost || 0),
+				share_pct: hideCosts ? Number(row.share_pct_tokens || 0) : Number(row.share_pct_cost || 0),
 				trend_cents,
 				trend_tokens: row.trend_tokens as number[],
 			}

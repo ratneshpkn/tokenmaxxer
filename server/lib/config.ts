@@ -24,6 +24,7 @@ export interface ResolvedConfig {
 	claudeCodeWorkspaceId: string | null
 	githubAccessToken: string | null // decrypted
 	githubOrg: string | null
+	spendVisibility: "admin_only" | "viewer_own" | "viewer_all"
 }
 
 /** Mutable fields accepted by saveConfig. Secrets are plaintext on input. */
@@ -45,6 +46,7 @@ export interface ConfigPatch {
 	setupCompletedAt?: Date | null
 	githubAccessToken?: string | null
 	githubOrg?: string | null
+	spendVisibility?: "admin_only" | "viewer_own" | "viewer_all"
 }
 
 function decryptOrThrow(v: string | null, columnName: string): string | null {
@@ -104,6 +106,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 		claudeCodeWorkspaceId: row.claudeCodeWorkspaceId,
 		githubAccessToken,
 		githubOrg: row.githubOrg,
+		spendVisibility: row.spendVisibility,
 	}
 	return cached
 }
@@ -137,6 +140,7 @@ export async function saveConfig(patch: ConfigPatch): Promise<ResolvedConfig> {
 	if (patch.githubAccessToken !== undefined)
 		update.githubAccessTokenEnc = encryptOrNull(patch.githubAccessToken)
 	if (patch.githubOrg !== undefined) update.githubOrg = patch.githubOrg
+	if (patch.spendVisibility !== undefined) update.spendVisibility = patch.spendVisibility
 
 	await db.update(appConfig).set(update).where(eq(appConfig.id, 1))
 	invalidateConfigCache()

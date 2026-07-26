@@ -1,0 +1,2 @@
+CREATE TYPE "public"."spend_visibility" AS ENUM('admin_only', 'viewer_own', 'viewer_all');--> statement-breakpoint
+ALTER TABLE "app_config" ADD COLUMN "spend_visibility" "spend_visibility" DEFAULT 'admin_only' NOT NULL;
