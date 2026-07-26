@@ -67,6 +67,15 @@ export interface AuthResponse {
 	role: "viewer" | "admin"
 }
 
+export interface AppUserItem {
+	id: string
+	email: string
+	name: string | null
+	role: "viewer" | "admin"
+	createdAt: string
+	lastLoginAt: string | null
+}
+
 export interface InvitationItem {
 	id: string
 	email: string
