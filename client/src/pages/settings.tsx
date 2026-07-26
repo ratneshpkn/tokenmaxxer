@@ -24,6 +24,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { toast } from "@/components/ui/toast"
 import { api } from "@/lib/api"
 import { platformLabel } from "@/lib/platform"
 import { formatCents, formatDate, formatDuration } from "@/lib/utils"
@@ -151,7 +152,7 @@ export function SettingsPage(): React.JSX.Element {
 		onSuccess: (res) => {
 			navigator.clipboard?.writeText(res.url)
 			qc.invalidateQueries({ queryKey: ["invitations"] })
-			alert(`Invite link copied to clipboard:\n${res.url}`)
+			toast.success(`Invite link copied to clipboard: ${res.url}`, "Invite Link Created")
 		},
 	})
 
@@ -164,7 +165,7 @@ export function SettingsPage(): React.JSX.Element {
 		mutationFn: ({ id, role }: { id: string; role: "viewer" | "admin" }) =>
 			api.appUsers.updateRole(id, role),
 		onSuccess: () => qc.invalidateQueries({ queryKey: ["appUsers"] }),
-		onError: (err: Error) => alert(`Failed to update role:\n${err.message}`),
+		onError: (err: Error) => toast.error(err.message, "Failed to update role"),
 	})
 
 	const ccGlobalCents = thresholds?.global.claude_code ?? 5000
@@ -321,7 +322,7 @@ export function SettingsPage(): React.JSX.Element {
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["admin.config"] })
 			qc.invalidateQueries({ queryKey: ["config"] })
-			alert("Workspace configuration updated successfully.")
+			toast.success("Workspace configuration updated successfully.")
 			setAnthropicKey("")
 			setCursorKey("")
 			setSlackToken("")
@@ -333,7 +334,7 @@ export function SettingsPage(): React.JSX.Element {
 			setEditingSection(null)
 		},
 		onError: (err: Error) => {
-			alert(`Failed to update configuration:\n${err.message}`)
+			toast.error(err.message, "Failed to update configuration")
 		},
 	})
 

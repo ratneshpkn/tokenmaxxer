@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
+import { ToastProvider } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { applyInitialTheme } from "@/lib/use-theme"
 import App from "./App"
@@ -17,7 +18,9 @@ createRoot(root).render(
 	<StrictMode>
 		<QueryClientProvider client={queryClient}>
 			<TooltipProvider delayDuration={200}>
-				<App />
+				<ToastProvider>
+					<App />
+				</ToastProvider>
 			</TooltipProvider>
 		</QueryClientProvider>
 	</StrictMode>,
