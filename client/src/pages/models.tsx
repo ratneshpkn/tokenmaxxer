@@ -3,9 +3,11 @@ import { useMemo, useState } from "react"
 import { Link } from "wouter"
 import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
+import { SearchInput } from "@/components/SearchInput"
 import { SortHeader } from "@/components/SortHeader"
 import { Sparkline } from "@/components/Sparkline"
-import { Input } from "@/components/ui/input"
+import { TableStateRow } from "@/components/TableStateRow"
+import { Card } from "@/components/ui/card"
 import {
 	Table,
 	TableBody,
@@ -86,15 +88,15 @@ export function ModelsPage(): React.JSX.Element {
 					{data.length} MODELS TRACKED · sorted by{" "}
 					<span className="text-fg">{sortKey.toUpperCase()}</span>
 				</div>
-				<Input
+				<SearchInput
 					placeholder="filter by model name…"
 					value={filter}
-					onChange={(e) => setFilter(e.target.value)}
+					onChange={setFilter}
 					className="max-w-xs w-full"
 				/>
 			</div>
 
-			<div className="panel overflow-hidden">
+			<Card className="overflow-hidden">
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
@@ -128,18 +130,8 @@ export function ModelsPage(): React.JSX.Element {
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{isLoading ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── loading ──
-								</TableCell>
-							</TableRow>
-						) : rows.length === 0 ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── no models in window ──
-								</TableCell>
-							</TableRow>
+						{isLoading || rows.length === 0 ? (
+							<TableStateRow colSpan={5} isLoading={isLoading} emptyText="no models in window" />
 						) : (
 							rows.map((m, i) => {
 								const value = effectiveMode === "cost" ? Number(m.cents ?? 0) : Number(m.tokens)
@@ -194,7 +186,7 @@ export function ModelsPage(): React.JSX.Element {
 						)}
 					</TableBody>
 				</Table>
-			</div>
+			</Card>
 		</div>
 	)
 }

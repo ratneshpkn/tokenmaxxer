@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query"
-import { Search } from "lucide-react"
 import { useMemo, useState } from "react"
 import {
 	Area,
@@ -16,9 +15,14 @@ import {
 import { Link, useSearch } from "wouter"
 import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
+import { SearchInput } from "@/components/SearchInput"
+import { SectionHeader } from "@/components/SectionHeader"
 import { SortHeader } from "@/components/SortHeader"
 import { Sparkline } from "@/components/Sparkline"
+import { TableStateRow } from "@/components/TableStateRow"
+import { UserLink } from "@/components/UserLink"
 import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
 import {
 	Table,
 	TableBody,
@@ -271,12 +275,11 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 			</section>
 
 			{/* Trend chart */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line">
-					<span className="text-[11px] tracked text-fg">
-						USAGE TREND · {winLabel} · {trendMode === "cost" ? "USD" : "TOKENS"}
-					</span>
-				</div>
+			<Card>
+				<SectionHeader
+					title="USAGE TREND"
+					subtitle={`${winLabel} · ${trendMode === "cost" ? "USD" : "TOKENS"}`}
+				/>
 				<div
 					className="p-4"
 					style={{
@@ -389,23 +392,15 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 						</ResponsiveContainer>
 					)}
 				</div>
-			</section>
+			</Card>
 
 			{/* Top Users table */}
-			<section className="panel overflow-hidden">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">TOP USERS · {winLabel}</span>
-					<div className="flex items-center gap-2 w-48">
-						<Search className="w-3.5 h-3.5 text-fg-dim" />
-						<input
-							type="text"
-							placeholder="filter..."
-							value={filter}
-							onChange={(e) => setFilter(e.target.value)}
-							className="bg-transparent text-[11px] outline-none text-fg placeholder:text-fg-very-dim w-full"
-						/>
-					</div>
-				</div>
+			<Card className="overflow-hidden">
+				<SectionHeader
+					title="TOP USERS"
+					subtitle={winLabel}
+					action={<SearchInput value={filter} onChange={setFilter} placeholder="filter…" />}
+				/>
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
@@ -438,18 +433,12 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{topUsersQuery.isLoading ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── loading ──
-								</TableCell>
-							</TableRow>
-						) : rows.length === 0 ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── no users in window ──
-								</TableCell>
-							</TableRow>
+						{topUsersQuery.isLoading || rows.length === 0 ? (
+							<TableStateRow
+								colSpan={5}
+								isLoading={topUsersQuery.isLoading}
+								emptyText="no users in window"
+							/>
 						) : (
 							rows.map((u, i) => {
 								return (
@@ -458,14 +447,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
-											<Link
-												href={`/users/${encodeURIComponent(u.email)}`}
-												className="flex items-center min-w-0 group"
-											>
-												<span className="text-fg truncate group-hover:text-amber transition-colors">
-													{u.name || u.email}
-												</span>
-											</Link>
+											<UserLink email={u.email} name={u.name} />
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right text-fg">
 											<MetricPair
@@ -497,23 +479,15 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 						)}
 					</TableBody>
 				</Table>
-			</section>
+			</Card>
 
 			{/* Raw Models Breakdown table */}
-			<section className="panel overflow-hidden">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">RAW MODELS BREAKDOWN · {winLabel}</span>
-					<div className="flex items-center gap-2 w-48">
-						<Search className="w-3.5 h-3.5 text-fg-dim" />
-						<input
-							type="text"
-							placeholder="filter..."
-							value={rawFilter}
-							onChange={(e) => setRawFilter(e.target.value)}
-							className="bg-transparent text-[11px] outline-none text-fg placeholder:text-fg-very-dim w-full"
-						/>
-					</div>
-				</div>
+			<Card className="overflow-hidden">
+				<SectionHeader
+					title="RAW MODELS BREAKDOWN"
+					subtitle={winLabel}
+					action={<SearchInput value={rawFilter} onChange={setRawFilter} placeholder="filter…" />}
+				/>
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
@@ -546,18 +520,12 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 						</TableRow>
 					</TableHeader>
 					<TableBody>
-						{rawModelsQuery.isLoading ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── loading ──
-								</TableCell>
-							</TableRow>
-						) : rawModelRows.length === 0 ? (
-							<TableRow>
-								<TableCell colSpan={5} className="text-center text-fg-dim py-8 text-xs">
-									── no raw models in window ──
-								</TableCell>
-							</TableRow>
+						{rawModelsQuery.isLoading || rawModelRows.length === 0 ? (
+							<TableStateRow
+								colSpan={5}
+								isLoading={rawModelsQuery.isLoading}
+								emptyText="no raw models in window"
+							/>
 						) : (
 							rawModelRows.map((u, i) => {
 								return (
@@ -600,7 +568,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 						)}
 					</TableBody>
 				</Table>
-			</section>
+			</Card>
 		</div>
 	)
 }

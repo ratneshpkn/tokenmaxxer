@@ -1,4 +1,5 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
+import { Check } from "lucide-react"
 import { forwardRef } from "react"
 import { cn } from "@/lib/utils"
 
@@ -68,8 +69,6 @@ export const DropdownMenuSeparator = forwardRef<
 	/>
 ))
 DropdownMenuSeparator.displayName = DropdownMenuPrimitive.Separator.displayName
-
-import { Check } from "lucide-react"
 
 export const DropdownMenuCheckboxItem = forwardRef<
 	React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,

@@ -17,8 +17,11 @@ import { DateRangeBar } from "@/components/DateRangeBar"
 import { FlexCardModal } from "@/components/FlexCardModal"
 import { MetricPair } from "@/components/MetricPair"
 import { ModelMixSection } from "@/components/ModelMixSection"
+import { SectionHeader } from "@/components/SectionHeader"
 import { Sparkline } from "@/components/Sparkline"
+import { UserLink } from "@/components/UserLink"
 import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { severity } from "@/lib/alert-severity"
 import { api } from "@/lib/api"
@@ -166,7 +169,7 @@ export function DashboardPage(): React.JSX.Element {
 		return (
 			<div className="space-y-6 fade-rise">
 				<DateRangeBar updatedAt={summaryQuery.dataUpdatedAt} />
-				<section className="panel p-12 text-center">
+				<Card className="p-12 text-center">
 					<div className="font-display text-5xl text-fg leading-none tracking-tight mb-3">
 						No data yet.
 					</div>
@@ -210,7 +213,7 @@ export function DashboardPage(): React.JSX.Element {
 							))}
 						</div>
 					) : null}
-				</section>
+				</Card>
 			</div>
 		)
 	}
@@ -336,15 +339,11 @@ export function DashboardPage(): React.JSX.Element {
 			</section>
 
 			{/* ── Trend chart ───────────────────────────────────────────────── */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<div className="flex items-center gap-3">
-						<span className="text-[10px] tracked text-fg-dim">CHART</span>
-						<span className="text-[11px] tracked text-fg">
-							DAILY {trendMode === "usd" ? "SPEND" : "TOKENS"} · {winLabel}
-						</span>
-					</div>
-				</div>
+			<Card>
+				<SectionHeader
+					title={`DAILY ${trendMode === "usd" ? "SPEND" : "TOKENS"}`}
+					subtitle={winLabel}
+				/>
 				<div
 					className="p-4"
 					style={{
@@ -390,16 +389,11 @@ export function DashboardPage(): React.JSX.Element {
 					then attributed to the api_key creator. Totals match the Anthropic Console to within
 					rounding; for exact invoice reconciliation, use the Console.
 				</div>
-			</section>
+			</Card>
 
 			{/* ── GitHub Activity Trend chart ───────────────────────────────── */}
-			<section className="panel">
-				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<div className="flex items-center gap-3">
-						<span className="text-[10px] tracked text-fg-dim">CHART</span>
-						<span className="text-[11px] tracked text-fg">DAILY GITHUB PRs · {winLabel}</span>
-					</div>
-				</div>
+			<Card>
+				<SectionHeader title="DAILY GITHUB PRs" subtitle={winLabel} />
 				<div
 					className="p-4"
 					style={{
@@ -439,10 +433,10 @@ export function DashboardPage(): React.JSX.Element {
 				<div className="px-5 py-2 border-t border-line text-[10px] text-fg-very-dim leading-relaxed">
 					GitHub pull requests merged daily across all tracked users.
 				</div>
-			</section>
+			</Card>
 
 			{/* ── Model mix · stacked bar + ranked list with sparklines ─────── */}
-			<section className="panel">
+			<Card>
 				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
 					<span className="text-[11px] tracked text-fg">MODEL MIX · {winLabel}</span>
 					<span className="text-[10px] tracked text-fg-dim flex items-center gap-3">
@@ -457,20 +451,20 @@ export function DashboardPage(): React.JSX.Element {
 					</span>
 				</div>
 				<ModelMixSection modelMix={modelMix ?? []} isViewer={isViewer} />
-			</section>
+			</Card>
 
 			{/* ── Two-column: leaderboard + alerts (admins) / full-width leaderboard (viewers) ── */}
 			<section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-				<div className={`${isViewer ? "lg:col-span-12" : "lg:col-span-7"} panel`}>
-					<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-						<span className="text-[11px] tracked text-fg">
-							{isViewer || metricMode === "tokens" ? "TOP USERS · " : "TOP SPENDERS · "}
-							{winLabel}
-						</span>
-						<Link href="/users" className="text-[10px] tracked text-fg-dim hover:text-amber">
-							▸ VIEW ROSTER
-						</Link>
-					</div>
+				<Card className={isViewer ? "lg:col-span-12" : "lg:col-span-7"}>
+					<SectionHeader
+						title={isViewer || metricMode === "tokens" ? "TOP USERS" : "TOP SPENDERS"}
+						subtitle={winLabel}
+						action={
+							<Link href="/users" className="text-[10px] tracked text-fg-dim hover:text-amber">
+								▸ VIEW ROSTER
+							</Link>
+						}
+					/>
 					<ol className="divide-y divide-line/60">
 						{(top ?? []).map((r, i) => {
 							return (
@@ -481,15 +475,11 @@ export function DashboardPage(): React.JSX.Element {
 									<span className="col-span-1 font-display text-2xl tabular text-fg-very-dim leading-none">
 										{String(i + 1).padStart(2, "0")}
 									</span>
-									<Link
-										href={`/users/${encodeURIComponent(r.email)}`}
-										className="col-span-5 text-xs hover:text-amber truncate min-w-0"
-									>
-										<div className="text-fg truncate">{r.name || r.email}</div>
-										{r.name ? (
-											<div className="text-[10px] text-fg-very-dim truncate">{r.email}</div>
-										) : null}
-									</Link>
+									<UserLink
+										email={r.email}
+										name={r.name}
+										className="col-span-5 text-xs truncate min-w-0"
+									/>
 									<div className="col-span-4">
 										<Sparkline
 											data={pickTrend(r, isViewer, metricMode)}
@@ -514,10 +504,10 @@ export function DashboardPage(): React.JSX.Element {
 							</li>
 						) : null}
 					</ol>
-				</div>
+				</Card>
 
 				{!isViewer ? (
-					<div className="lg:col-span-5 panel">
+					<Card className="lg:col-span-5">
 						<div className="px-5 py-3 border-b border-line flex items-center justify-between">
 							<span className="text-[11px] tracked text-amber-hot flex items-center gap-2">
 								{totalOpenAlerts > 0 ? (
@@ -527,11 +517,11 @@ export function DashboardPage(): React.JSX.Element {
 								)}
 								OPEN ALERTS
 								{totalOpenAlerts > severeAlerts.length ? (
-									<span className="text-fg-very-dim font-normal">· top 5 of {totalOpenAlerts}</span>
+									<span className="text-fg-dim">({totalOpenAlerts})</span>
 								) : null}
 							</span>
 							<Link href="/alerts" className="text-[10px] tracked text-fg-dim hover:text-amber">
-								▸ VIEW ALL
+								▸ ALL ALERTS
 							</Link>
 						</div>
 						{severeAlerts.length > 0 ? (
@@ -573,7 +563,7 @@ export function DashboardPage(): React.JSX.Element {
 						) : (
 							<div className="px-5 py-6 text-xs text-fg-dim">── all clear ──</div>
 						)}
-					</div>
+					</Card>
 				) : null}
 			</section>
 

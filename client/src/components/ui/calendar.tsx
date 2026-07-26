@@ -16,18 +16,19 @@ export function Calendar({
 			showOutsideDays={showOutsideDays}
 			className={cn("p-3 font-mono text-xs", className)}
 			classNames={{
-				months: "flex flex-col sm:flex-row gap-4",
+				months: "flex flex-col sm:flex-row gap-4 relative",
 				month: "space-y-3",
-				month_caption: "flex justify-center relative items-center text-[11px] tracked",
-				caption_label: "text-fg",
-				nav: "space-x-1 flex items-center",
+				month_caption:
+					"flex justify-center items-center h-7 text-[11px] tracked font-medium relative",
+				caption_label: "text-fg font-medium text-xs",
+				nav: "flex items-center justify-between w-full absolute top-0 inset-x-0 h-7 z-10 pointer-events-none",
 				button_previous: cn(
-					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-mid",
-					"hover:border-amber hover:text-amber transition-colors absolute left-1",
+					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-mid bg-bg cursor-pointer",
+					"hover:border-amber hover:text-amber transition-colors pointer-events-auto",
 				),
 				button_next: cn(
-					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-mid",
-					"hover:border-amber hover:text-amber transition-colors absolute right-1",
+					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-mid bg-bg cursor-pointer",
+					"hover:border-amber hover:text-amber transition-colors pointer-events-auto",
 				),
 				month_grid: "w-full border-collapse",
 				weekdays: "flex",
@@ -56,9 +57,9 @@ export function Calendar({
 			components={{
 				Chevron: (props: ChevronProps) => {
 					if (props.orientation === "left") {
-						return <ChevronLeft className="h-3 w-3" strokeWidth={1.5} />
+						return <ChevronLeft className="size-3.5 shrink-0" strokeWidth={1.5} />
 					}
-					return <ChevronRight className="h-3 w-3" strokeWidth={1.5} />
+					return <ChevronRight className="size-3.5 shrink-0" strokeWidth={1.5} />
 				},
 			}}
 			{...props}

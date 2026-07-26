@@ -63,3 +63,27 @@ export function timeAgo(d: string | Date | null | undefined): string {
 	if (sec < 86400) return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m ago`
 	return `${Math.floor(sec / 86400)}d ago`
 }
+
+/** Formats run duration: e.g. "350ms", "2.4s", "15s", "2m 5s", "1h 12m" or "—" if incomplete/invalid. */
+export function formatDuration(
+	startedAt: string | Date | null | undefined,
+	completedAt: string | Date | null | undefined,
+): string {
+	if (!startedAt || !completedAt) return "—"
+	const start = typeof startedAt === "string" ? new Date(startedAt).getTime() : startedAt.getTime()
+	const end =
+		typeof completedAt === "string" ? new Date(completedAt).getTime() : completedAt.getTime()
+	if (Number.isNaN(start) || Number.isNaN(end) || end < start) return "—"
+
+	const ms = end - start
+	const sec = Math.floor(ms / 1000)
+	if (sec < 1) return `${ms}ms`
+	if (sec < 10) return `${(ms / 1000).toFixed(1)}s`
+	if (sec < 60) return `${sec}s`
+	const min = Math.floor(sec / 60)
+	const remSec = sec % 60
+	if (min < 60) return remSec > 0 ? `${min}m ${remSec}s` : `${min}m`
+	const hrs = Math.floor(min / 60)
+	const remMin = min % 60
+	return remMin > 0 ? `${hrs}h ${remMin}m` : `${hrs}h`
+}
