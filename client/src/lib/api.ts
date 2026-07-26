@@ -26,6 +26,7 @@ import type {
 	UsageRow,
 	UserDetailResponse,
 	UserListItem,
+	UserPRComplexityResponse,
 	UserRawModelsResponse,
 } from "@shared/api-types"
 
@@ -174,6 +175,10 @@ export const api = {
 		rawModels: (email: string, from: string, to: string) =>
 			request<UserRawModelsResponse>(
 				`/api/users/${encodeURIComponent(email)}/raw-models?from=${from}&to=${to}`,
+			),
+		prComplexity: (email: string, from?: string, to?: string) =>
+			request<UserPRComplexityResponse>(
+				`/api/users/${encodeURIComponent(email)}/pr-complexity${from && to ? `?from=${from}&to=${to}` : ""}`,
 			),
 	},
 

@@ -1,5 +1,5 @@
-import { trackedUsers } from "@shared/schema"
-import { eq, sql } from "drizzle-orm"
+import { githubPrEnrichments, githubPullRequests, trackedUsers } from "@shared/schema"
+import { and, desc, eq, sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
 import type { AppEnv } from "../auth/session"
@@ -603,5 +603,119 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			: []
 
 		return c.json({ claude_code, cursor })
+	})
+
+	// Per-user PR complexity metrics & breakdown
+	app.get("/api/users/:email/pr-complexity", isAuthenticated, async (c) => {
+		const email = String(c.req.param("email")).toLowerCase()
+		const query = c.req.query()
+		const fromStr = query.from
+		const toStr = query.to
+
+		const conditions = [eq(githubPullRequests.email, email)]
+		if (fromStr && /^\d{4}-\d{2}-\d{2}$/.test(fromStr)) {
+			conditions.push(
+				sql`${githubPullRequests.mergedAt} >= ${new Date(`${fromStr}T00:00:00.000Z`)}`,
+			)
+		}
+		if (toStr && /^\d{4}-\d{2}-\d{2}$/.test(toStr)) {
+			conditions.push(sql`${githubPullRequests.mergedAt} <= ${new Date(`${toStr}T23:59:59.999Z`)}`)
+		}
+
+		const rows = await db
+			.select({
+				repo: githubPullRequests.repo,
+				number: githubPullRequests.number,
+				title: githubPullRequests.title,
+				category: githubPrEnrichments.category,
+				complexityScore: githubPrEnrichments.complexityScore,
+				complexityReason: githubPrEnrichments.complexityReason,
+				summary: githubPrEnrichments.summary,
+				mergedAt: githubPullRequests.mergedAt,
+			})
+			.from(githubPullRequests)
+			.innerJoin(
+				githubPrEnrichments,
+				and(
+					eq(githubPullRequests.repo, githubPrEnrichments.repo),
+					eq(githubPullRequests.number, githubPrEnrichments.number),
+				),
+			)
+			.where(and(...conditions))
+			.orderBy(desc(githubPullRequests.mergedAt), desc(githubPrEnrichments.syncedAt))
+
+		const WEIGHT_MAP: Record<number, number> = { 1: 0.1, 2: 0.5, 3: 2.0, 4: 8.0, 5: 24.0 }
+		const totalEnrichedPrs = rows.length
+		const scoreCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
+		let totalScoreSum = 0
+		let weightedNumerator = 0
+		let weightedDenominator = 0
+		let totalImpactPoints = 0
+		let substantivePrCount = 0
+
+		for (const r of rows) {
+			const score = Math.max(1, Math.min(5, r.complexityScore))
+			scoreCounts[score] = (scoreCounts[score] || 0) + 1
+			totalScoreSum += score
+
+			const w = WEIGHT_MAP[score] || 1.0
+			weightedNumerator += w * score
+			weightedDenominator += w
+			totalImpactPoints += w
+			if (score >= 4) {
+				substantivePrCount += 1
+			}
+		}
+
+		const averageComplexity =
+			totalEnrichedPrs > 0 ? Number((totalScoreSum / totalEnrichedPrs).toFixed(1)) : null
+		const weightedAvgComplexity =
+			weightedDenominator > 0 ? Number((weightedNumerator / weightedDenominator).toFixed(2)) : null
+
+		const distribution = [1, 2, 3, 4, 5].map((score) => ({
+			score,
+			count: scoreCounts[score] || 0,
+		}))
+
+		// Compute daily complexity trend over time (chronological)
+		const dailyMap = new Map<string, { totalScore: number; count: number }>()
+		for (const r of rows) {
+			if (!r.mergedAt) continue
+			const dateStr = r.mergedAt.toISOString().slice(5, 10) // "MM-DD"
+			const entry = dailyMap.get(dateStr) || { totalScore: 0, count: 0 }
+			entry.totalScore += r.complexityScore
+			entry.count += 1
+			dailyMap.set(dateStr, entry)
+		}
+
+		const trend = Array.from(dailyMap.entries())
+			.map(([date, d]) => ({
+				date,
+				averageComplexity: Number((d.totalScore / d.count).toFixed(1)),
+				prCount: d.count,
+			}))
+			.reverse()
+
+		const recentPrs = rows.map((r) => ({
+			repo: r.repo,
+			number: r.number,
+			title: r.title,
+			category: r.category,
+			complexityScore: r.complexityScore,
+			complexityReason: r.complexityReason,
+			summary: r.summary,
+			mergedAt: r.mergedAt ? r.mergedAt.toISOString() : null,
+		}))
+
+		return c.json({
+			averageComplexity,
+			weightedAvgComplexity,
+			totalImpactPoints: Number(totalImpactPoints.toFixed(1)),
+			substantivePrCount,
+			totalEnrichedPrs,
+			distribution,
+			trend,
+			recentPrs,
+		})
 	})
 }

@@ -1,3 +1,4 @@
+import type { SyncJob } from "@shared/constants"
 import type { AppUser } from "@shared/schema"
 import {
 	dailyClaudeCodeAttribution,
@@ -13,6 +14,7 @@ import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
 import { loadConfig } from "../lib/config"
 import { runComputeAlerts } from "../scripts/compute-alerts"
+import { runPREnrichment } from "../scripts/enrich-prs"
 import { daysAgo, startSyncRun, today } from "../scripts/lib/shared"
 import { runSlackDigest } from "../scripts/slack-digest"
 import { runAnthropicSync } from "../scripts/sync-anthropic"
@@ -47,18 +49,10 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 	})
 
 	// Admin-only: kick a sync now. Returns immediately with runId; the job runs in the background.
-	// Pass ?full=true for anthropic/cursor to backfill recent data. Default lookback is 30 days;
-	// when the platform's daily-usage table is empty (cold start), we look back 365 days instead so
-	// the dashboard isn't useless on first run.
 	app.post("/api/admin/sync/:job/run", requireAdmin, async (c) => {
 		const job = String(c.req.param("job"))
-		if (
-			job !== "anthropic" &&
-			job !== "cursor" &&
-			job !== "alerts" &&
-			job !== "slack_digest" &&
-			job !== "github"
-		) {
+		const validJobs = ["anthropic", "cursor", "alerts", "slack_digest", "github", "prs_enrich"]
+		if (!validJobs.includes(job)) {
 			return c.json({ message: "Unknown job" }, 400)
 		}
 
@@ -77,24 +71,26 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 			range = { from: daysAgo(lookback), to: today() }
 		}
 
-		// Create the sync_runs row up front so we can return its id immediately.
-		// The runner reuses this row via withSyncRun's existingRunId option, so we
-		// end up with exactly one row per click — not two.
 		const me = currentUser(c) as AppUser | null
 		const triggeredBy = me?.email ? `user:${me.email}` : "user"
-		const runId = await startSyncRun(job, triggeredBy)
+		const runId = await startSyncRun(job as SyncJob, triggeredBy)
 
 		const opts = { existingRunId: runId }
-		const promise =
-			job === "anthropic"
-				? runAnthropicSync(range, opts)
-				: job === "cursor"
-					? runCursorSync(range, opts)
-					: job === "alerts"
-						? runComputeAlerts(opts)
-						: job === "slack_digest"
-							? runSlackDigest(opts)
-							: runGithubSync(range, opts)
+		let promise: Promise<unknown>
+
+		if (job === "anthropic") {
+			promise = runAnthropicSync(range, opts)
+		} else if (job === "cursor") {
+			promise = runCursorSync(range, opts)
+		} else if (job === "alerts") {
+			promise = runComputeAlerts(opts)
+		} else if (job === "slack_digest") {
+			promise = runSlackDigest(opts)
+		} else if (job === "prs_enrich") {
+			promise = runPREnrichment()
+		} else {
+			promise = runGithubSync(range, opts)
+		}
 
 		promise.catch((err) => console.error(`[sync route] ${job} failed`, err))
 

@@ -35,6 +35,7 @@ export const syncJobEnum = pgEnum("sync_job", [
 	"alerts",
 	"slack_digest",
 	"github",
+	"prs_enrich",
 ])
 export const syncStatusEnum = pgEnum("sync_status", ["success", "failed", "running"])
 
@@ -356,6 +357,10 @@ export const appConfig = pgTable("app_config", {
 	bootstrapAdminUserId: uuid("bootstrap_admin_user_id"),
 	setupCompletedAt: timestamp("setup_completed_at", { withTimezone: true }),
 	spendVisibility: spendVisibilityEnum("spend_visibility").notNull().default("admin_only"),
+	enrichmentProvider: text("enrichment_provider"),
+	enrichmentApiKeyEnc: text("enrichment_api_key_enc"),
+	enrichmentModelName: text("enrichment_model_name"),
+	enrichmentBaseUrl: text("enrichment_base_url"),
 	encryptionKeyVersion: integer("encryption_key_version").notNull().default(1),
 	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -426,6 +431,24 @@ export const githubPullRequests = pgTable(
 	}),
 )
 
+export const githubPrEnrichments = pgTable(
+	"github_pr_enrichments",
+	{
+		repo: text("repo").notNull(),
+		number: integer("number").notNull(),
+		category: varchar("category", { length: 50 }).notNull().default("other"),
+		complexityScore: integer("complexity_score").notNull().default(3),
+		complexityReason: text("complexity_reason"),
+		summary: text("summary"),
+		syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(t) => ({
+		pk: primaryKey({ columns: [t.repo, t.number] }),
+		categoryIdx: index("gpe_category_idx").on(t.category),
+		complexityIdx: index("gpe_complexity_idx").on(t.complexityScore),
+	}),
+)
+
 // ── Zod schemas (insert/select) ──────────────────────────────────────────
 
 export const insertAppUserSchema = createInsertSchema(appUsers).omit({
@@ -467,3 +490,4 @@ export type CursorSpendSnapshot = typeof cursorSpendSnapshots.$inferSelect
 export type AppConfig = typeof appConfig.$inferSelect
 export type Invitation = typeof invitations.$inferSelect
 export type DailyGithubActivity = typeof dailyGithubActivity.$inferSelect
+export type GithubPrEnrichment = typeof githubPrEnrichments.$inferSelect
