@@ -5,6 +5,7 @@ import { isAuthenticated } from "../auth/session"
 import { loadConfig } from "../lib/config"
 import { registerAdminConfigRoutes } from "./admin-config"
 import { registerAlertRoutes } from "./alerts"
+import { registerAppUserRoutes } from "./app-users"
 import { registerAuthPasswordRoutes } from "./auth-password"
 import { registerDashboardRoutes } from "./dashboard"
 import { registerInvitationRoutes } from "./invitations"
@@ -61,4 +62,5 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 	registerSetupRoutes(app)
 	registerAdminConfigRoutes(app)
 	registerModelRoutes(app)
+	registerAppUserRoutes(app)
 }

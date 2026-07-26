@@ -93,6 +93,8 @@ function StatusPip({ state }: { state: ValidationState }): React.JSX.Element | n
 
 export function SettingsPage(): React.JSX.Element {
 	const qc = useQueryClient()
+	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
+	const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: api.appUsers.list })
 	const { data: thresholds } = useQuery({
 		queryKey: ["thresholds"],
 		queryFn: api.thresholds.list,
@@ -145,6 +147,13 @@ export function SettingsPage(): React.JSX.Element {
 	const deleteInviteMut = useMutation({
 		mutationFn: (id: string) => api.invitations.delete(id),
 		onSuccess: () => qc.invalidateQueries({ queryKey: ["invitations"] }),
+	})
+
+	const updateRoleMut = useMutation({
+		mutationFn: ({ id, role }: { id: string; role: "viewer" | "admin" }) =>
+			api.appUsers.updateRole(id, role),
+		onSuccess: () => qc.invalidateQueries({ queryKey: ["appUsers"] }),
+		onError: (err: Error) => alert(`Failed to update role:\n${err.message}`),
 	})
 
 	const ccGlobalCents = thresholds?.global.claude_code ?? 5000
@@ -887,6 +896,70 @@ export function SettingsPage(): React.JSX.Element {
 						)}
 					</div>
 				</div>
+			</section>
+
+			{/* Active Accounts */}
+			<section className="panel">
+				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
+					<span className="text-[11px] tracked text-fg">ACTIVE ACCOUNTS</span>
+					<span className="text-[10px] tracked text-fg-dim">
+						{appUsers.length} ACCOUNT{appUsers.length === 1 ? "" : "S"}
+					</span>
+				</div>
+				<Table className="w-full tabular text-xs">
+					<TableHeader>
+						<TableRow>
+							<TableHead className="h-8 px-5 text-left text-[10px] tracked text-fg-dim">
+								USER
+							</TableHead>
+							<TableHead className="h-8 px-5 text-left text-[10px] tracked text-fg-dim w-48">
+								ROLE
+							</TableHead>
+							<TableHead className="h-8 px-5 text-right text-[10px] tracked text-fg-dim">
+								JOINED
+							</TableHead>
+							<TableHead className="h-8 px-5 text-right text-[10px] tracked text-fg-dim">
+								LAST LOGIN
+							</TableHead>
+						</TableRow>
+					</TableHeader>
+					<TableBody>
+						{appUsers.map((u) => (
+							<TableRow key={u.id}>
+								<TableCell className="px-5 py-3">
+									<div className="text-fg">{u.name || "—"}</div>
+									<div className="text-fg-dim text-[11px]">{u.email}</div>
+								</TableCell>
+								<TableCell className="px-5 py-3">
+									{me?.role === "admin" && me?.id !== u.id ? (
+										<select
+											value={u.role}
+											onChange={(e) =>
+												updateRoleMut.mutate({
+													id: u.id,
+													role: e.target.value as "viewer" | "admin",
+												})
+											}
+											disabled={updateRoleMut.isPending}
+											className="w-full h-8 bg-transparent border border-line text-fg text-xs px-2"
+										>
+											<option value="viewer">VIEWER</option>
+											<option value="admin">ADMIN</option>
+										</select>
+									) : (
+										<span className="text-fg-mid uppercase text-[10px] tracked">{u.role}</span>
+									)}
+								</TableCell>
+								<TableCell className="px-5 py-3 text-right text-fg-dim">
+									{new Date(u.createdAt).toLocaleDateString()}
+								</TableCell>
+								<TableCell className="px-5 py-3 text-right text-fg-dim">
+									{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}
+								</TableCell>
+							</TableRow>
+						))}
+					</TableBody>
+				</Table>
 			</section>
 
 			{/* Invitations */}

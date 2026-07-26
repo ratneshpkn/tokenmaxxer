@@ -2,6 +2,7 @@ import type {
 	AdminConfigPatch,
 	AdminConfigResponse,
 	AlertItem,
+	AppUserItem,
 	AuthResponse,
 	CodeOutputItem,
 	ConfigResponse,
@@ -97,6 +98,15 @@ export const api = {
 				body: JSON.stringify({ email, role }),
 			}),
 		delete: (id: string) => request(`/api/invitations/${id}`, { method: "DELETE" }),
+	},
+
+	appUsers: {
+		list: () => request<AppUserItem[]>("/api/app-users"),
+		updateRole: (id: string, role: "viewer" | "admin") =>
+			request<{ ok: true }>(`/api/app-users/${id}/role`, {
+				method: "PATCH",
+				body: JSON.stringify({ role }),
+			}),
 	},
 
 	dashboard: {
