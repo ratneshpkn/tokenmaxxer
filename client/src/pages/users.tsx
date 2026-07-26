@@ -262,9 +262,6 @@ export function UsersPage(): React.JSX.Element {
 													</span>
 												)}
 											</div>
-											{r.name ? (
-												<div className="text-[10px] text-fg-very-dim">{r.email}</div>
-											) : null}
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right">
 											<MetricPair
