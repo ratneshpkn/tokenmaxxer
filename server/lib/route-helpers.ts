@@ -1,7 +1,8 @@
 import type { Context } from "hono"
 import type { AppEnv } from "../auth/session"
-import { currentRole } from "../routes/index"
+import { currentRole, currentUser } from "../routes/index"
 import { daysAgo, yesterday } from "../scripts/lib/shared"
+import { loadConfig } from "./config"
 
 /** Coerce bigint[] fields (which arrive from node-postgres as string[]) to number[].
  *  Accepts an explicit list of field names. Mutates the row in place.
@@ -14,13 +15,24 @@ export function coerceTrendArrays(row: Record<string, unknown>, fields: string[]
 
 /** Strip the named cost fields from each row when the requester is not an admin.
  *  Used by RBAC-gated endpoints to prevent cost data leaking to viewers. */
-export function stripCostForViewer(
+export async function stripCostForViewer(
 	rows: Record<string, unknown>[],
 	c: Context<AppEnv>,
 	fields: string[],
-): void {
+): Promise<void> {
 	if (currentRole(c) === "admin") return
+	const cfg = await loadConfig()
+	const visibility = cfg.spendVisibility
+	if (visibility === "viewer_all") return
+
+	const user = currentUser(c)
+
 	for (const row of rows) {
+		if (visibility === "viewer_own") {
+			if (row.email && typeof row.email === "string" && row.email === user?.email) {
+				continue
+			}
+		}
 		for (const f of fields) delete row[f]
 	}
 }

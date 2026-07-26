@@ -17,6 +17,7 @@ export interface ConfigResponse {
 	openSignupEnabled: boolean
 	setupCompleted: boolean
 	bootstrapNeeded: boolean
+	spendVisibility: "admin_only" | "viewer_own" | "viewer_all"
 }
 
 export interface AdminConfigResponse {
@@ -33,6 +34,7 @@ export interface AdminConfigResponse {
 	googleClientSecretSet: boolean
 	githubOrg: string | null
 	githubAccessTokenSet: boolean
+	spendVisibility: "admin_only" | "viewer_own" | "viewer_all"
 }
 
 export interface AdminConfigPatch {
@@ -49,6 +51,7 @@ export interface AdminConfigPatch {
 	slackChannelId?: string | null
 	githubAccessToken?: string | null
 	githubOrg?: string | null
+	spendVisibility?: "admin_only" | "viewer_own" | "viewer_all"
 }
 
 export interface MeResponse {

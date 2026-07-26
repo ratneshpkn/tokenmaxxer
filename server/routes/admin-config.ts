@@ -18,6 +18,7 @@ const updateAdminConfigSchema = z.object({
 	slackChannelId: z.string().nullable().optional(),
 	githubAccessToken: z.string().nullable().optional(),
 	githubOrg: z.string().nullable().optional(),
+	spendVisibility: z.enum(["admin_only", "viewer_own", "viewer_all"]).optional(),
 })
 
 export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
@@ -37,6 +38,7 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 			googleClientSecretSet: cfg.googleClientSecret != null && cfg.googleClientSecret !== "",
 			githubOrg: cfg.githubOrg,
 			githubAccessTokenSet: cfg.githubAccessToken != null && cfg.githubAccessToken !== "",
+			spendVisibility: cfg.spendVisibility,
 		})
 	})
 
@@ -63,6 +65,7 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 			googleOauthRedirectUri: data.googleOauthRedirectUri,
 			slackChannelId: data.slackChannelId,
 			githubOrg: data.githubOrg,
+			spendVisibility: data.spendVisibility,
 		}
 
 		if (data.googleClientSecret !== undefined) {
