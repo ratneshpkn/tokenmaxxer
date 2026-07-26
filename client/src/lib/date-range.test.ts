@@ -55,37 +55,37 @@ describe("isValidYmd", () => {
 })
 
 describe("resolvePreset", () => {
-	it("7d covers yesterday and the 6 preceding days", () => {
+	it("7d covers today and the 6 preceding days", () => {
 		const r = resolvePreset("7d", NOW)
-		expect(r.to).toBe("2026-04-28")
-		expect(r.from).toBe("2026-04-22")
+		expect(r.to).toBe("2026-04-29")
+		expect(r.from).toBe("2026-04-23")
 		expect(r.preset).toBe("7d")
 	})
-	it("30d covers 30 days ending yesterday", () => {
+	it("30d covers 30 days ending today", () => {
 		const r = resolvePreset("30d", NOW)
-		expect(r.to).toBe("2026-04-28")
-		expect(r.from).toBe("2026-03-30")
+		expect(r.to).toBe("2026-04-29")
+		expect(r.from).toBe("2026-03-31")
 	})
 	it("mtd starts at the first of the current month", () => {
 		const r = resolvePreset("mtd", NOW)
 		expect(r.from).toBe("2026-04-01")
-		expect(r.to).toBe("2026-04-28")
+		expect(r.to).toBe("2026-04-29")
 	})
-	it("90d covers 90 days ending yesterday", () => {
+	it("90d covers 90 days ending today", () => {
 		const r = resolvePreset("90d", NOW)
-		expect(r.to).toBe("2026-04-28")
-		expect(r.from).toBe("2026-01-29") // yesterday - 89
+		expect(r.to).toBe("2026-04-29")
+		expect(r.from).toBe("2026-01-30") // today - 89
 	})
-	it("6m covers 180 days ending yesterday", () => {
+	it("6m covers 180 days ending today", () => {
 		const r = resolvePreset("6m", NOW)
-		expect(r.to).toBe("2026-04-28")
-		expect(r.from).toBe("2025-10-31") // yesterday - 179
+		expect(r.to).toBe("2026-04-29")
+		expect(r.from).toBe("2025-11-01") // today - 179
 	})
-	it("mtd on the 1st of the month returns the full previous month", () => {
+	it("mtd on the 1st of the month returns the first day of the current month", () => {
 		const MAY_1 = new Date("2026-05-01T12:00:00Z")
 		const r = resolvePreset("mtd", MAY_1)
-		expect(r.from).toBe("2026-04-01")
-		expect(r.to).toBe("2026-04-30")
+		expect(r.from).toBe("2026-05-01")
+		expect(r.to).toBe("2026-05-01")
 	})
 })
 
@@ -93,7 +93,7 @@ describe("parseSearch", () => {
 	it("empty input → 30d default", () => {
 		const r = parseSearch("", NOW)
 		expect(r.preset).toBe("30d")
-		expect(r.to).toBe("2026-04-28")
+		expect(r.to).toBe("2026-04-29")
 	})
 	it("?range=7d → resolves preset", () => {
 		expect(parseSearch("?range=7d", NOW).preset).toBe("7d")
@@ -117,16 +117,16 @@ describe("parseSearch", () => {
 		const r = parseSearch("?range=7d&from=2026-04-01&to=2026-04-15", NOW)
 		expect(r.preset).toBe("7d")
 	})
-	it("clamps a future `to` to yesterday", () => {
+	it("clamps a future `to` to today", () => {
 		const r = parseSearch("?from=2026-04-01&to=2030-01-01", NOW)
 		expect(r.preset).toBe("custom")
-		expect(r.to).toBe("2026-04-28")
+		expect(r.to).toBe("2026-04-29")
 	})
-	it("from after the clamped to → clamps from to yesterday as well", () => {
-		const r = parseSearch("?from=2026-04-29&to=2030-01-01", NOW)
+	it("from after the clamped to → clamps from to today as well", () => {
+		const r = parseSearch("?from=2026-04-30&to=2030-01-01", NOW)
 		expect(r.preset).toBe("custom")
-		expect(r.from).toBe("2026-04-28")
-		expect(r.to).toBe("2026-04-28")
+		expect(r.from).toBe("2026-04-29")
+		expect(r.to).toBe("2026-04-29")
 	})
 	it("partial (only `from`) → default", () => {
 		expect(parseSearch("?from=2026-04-01", NOW).preset).toBe("30d")

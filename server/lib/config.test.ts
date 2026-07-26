@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
 import { sql } from "drizzle-orm"
-import { db, pool } from "../db"
+import { db } from "../db"
 
 // Use a fixed key for standard test cases
 process.env.CONFIG_ENCRYPTION_KEY = "00".repeat(32)
@@ -27,7 +27,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
 	delete process.env.CONFIG_ENCRYPTION_KEY
-	await pool.end()
+	const { resetCachedKey } = await import("./crypto")
+	resetCachedKey()
 })
 
 describe("config", () => {
