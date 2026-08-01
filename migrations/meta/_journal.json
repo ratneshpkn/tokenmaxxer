@@ -29,6 +29,13 @@
       "when": 1785039778925,
       "tag": "0003_great_tarot",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785087628789,
+      "tag": "0004_whole_gateway",
+      "breakpoints": true
     }
   ]
 }

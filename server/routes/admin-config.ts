@@ -19,6 +19,10 @@ const updateAdminConfigSchema = z.object({
 	githubAccessToken: z.string().nullable().optional(),
 	githubOrg: z.string().nullable().optional(),
 	spendVisibility: z.enum(["admin_only", "viewer_own", "viewer_all"]).optional(),
+	enrichmentProvider: z.enum(["anthropic", "openai", "openai_compatible"]).nullable().optional(),
+	enrichmentApiKey: z.string().nullable().optional(),
+	enrichmentModelName: z.string().nullable().optional(),
+	enrichmentBaseUrl: z.string().nullable().optional(),
 })
 
 export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
@@ -39,6 +43,10 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 			githubOrg: cfg.githubOrg,
 			githubAccessTokenSet: cfg.githubAccessToken != null && cfg.githubAccessToken !== "",
 			spendVisibility: cfg.spendVisibility,
+			enrichmentProvider: cfg.enrichmentProvider,
+			enrichmentApiKeySet: cfg.enrichmentApiKey != null && cfg.enrichmentApiKey !== "",
+			enrichmentModelName: cfg.enrichmentModelName,
+			enrichmentBaseUrl: cfg.enrichmentBaseUrl,
 		})
 	})
 
@@ -66,6 +74,9 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 			slackChannelId: data.slackChannelId,
 			githubOrg: data.githubOrg,
 			spendVisibility: data.spendVisibility,
+			enrichmentProvider: data.enrichmentProvider,
+			enrichmentModelName: data.enrichmentModelName,
+			enrichmentBaseUrl: data.enrichmentBaseUrl,
 		}
 
 		if (data.googleClientSecret !== undefined) {
@@ -83,6 +94,9 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 		}
 		if (data.githubAccessToken !== undefined) {
 			patch.githubAccessToken = data.githubAccessToken === "" ? null : data.githubAccessToken
+		}
+		if (data.enrichmentApiKey !== undefined) {
+			patch.enrichmentApiKey = data.enrichmentApiKey === "" ? null : data.enrichmentApiKey
 		}
 
 		await saveConfig(patch)

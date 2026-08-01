@@ -35,6 +35,10 @@ export interface AdminConfigResponse {
 	githubOrg: string | null
 	githubAccessTokenSet: boolean
 	spendVisibility: "admin_only" | "viewer_own" | "viewer_all"
+	enrichmentProvider: "anthropic" | "openai" | "openai_compatible" | null
+	enrichmentApiKeySet: boolean
+	enrichmentModelName: string | null
+	enrichmentBaseUrl: string | null
 }
 
 export interface AdminConfigPatch {
@@ -52,6 +56,10 @@ export interface AdminConfigPatch {
 	githubAccessToken?: string | null
 	githubOrg?: string | null
 	spendVisibility?: "admin_only" | "viewer_own" | "viewer_all"
+	enrichmentProvider?: "anthropic" | "openai" | "openai_compatible" | null
+	enrichmentApiKey?: string | null
+	enrichmentModelName?: string | null
+	enrichmentBaseUrl?: string | null
 }
 
 export interface MeResponse {
@@ -318,4 +326,35 @@ export interface UserRawModelCursorItem {
 export interface UserRawModelsResponse {
 	claude_code: UserRawModelClaudeCodeItem[]
 	cursor: UserRawModelCursorItem[]
+}
+
+export interface UserPRComplexityItem {
+	repo: string
+	number: number
+	title: string
+	category: string
+	complexityScore: number
+	complexityReason: string
+	summary: string
+	mergedAt: string | null
+}
+
+export interface UserPRComplexityTrendItem {
+	date: string
+	averageComplexity: number
+	prCount: number
+}
+
+export interface UserPRComplexityResponse {
+	averageComplexity: number | null
+	weightedAvgComplexity: number | null
+	totalImpactPoints: number
+	substantivePrCount: number
+	totalEnrichedPrs: number
+	distribution: Array<{
+		score: number
+		count: number
+	}>
+	trend: UserPRComplexityTrendItem[]
+	recentPrs: UserPRComplexityItem[]
 }

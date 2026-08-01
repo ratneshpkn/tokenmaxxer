@@ -25,6 +25,10 @@ export interface ResolvedConfig {
 	githubAccessToken: string | null // decrypted
 	githubOrg: string | null
 	spendVisibility: "admin_only" | "viewer_own" | "viewer_all"
+	enrichmentProvider: "anthropic" | "openai" | "openai_compatible" | null
+	enrichmentApiKey: string | null // decrypted
+	enrichmentModelName: string | null
+	enrichmentBaseUrl: string | null
 }
 
 /** Mutable fields accepted by saveConfig. Secrets are plaintext on input. */
@@ -47,6 +51,10 @@ export interface ConfigPatch {
 	githubAccessToken?: string | null
 	githubOrg?: string | null
 	spendVisibility?: "admin_only" | "viewer_own" | "viewer_all"
+	enrichmentProvider?: "anthropic" | "openai" | "openai_compatible" | null
+	enrichmentApiKey?: string | null
+	enrichmentModelName?: string | null
+	enrichmentBaseUrl?: string | null
 }
 
 function decryptOrThrow(v: string | null, columnName: string): string | null {
@@ -85,6 +93,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 	const cursorAdminApiKey = decryptOrThrow(row.cursorAdminApiKeyEnc, "cursorAdminApiKeyEnc")
 	const slackBotToken = decryptOrThrow(row.slackBotTokenEnc, "slackBotTokenEnc")
 	const githubAccessToken = decryptOrThrow(row.githubAccessTokenEnc, "githubAccessTokenEnc")
+	const enrichmentApiKey = decryptOrThrow(row.enrichmentApiKeyEnc, "enrichmentApiKeyEnc")
 
 	cached = {
 		id: 1,
@@ -107,6 +116,11 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 		githubAccessToken,
 		githubOrg: row.githubOrg,
 		spendVisibility: row.spendVisibility,
+		enrichmentProvider:
+			(row.enrichmentProvider as "anthropic" | "openai" | "openai_compatible" | null) ?? null,
+		enrichmentApiKey,
+		enrichmentModelName: row.enrichmentModelName,
+		enrichmentBaseUrl: row.enrichmentBaseUrl,
 	}
 	return cached
 }
@@ -141,6 +155,12 @@ export async function saveConfig(patch: ConfigPatch): Promise<ResolvedConfig> {
 		update.githubAccessTokenEnc = encryptOrNull(patch.githubAccessToken)
 	if (patch.githubOrg !== undefined) update.githubOrg = patch.githubOrg
 	if (patch.spendVisibility !== undefined) update.spendVisibility = patch.spendVisibility
+	if (patch.enrichmentProvider !== undefined) update.enrichmentProvider = patch.enrichmentProvider
+	if (patch.enrichmentApiKey !== undefined)
+		update.enrichmentApiKeyEnc = encryptOrNull(patch.enrichmentApiKey)
+	if (patch.enrichmentModelName !== undefined)
+		update.enrichmentModelName = patch.enrichmentModelName
+	if (patch.enrichmentBaseUrl !== undefined) update.enrichmentBaseUrl = patch.enrichmentBaseUrl
 
 	await db.update(appConfig).set(update).where(eq(appConfig.id, 1))
 	invalidateConfigCache()

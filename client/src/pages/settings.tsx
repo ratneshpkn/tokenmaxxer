@@ -205,9 +205,17 @@ export function SettingsPage(): React.JSX.Element {
 	const [githubToken, setGithubToken] = useState("")
 	const [githubOrg, setGithubOrg] = useState("")
 
+	const [enrichmentProvider, setEnrichmentProvider] = useState<
+		"anthropic" | "openai" | "openai_compatible"
+	>("anthropic")
+	const [enrichmentApiKey, setEnrichmentApiKey] = useState("")
+	const [enrichmentModelName, setEnrichmentModelName] = useState("")
+	const [enrichmentBaseUrl, setEnrichmentBaseUrl] = useState("")
+
 	const [clearSlackToken, setClearSlackToken] = useState(false)
 	const [clearGithubToken, setClearGithubToken] = useState(false)
 	const [clearGoogleSecret, setClearGoogleSecret] = useState(false)
+	const [clearEnrichmentKey, setClearEnrichmentKey] = useState(false)
 
 	const hasInitialized = useRef(false)
 
@@ -227,9 +235,14 @@ export function SettingsPage(): React.JSX.Element {
 			setSlackChannel(adminCfg.slackChannelId || "")
 			setGithubToken("")
 			setGithubOrg(adminCfg.githubOrg || "")
+			setEnrichmentProvider(adminCfg.enrichmentProvider || "anthropic")
+			setEnrichmentApiKey("")
+			setEnrichmentModelName(adminCfg.enrichmentModelName || "")
+			setEnrichmentBaseUrl(adminCfg.enrichmentBaseUrl || "")
 			setClearSlackToken(false)
 			setClearGithubToken(false)
 			setClearGoogleSecret(false)
+			setClearEnrichmentKey(false)
 			hasInitialized.current = true
 		}
 	}, [adminCfg])
@@ -260,8 +273,13 @@ export function SettingsPage(): React.JSX.Element {
 				setSlackChannel(adminCfg.slackChannelId || "")
 				setGithubToken("")
 				setGithubOrg(adminCfg.githubOrg || "")
+				setEnrichmentProvider(adminCfg.enrichmentProvider || "anthropic")
+				setEnrichmentApiKey("")
+				setEnrichmentModelName(adminCfg.enrichmentModelName || "")
+				setEnrichmentBaseUrl(adminCfg.enrichmentBaseUrl || "")
 				setClearSlackToken(false)
 				setClearGithubToken(false)
+				setClearEnrichmentKey(false)
 			}
 		}
 		setEditingSection(null)
@@ -314,6 +332,20 @@ export function SettingsPage(): React.JSX.Element {
 				}
 				if (githubOrg !== (adminCfg?.githubOrg || "")) {
 					payload.githubOrg = githubOrg.trim() || null
+				}
+				if (enrichmentProvider !== adminCfg?.enrichmentProvider) {
+					payload.enrichmentProvider = enrichmentProvider
+				}
+				if (clearEnrichmentKey) {
+					payload.enrichmentApiKey = ""
+				} else if (enrichmentApiKey) {
+					payload.enrichmentApiKey = enrichmentApiKey
+				}
+				if (enrichmentModelName !== (adminCfg?.enrichmentModelName || "")) {
+					payload.enrichmentModelName = enrichmentModelName.trim() || null
+				}
+				if (enrichmentBaseUrl !== (adminCfg?.enrichmentBaseUrl || "")) {
+					payload.enrichmentBaseUrl = enrichmentBaseUrl.trim() || null
 				}
 			}
 
@@ -880,6 +912,120 @@ export function SettingsPage(): React.JSX.Element {
 											placeholder="GitHub Org Name"
 											className="mt-1"
 										/>
+									</div>
+
+									<div className="pt-4 border-t border-line/60">
+										<div className="text-[11px] font-medium text-fg mb-3 font-mono">
+											PR ENRICHMENT & AI CLASSIFICATION PROVIDER
+										</div>
+										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+											<div>
+												<Label
+													htmlFor="enrichmentProvider"
+													className="text-[10px] tracked text-fg-dim"
+												>
+													PROVIDER
+												</Label>
+												<Select
+													value={enrichmentProvider}
+													onValueChange={(val: "anthropic" | "openai" | "openai_compatible") =>
+														setEnrichmentProvider(val)
+													}
+												>
+													<SelectTrigger
+														id="enrichmentProvider"
+														className="mt-1 h-9 bg-transparent border-line text-xs"
+													>
+														<SelectValue placeholder="Select Provider" />
+													</SelectTrigger>
+													<SelectContent>
+														<SelectItem value="anthropic">Anthropic</SelectItem>
+														<SelectItem value="openai">OpenAI</SelectItem>
+														<SelectItem value="openai_compatible">
+															Custom OpenAI-compatible / Proxy
+														</SelectItem>
+													</SelectContent>
+												</Select>
+											</div>
+
+											<div>
+												<Label
+													htmlFor="enrichmentModelName"
+													className="text-[10px] tracked text-fg-dim"
+												>
+													MODEL NAME
+												</Label>
+												<Input
+													id="enrichmentModelName"
+													value={enrichmentModelName}
+													onChange={(e) => setEnrichmentModelName(e.target.value)}
+													placeholder="e.g. claude-3-5-haiku-20241022 or gpt-4o-mini"
+													className="mt-1"
+												/>
+											</div>
+
+											<div className="md:col-span-2">
+												<div className="flex items-center justify-between mb-1">
+													<Label
+														htmlFor="enrichmentApiKey"
+														className="text-[10px] tracked text-fg-dim"
+													>
+														ENRICHMENT API KEY
+													</Label>
+													{adminCfg?.enrichmentApiKeySet && !clearEnrichmentKey && (
+														<button
+															type="button"
+															onClick={() => setClearEnrichmentKey(true)}
+															className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+														>
+															[Clear Key]
+														</button>
+													)}
+													{clearEnrichmentKey && (
+														<button
+															type="button"
+															onClick={() => setClearEnrichmentKey(false)}
+															className="text-[9px] text-mint uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+														>
+															[Undo Clear]
+														</button>
+													)}
+												</div>
+												<Input
+													id="enrichmentApiKey"
+													value={enrichmentApiKey}
+													onChange={(e) => {
+														setEnrichmentApiKey(e.target.value)
+														if (clearEnrichmentKey) setClearEnrichmentKey(false)
+													}}
+													placeholder={
+														clearEnrichmentKey
+															? "Cleared (will save on Save)"
+															: adminCfg?.enrichmentApiKeySet
+																? "•••••••••••• (configured)"
+																: "API Key for classification"
+													}
+													type="password"
+													disabled={clearEnrichmentKey}
+												/>
+											</div>
+
+											<div className="md:col-span-2">
+												<Label
+													htmlFor="enrichmentBaseUrl"
+													className="text-[10px] tracked text-fg-dim"
+												>
+													CUSTOM PROXY / BASE URL (OPTIONAL)
+												</Label>
+												<Input
+													id="enrichmentBaseUrl"
+													value={enrichmentBaseUrl}
+													onChange={(e) => setEnrichmentBaseUrl(e.target.value)}
+													placeholder="e.g. https://my-internal-proxy.com/v1"
+													className="mt-1"
+												/>
+											</div>
+										</div>
 									</div>
 								</div>
 								<div className="flex justify-end gap-2 pt-2">
