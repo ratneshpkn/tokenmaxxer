@@ -40,6 +40,7 @@
 		"sync:github": "bun run server/scripts/sync-github.ts",
 		"backfill": "bun run server/scripts/backfill.ts",
 		"alerts:compute": "bun run server/scripts/compute-alerts.ts",
+		"recommendations:compute": "bun run server/scripts/compute-recommendations.ts",
 		"prs:enrich": "bun run server/scripts/enrich-prs.ts",
 		"slack:digest": "bun run server/scripts/slack-digest.ts",
 		"reset-admin-password": "bun run server/scripts/reset-admin-password.ts"

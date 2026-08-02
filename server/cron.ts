@@ -1,5 +1,6 @@
 import { DEFAULTS } from "@shared/defaults"
 import { runComputeAlerts } from "./scripts/compute-alerts"
+import { computeRecommendations } from "./scripts/compute-recommendations"
 import { daysAgo, today, yesterday } from "./scripts/lib/shared"
 import { runSlackDigest } from "./scripts/slack-digest"
 import { runAnthropicSync } from "./scripts/sync-anthropic"
@@ -95,6 +96,7 @@ export function startCron(): void {
 		await runJob("daily cursor", () => runCursorSync(range, o))
 		await runJob("daily github", () => runGithubSync(range, o))
 		await runJob("daily alerts", () => runComputeAlerts(o))
+		await runJob("daily recommendations", () => computeRecommendations(o))
 		await runJob("daily slack", () => runSlackDigest(o))
 	})
 

@@ -15,6 +15,7 @@ import type {
 	ModelMixItem,
 	ModelProfileResponse,
 	ModelRawModelItem,
+	ModelRecommendationItem,
 	ModelTrendItem,
 	ModelUserItem,
 	SetupSavePayload,
@@ -180,6 +181,8 @@ export const api = {
 			request<UserPRComplexityResponse>(
 				`/api/users/${encodeURIComponent(email)}/pr-complexity${from && to ? `?from=${from}&to=${to}` : ""}`,
 			),
+		recommendations: (email: string) =>
+			request<ModelRecommendationItem[]>(`/api/users/${encodeURIComponent(email)}/recommendations`),
 	},
 
 	alerts: {

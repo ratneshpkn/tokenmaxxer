@@ -188,6 +188,11 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 		queryKey: ["users.githubHeatmap", email, from, to],
 		queryFn: () => api.users.githubHeatmap(email, from, to),
 	})
+	const recommendationsQuery = useQuery({
+		queryKey: ["users.recommendations", email],
+		queryFn: () => api.users.recommendations(email),
+	})
+	const recommendations = recommendationsQuery.data ?? []
 
 	const prComplexityQuery = useQuery({
 		queryKey: ["users.prComplexity", email, from, to],
@@ -983,6 +988,48 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 					</div>
 				</DialogContent>
 			</Dialog>
+
+			{/* Model Recommendations */}
+			{recommendations.length > 0 && (
+				<Card className="overflow-hidden p-5 border-amber/30 bg-amber/5">
+					<SectionHeader
+						title="MODEL RECOMMENDATIONS"
+						subtitle={`${recommendations.length} SUGGESTION${recommendations.length === 1 ? "" : "S"}`}
+					/>
+					<div className="space-y-3 pt-3">
+						{recommendations.map((rec) => (
+							<div
+								key={rec.id}
+								className="p-3.5 bg-bg/80 border border-line rounded flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs"
+							>
+								<div className="space-y-1 min-w-0">
+									<div className="flex items-center gap-2">
+										<Badge
+											variant={rec.severity === "critical" ? "destructive" : "secondary"}
+											className="uppercase font-mono text-[9px] tracked"
+										>
+											{rec.severity}
+										</Badge>
+										<span className="font-semibold text-fg">{rec.title}</span>
+									</div>
+									<p className="text-fg-dim text-[11px] leading-relaxed">{rec.message}</p>
+								</div>
+								{rec.suggestedModel && (
+									<div className="flex-shrink-0 text-right font-mono text-[11px]">
+										<span className="text-fg-dim">Suggested: </span>
+										<span className="text-amber font-medium">{rec.suggestedModel}</span>
+										{rec.potentialSavingsCents != null && rec.potentialSavingsCents > 0 && (
+											<div className="text-[10px] text-mint mt-0.5">
+												Est. Savings: ${(rec.potentialSavingsCents / 100).toFixed(2)}
+											</div>
+										)}
+									</div>
+								)}
+							</div>
+						))}
+					</div>
+				</Card>
+			)}
 
 			{/* Model Usage Leaderboard */}
 			<Card className="overflow-hidden">

@@ -14,6 +14,7 @@ import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
 import { loadConfig } from "../lib/config"
 import { runComputeAlerts } from "../scripts/compute-alerts"
+import { computeRecommendations } from "../scripts/compute-recommendations"
 import { runPREnrichment } from "../scripts/enrich-prs"
 import { daysAgo, startSyncRun, today } from "../scripts/lib/shared"
 import { runSlackDigest } from "../scripts/slack-digest"
@@ -51,7 +52,15 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 	// Admin-only: kick a sync now. Returns immediately with runId; the job runs in the background.
 	app.post("/api/admin/sync/:job/run", requireAdmin, async (c) => {
 		const job = String(c.req.param("job"))
-		const validJobs = ["anthropic", "cursor", "alerts", "slack_digest", "github", "prs_enrich"]
+		const validJobs = [
+			"anthropic",
+			"cursor",
+			"alerts",
+			"slack_digest",
+			"github",
+			"prs_enrich",
+			"recommendations",
+		]
 		if (!validJobs.includes(job)) {
 			return c.json({ message: "Unknown job" }, 400)
 		}
@@ -88,6 +97,8 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 			promise = runSlackDigest(opts)
 		} else if (job === "prs_enrich") {
 			promise = runPREnrichment()
+		} else if (job === "recommendations") {
+			promise = computeRecommendations(opts)
 		} else {
 			promise = runGithubSync(range, opts)
 		}
