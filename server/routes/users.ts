@@ -1,4 +1,9 @@
-import { githubPrEnrichments, githubPullRequests, trackedUsers } from "@shared/schema"
+import {
+	githubPrEnrichments,
+	githubPullRequests,
+	modelRecommendations,
+	trackedUsers,
+} from "@shared/schema"
 import { and, desc, eq, sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
@@ -603,6 +608,64 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			: []
 
 		return c.json({ claude_code, cursor })
+	})
+
+	// User Model Recommendations
+	app.get("/api/users/:email/recommendations", isAuthenticated, async (c) => {
+		const email = decodeURIComponent(c.req.param("email")).toLowerCase()
+		const isViewer = currentRole(c) !== "admin"
+
+		const cfg = await loadConfig()
+		const isOwn = email === currentUser(c)?.email
+		const effectivelyHideCosts =
+			isViewer &&
+			(cfg.spendVisibility === "admin_only" || (cfg.spendVisibility === "viewer_own" && !isOwn))
+
+		const rows = await db
+			.select()
+			.from(modelRecommendations)
+			.where(eq(modelRecommendations.email, email))
+			.orderBy(
+				sql`${modelRecommendations.computedDate} desc`,
+				sql`${modelRecommendations.createdAt} desc`,
+			)
+			.limit(10)
+
+		const items = rows.map((r) => {
+			let message = r.message
+			let potentialSavingsCents = r.potentialSavingsCents
+			const metadata = r.metadata ? { ...r.metadata } : null
+
+			if (effectivelyHideCosts) {
+				potentialSavingsCents = null
+				message = message
+					.replace(/to save ~\$[\d.]+\./g, ".")
+					.replace(/\(\$[\d.]+\/M\)/g, "")
+					.replace(/\s+\./g, ".")
+					.replace(/\s+/g, " ")
+					.trim()
+				if (metadata) {
+					delete metadata.userCentsPerToken
+					delete metadata.orgAvgCentsPerToken
+				}
+			}
+
+			return {
+				id: r.id,
+				email: r.email,
+				computedDate: r.computedDate,
+				type: r.type,
+				severity: r.severity,
+				title: r.title,
+				message,
+				suggestedModel: r.suggestedModel,
+				potentialSavingsCents,
+				metadata,
+				createdAt: r.createdAt.toISOString(),
+			}
+		})
+
+		return c.json(items)
 	})
 
 	// Per-user PR complexity metrics & breakdown

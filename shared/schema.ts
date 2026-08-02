@@ -36,6 +36,7 @@ export const syncJobEnum = pgEnum("sync_job", [
 	"slack_digest",
 	"github",
 	"prs_enrich",
+	"recommendations",
 ])
 export const syncStatusEnum = pgEnum("sync_status", ["success", "failed", "running"])
 
@@ -449,7 +450,38 @@ export const githubPrEnrichments = pgTable(
 	}),
 )
 
+export const modelRecommendations = pgTable(
+	"model_recommendations",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		email: varchar("email", { length: 320 }).notNull(),
+		computedDate: date("computed_date").notNull(),
+		type: text("type").notNull().default("cost_optimization"),
+		severity: text("severity").notNull().default("info"),
+		title: text("title").notNull(),
+		message: text("message").notNull(),
+		suggestedModel: text("suggested_model"),
+		potentialSavingsCents: integer("potential_savings_cents"),
+		metadata: jsonb("metadata").$type<{
+			bugFixPct?: number
+			featurePct?: number
+			heavyweightModel?: string
+			orgAvgCentsPerToken?: number
+			userCentsPerToken?: number
+		}>(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(t) => ({
+		emailDateIdx: index("mr_email_date_idx").on(t.email, t.computedDate),
+	}),
+)
 // ── Zod schemas (insert/select) ──────────────────────────────────────────
+
+export const insertModelRecommendationSchema = createInsertSchema(modelRecommendations).omit({
+	id: true,
+	createdAt: true,
+})
+export const selectModelRecommendationSchema = createSelectSchema(modelRecommendations)
 
 export const insertAppUserSchema = createInsertSchema(appUsers).omit({
 	id: true,
@@ -491,3 +523,5 @@ export type AppConfig = typeof appConfig.$inferSelect
 export type Invitation = typeof invitations.$inferSelect
 export type DailyGithubActivity = typeof dailyGithubActivity.$inferSelect
 export type GithubPrEnrichment = typeof githubPrEnrichments.$inferSelect
+export type ModelRecommendation = typeof modelRecommendations.$inferSelect
+export type NewModelRecommendation = typeof modelRecommendations.$inferInsert

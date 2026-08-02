@@ -328,6 +328,26 @@ export interface UserRawModelsResponse {
 	cursor: UserRawModelCursorItem[]
 }
 
+export interface ModelRecommendationItem {
+	id: string
+	email: string
+	computedDate: string
+	type: "cost_optimization" | "policy_violation" | "work_type_mismatch"
+	severity: "info" | "warning" | "critical"
+	title: string
+	message: string
+	suggestedModel?: string | null
+	potentialSavingsCents?: number | null
+	metadata?: {
+		bugFixPct?: number
+		featurePct?: number
+		heavyweightModel?: string
+		orgAvgCentsPerToken?: number
+		userCentsPerToken?: number
+	} | null
+	createdAt: string
+}
+
 export interface UserPRComplexityItem {
 	repo: string
 	number: number
