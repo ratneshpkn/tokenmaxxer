@@ -1,4 +1,4 @@
-import type { SyncJob } from "@shared/constants"
+import { SYNC_JOBS, type SyncJob } from "@shared/constants"
 import type { AppUser } from "@shared/schema"
 import {
 	dailyClaudeCodeAttribution,
@@ -21,6 +21,7 @@ import { runSlackDigest } from "../scripts/slack-digest"
 import { runAnthropicSync } from "../scripts/sync-anthropic"
 import { runCursorSync } from "../scripts/sync-cursor"
 import { runGithubSync } from "../scripts/sync-github"
+import { runPrFilesSync } from "../scripts/sync-pr-files"
 import { currentUser } from "./index"
 
 /** Manual sync button lookbacks. When the platform already has data, we re-pull just
@@ -52,16 +53,7 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 	// Admin-only: kick a sync now. Returns immediately with runId; the job runs in the background.
 	app.post("/api/admin/sync/:job/run", requireAdmin, async (c) => {
 		const job = String(c.req.param("job"))
-		const validJobs = [
-			"anthropic",
-			"cursor",
-			"alerts",
-			"slack_digest",
-			"github",
-			"prs_enrich",
-			"recommendations",
-		]
-		if (!validJobs.includes(job)) {
+		if (!SYNC_JOBS.includes(job as SyncJob)) {
 			return c.json({ message: "Unknown job" }, 400)
 		}
 
@@ -97,6 +89,8 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 			promise = runSlackDigest(opts)
 		} else if (job === "prs_enrich") {
 			promise = runPREnrichment()
+		} else if (job === "pr_files") {
+			promise = runPrFilesSync(opts)
 		} else if (job === "recommendations") {
 			promise = computeRecommendations(opts)
 		} else {

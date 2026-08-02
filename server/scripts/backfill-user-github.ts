@@ -73,14 +73,14 @@ export async function backfillUserGithub(
 				const statsResults = await Promise.all(
 					chunk.map(async (pr) => {
 						try {
-							const stats = await client.getPullRequestStats(org, pr.repo, pr.number)
+							const stats = await client.getPullRequestDetails(org, pr.repo, pr.number)
 							return { pr, stats }
 						} catch (err) {
 							console.error(
 								`[backfill-github] Failed to get PR stats for ${pr.repo}#${pr.number}`,
 								err,
 							)
-							return { pr, stats: { additions: 0, deletions: 0 } }
+							return { pr, stats: { additions: 0, deletions: 0, body: null } }
 						}
 					}),
 				)
@@ -106,6 +106,7 @@ export async function backfillUserGithub(
 							number: pr.number,
 							email,
 							title: pr.title ?? "",
+							body: stats.body ?? null,
 							additions: stats.additions ?? 0,
 							deletions: stats.deletions ?? 0,
 							mergedAt: new Date(pr.mergedAtIso),
@@ -181,6 +182,8 @@ export async function backfillUserGithub(
 							set: {
 								email: sql`excluded.email`,
 								title: sql`excluded.title`,
+								// Keep a previously-stored body if this fetch failed and sent null.
+								body: sql`coalesce(excluded.body, ${githubPullRequests.body})`,
 								additions: sql`excluded.additions`,
 								deletions: sql`excluded.deletions`,
 								mergedAt: sql`excluded.merged_at`,

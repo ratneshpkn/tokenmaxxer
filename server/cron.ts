@@ -6,6 +6,7 @@ import { runSlackDigest } from "./scripts/slack-digest"
 import { runAnthropicSync } from "./scripts/sync-anthropic"
 import { runCursorSync } from "./scripts/sync-cursor"
 import { runGithubSync } from "./scripts/sync-github"
+import { runPrFilesSync } from "./scripts/sync-pr-files"
 
 /** Two-cron design:
  *
@@ -98,6 +99,9 @@ export function startCron(): void {
 		await runJob("daily alerts", () => runComputeAlerts(o))
 		await runJob("daily recommendations", () => computeRecommendations(o))
 		await runJob("daily slack", () => runSlackDigest(o))
+		// Last: this backfills the whole PR history on first run and will sleep on
+		// GitHub's rate limit, so it must not delay the alerts or the digest.
+		await runJob("daily pr files", () => runPrFilesSync(o))
 	})
 
 	console.log(

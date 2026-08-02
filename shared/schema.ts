@@ -36,6 +36,7 @@ export const syncJobEnum = pgEnum("sync_job", [
 	"slack_digest",
 	"github",
 	"prs_enrich",
+	"pr_files",
 	"recommendations",
 ])
 export const syncStatusEnum = pgEnum("sync_status", ["success", "failed", "running"])
@@ -412,6 +413,14 @@ export const dailyGithubActivity = pgTable(
 	}),
 )
 
+/** One changed file in a PR. Cached in `github_pull_requests.files`; no patch content. */
+export interface PRFileCache {
+	filename: string
+	additions: number
+	deletions: number
+	status: string
+}
+
 export const githubPullRequests = pgTable(
 	"github_pull_requests",
 	{
@@ -419,8 +428,12 @@ export const githubPullRequests = pgTable(
 		number: integer("number").notNull(),
 		email: varchar("email", { length: 320 }).notNull(),
 		title: text("title").notNull().default(""),
+		body: text("body"),
 		additions: integer("additions").notNull().default(0),
 		deletions: integer("deletions").notNull().default(0),
+		// Cached changed-file list (no patch content). A merged PR's file list is
+		// immutable, so this never needs invalidating — null means "not fetched yet".
+		files: jsonb("files").$type<PRFileCache[]>(),
 		mergedAt: timestamp("merged_at", { withTimezone: true }),
 		openedAt: timestamp("opened_at", { withTimezone: true }),
 		syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
@@ -441,6 +454,17 @@ export const githubPrEnrichments = pgTable(
 		complexityScore: integer("complexity_score").notNull().default(3),
 		complexityReason: text("complexity_reason"),
 		summary: text("summary"),
+		// Deterministic file-path signals fed to the scoring prompt, persisted for
+		// auditing only — never inputs to impact weighting. Their direction is
+		// ambiguous (bigger/broader is not reliably harder), so they exist to check
+		// the LLM's scores, e.g. "scored 4+ but flagged mechanical".
+		effLinesChanged: integer("eff_lines_changed"),
+		effFiles: integer("eff_files"),
+		breadth: integer("breadth"),
+		langSpan: integer("lang_span"),
+		mechanical: boolean("mechanical"),
+		sensitive: boolean("sensitive"),
+		contentKind: varchar("content_kind", { length: 30 }),
 		syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	(t) => ({
