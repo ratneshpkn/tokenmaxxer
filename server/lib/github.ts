@@ -2,6 +2,7 @@
  *  Follows the same class pattern as AnthropicAdminClient / CursorAdminClient:
  *  constructor takes token, methods return typed data, built-in pagination. */
 
+import type { PRFileCache } from "@shared/schema"
 import { toLocalDateStr } from "../scripts/lib/shared"
 
 export class GitHubApiError extends Error {
@@ -317,14 +318,34 @@ export class GitHubClient {
 		return results
 	}
 
-	/** Get detailed stats (additions, deletions) for a single PR. */
-	async getPullRequestStats(
+	/** Get detailed stats (additions, deletions, body) for a single PR. */
+	async getPullRequestDetails(
 		owner: string,
 		repo: string,
 		pullNumber: number,
-	): Promise<{ additions: number; deletions: number }> {
+	): Promise<{ additions: number; deletions: number; body: string | null }> {
 		const url = `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pullNumber}`
-		return this.fetchJson<{ additions: number; deletions: number }>(url)
+		return this.fetchJson<{ additions: number; deletions: number; body: string | null }>(url)
+	}
+
+	/** Get the changed-file list (filename, additions, deletions, status) for a single PR.
+	 *  Patch/diff content in the raw response is intentionally not surfaced here.
+	 *  Note: GitHub caps this endpoint at 3000 files, so the list is truncated (not
+	 *  an error) for mega-PRs — signals derived from it are approximate in that case. */
+	async getPullRequestFiles(
+		owner: string,
+		repo: string,
+		pullNumber: number,
+	): Promise<PRFileCache[]> {
+		const raw = await this.fetchAllPages<Record<string, unknown>>(
+			`${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pullNumber}/files`,
+		)
+		return raw.map((f) => ({
+			filename: f.filename as string,
+			additions: (f.additions as number) ?? 0,
+			deletions: (f.deletions as number) ?? 0,
+			status: (f.status as string) ?? "modified",
+		}))
 	}
 }
 

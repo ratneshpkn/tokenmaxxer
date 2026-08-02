@@ -10,6 +10,22 @@ export interface PREnrichmentInput {
 	body?: string | null
 	additions?: number
 	deletions?: number
+	/** File paths touched, capped to the largest N by lines changed. */
+	filePaths?: string[]
+	/** Lines changed (additions + deletions) after excluding lockfiles/generated/vendor/test/doc files. */
+	effLinesChanged?: number
+	/** File count after the same exclusion. */
+	effFiles?: number
+	/** Count of distinct architectural layers touched (api/service/data/etc). */
+	breadth?: number
+	/** Count of distinct source-code languages touched. */
+	langSpan?: number
+	/** True when the diff is dominated by generated/vendored content or pure renames. */
+	mechanical?: boolean
+	/** True when the diff touches auth/payment/security/billing paths. */
+	sensitive?: boolean
+	/** What the diff consists of — distinguishes generated bulk from tests/docs. */
+	contentKind?: "code" | "tests-or-docs-only" | "generated-or-vendored" | "empty"
 }
 
 export interface PREnrichmentResult {
@@ -37,6 +53,14 @@ The input will be a JSON array of objects, each containing:
 - "title": pull request title
 - "body": pull request description (may be truncated)
 - "linesChanged": total lines changed (additions + deletions)
+- "filePaths": file paths touched (capped to the largest by lines changed; may be a partial list on huge PRs)
+- "effLinesChanged": lines changed (additions + deletions, same basis as "linesChanged") AFTER excluding lockfiles, generated code, vendored code, tests, and docs — a computed value, not a guess
+- "effFiles": file count after the same exclusion
+- "breadth": number of distinct architectural layers touched (api/service/data/workflow/frontend/infra/mobile) — computed from file paths
+- "langSpan": number of distinct source-code languages touched — computed from file extensions
+- "mechanical": boolean, true when the diff is dominated by generated/vendored content or pure file moves — computed, not a guess
+- "sensitive": boolean, true when the diff touches auth/payment/security/billing paths — computed, not a guess
+- "contentKind": one of "code", "tests-or-docs-only", "generated-or-vendored", "empty" — what the diff actually consists of, computed from file paths
 
 For each PR in the input array, produce an object with these exact output fields:
 - "repo": copy verbatim from the input
@@ -56,31 +80,34 @@ For each PR in the input array, produce an object with these exact output fields
 
 When a PR spans multiple categories, pick the one that best describes the *primary intent*.
 
-## Complexity rubric
-Complexity balances *intellectual difficulty* with *implementation scope and code footprint*.
+## Complexity rubric: effort to competently produce this change
 
-Ask: How hard is this to design, implement, review, and verify? What is the scope of changes and blast radius if it breaks?
+Ask one question: how much skilled engineering time would this take — design, implementation, review, and verification included? A 5 should represent real time and effort from a strong engineer. A 1 should be something almost anyone could do quickly.
 
-- **Small Diff Rule (<= 5 lines)**: Small diffs (<= 5 lines changed, e.g. 1-file bug fixes, parameter tweaks, minor admin edits, logging, typos, or version bumps) belong in **Score 1 (Minor)** by default. They should ONLY move to **Score 2** if they involve a multi-file dependency or non-trivial logic change, and max out at **Score 3** for rare high-risk concurrency/security fixes. Small-line PRs (<= 5 lines) should NEVER be scored 4 or 5.
-- **Score 4 & 5 Guidance**: Scores 4 and 5 should be actively awarded whenever a PR delivers a major feature, new subsystem capability, multi-component refactor, core API/service integration, or key architectural addition.
+**Trust the computed fields over guesswork.** Do not infer "this is probably generated" or "this is probably a big feature" from the title alone — "mechanical", "contentKind", "effLinesChanged", "effFiles", "breadth", and "sensitive" are computed from the actual file list, not estimated. If "mechanical" is true, the effort is low regardless of "linesChanged" or how the title reads.
 
-1 = Minor: Default score for small diffs (<= 5 lines), 1-file bug fixes with straightforward logic, low-risk tweaks, documentation, typos, version bumps, cosmetic UI edits, logging/text additions, basic parameter adjustments, or simple config updates.
-2 = Routine: Multi-file routine development following established patterns (e.g., adding a standard field across model + API + view, standard component additions, or typical multi-file bug fixes).
-3 = Moderate: Substantive feature development or multi-component additions. Non-trivial bug fixes, workflow adjustments, or service/DB integrations.
-4 = Substantive (~10-12% target): Major multi-component features, key API additions, state/concurrency handling, complex data model migrations, or significant refactors across modules.
-5 = Major / Heavy (~4-5% target): Primary subsystem features, core framework/pipeline capabilities, heavy multi-file feature implementations, breaking API redesigns, or high-impact system additions.
+**Size is neutral, not automatically high or low:**
+- A large "linesChanged" with "mechanical": true (lockfiles, vendored code, generated stubs, pure file moves) reflects near-zero effort — score 1-2 no matter how many lines it touches.
+- A large "effLinesChanged" that also spans several layers ("breadth" >= 3) or touches sensitive systems reflects real effort — do not cap it just because it's big.
+- A tiny diff is not automatically low effort: a 10-line fix to a real concurrency, security, or data-correctness bug can be a 4, while a 10-line typo fix is a 1. Judge what the change is actually doing, not just its size.
 
-## Automated / generated change guidance
-Many PRs have large diffs that do NOT reflect real engineering complexity. Score these LOW (1–3) regardless of line count:
-- Greenfield scaffolding / repository bootstrapping: Initial project setup, boilerplate creation, or app scaffolding should be scored **Score 2 or 3** (not 5) unless introducing novel, complex algorithmic systems.
-- Benchmark datasets & test fixtures: Adding evaluation benchmarks, mock datasets, or test fixture suites should be scored **Score 2 or 3** (not 4 or 5) despite large line counts.
-- Lockfile updates (package-lock.json, yarn.lock, bun.lock, Gemfile.lock, poetry.lock, go.sum)
-- Dependency version bumps from bots (Dependabot, Renovate, Snyk)
-- Auto-generated code (protobuf stubs, OpenAI clients, GraphQL codegen, ORM migrations)
-- Bulk formatting or linting fixes (Prettier, ESLint, Biome, Black, gofmt)
-- Snapshot file updates (.snap, __snapshots__)
-- Copy/paste of vendor or third-party code
-Look at the title and body for signals like "chore:", "deps:", "bump", "generated", "auto-format", bot author names, or mentions of lockfiles.
+**"contentKind" tells you what you're looking at when "effFiles" is 0:**
+- "generated-or-vendored": no hand-written source at all — score 1.
+- "tests-or-docs-only": no product code, but the tests or docs themselves may be substantial work. Judge them on their merit — a large hand-written test suite or a real design document is typically 2-3, NOT 1. Only score 1 if the change is genuinely trivial (a typo fix, a one-line assertion tweak).
+- "empty": no files — score 1.
+
+1 = Minor: near-zero effort. Config/default tweaks, typos, one-line bug fixes with obvious causes, cosmetic edits, or a diff flagged "mechanical" (lockfiles, generated code, pure file moves) regardless of its raw line count.
+2 = Routine: mechanical-but-curated bulk work (e.g. vendoring a dependency and deciding what to keep), substantial test or documentation work, OR straightforward multi-file changes following an established pattern (adding a standard field across model + API + view, a typical CRUD endpoint, a routine bug fix).
+3 = Moderate: substantive feature work or a multi-file change requiring real judgment — non-trivial business logic with edge cases, an investigated bug fix, a behavior-preserving refactor, or a conventional new service/module that is bigger but not architecturally novel.
+4 = Substantive: multi-component features spanning several layers or systems, non-obvious algorithms, concurrency/state handling, complex data model changes, or significant cross-module refactors. Use this for both "big and touches many layers" and "small but requires real expertise" changes.
+5 = Major: primary subsystem or platform-level work, core framework/pipeline capabilities, breaking API/architecture redesigns, or a small change that most engineers would need significant time to get right (e.g. a subtle concurrency/security fix). Reserve this for genuinely high-effort or high-expertise work, not just "large diff."
+
+## Anchor examples
+- A 20,000-line diff that is 95% an autogenerated GraphQL client ("mechanical": true) → complexityScore 1, regardless of the impressive-sounding title.
+- A 15-line fix that resolves a real lock-ordering deadlock ("effFiles": 1, "mechanical": false) → complexityScore 4: small diff, real expertise required.
+- A 3,000-line PR adding a standard CRUD resource (model + API + one UI page, "breadth": 2, no unusual logic) → complexityScore 2-3, not 5: familiar shape, just more of it.
+- A 2,000-line PR introducing a new subsystem that spans API, service, data, and workflow layers ("breadth" >= 3) with non-trivial state handling → complexityScore 4-5.
+- An 800-line hand-written test suite ("contentKind": "tests-or-docs-only", "effFiles": 0) → complexityScore 2-3, not 1: no product code, but real work.
 
 ## Example Output
 [
@@ -95,8 +122,8 @@ Look at the title and body for signals like "chore:", "deps:", "bump", "generate
 ]
 
 ## Rules
-- **Input Schema:** The input will be an array of objects containing repo, number, title, body, and linesChanged. The PR body may be truncated; base your analysis only on the provided text.
-- **Line Counts:** Use linesChanged to enforce the Small Diff Rule (<= 5 lines). However, never assume a high line count equals a high complexity score (see Automated Changes guidance).
+- The PR body may be truncated; base your analysis only on the provided text and computed fields.
+- Never assume a high "linesChanged" equals a high complexity score — always check "mechanical" and "effLinesChanged" first.
 - **Formatting:** Return ONLY a raw JSON array. Do not wrap the response in markdown code fences (\`\`\`json), do not include a preamble, and do not include conversational text.
 - **Completeness:** Every PR in the input array must have exactly one corresponding output object, in the exact same order.`
 
@@ -115,6 +142,14 @@ export async function classifyPRBatch(
 		title: pr.title,
 		body: (pr.body || "").slice(0, 1500), // truncate very long bodies
 		linesChanged: (pr.additions ?? 0) + (pr.deletions ?? 0),
+		filePaths: pr.filePaths ?? [],
+		effLinesChanged: pr.effLinesChanged,
+		effFiles: pr.effFiles,
+		breadth: pr.breadth,
+		langSpan: pr.langSpan,
+		mechanical: pr.mechanical,
+		sensitive: pr.sensitive,
+		contentKind: pr.contentKind,
 	}))
 
 	const userMessage = JSON.stringify(prPayload)

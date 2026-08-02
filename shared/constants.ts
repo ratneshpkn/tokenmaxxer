@@ -16,6 +16,7 @@ export const SYNC_JOBS = [
 	"slack_digest",
 	"github",
 	"prs_enrich",
+	"pr_files",
 	"recommendations",
 ] as const
 export type SyncJob = (typeof SYNC_JOBS)[number]
