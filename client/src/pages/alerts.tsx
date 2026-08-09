@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { platformLabel } from "@/lib/platform"
 import { formatDate } from "@/lib/utils"
@@ -38,20 +39,26 @@ export function AlertsPage(): React.JSX.Element {
 
 	const ack = useMutation({
 		mutationFn: (id: string) => api.alerts.acknowledge(id),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ["alerts"] })
+			qc.invalidateQueries({ queryKey: ["dashboard.alerts"] })
+		},
 	})
 	const resolve = useMutation({
 		mutationFn: (id: string) => api.alerts.resolve(id),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ["alerts"] }),
+		onSuccess: () => {
+			qc.invalidateQueries({ queryKey: ["alerts"] })
+			qc.invalidateQueries({ queryKey: ["dashboard.alerts"] })
+		},
 	})
 
 	return (
-		<div className="space-y-6 fade-rise">
+		<div className="space-y-4 fade-rise">
 			<div className="flex items-end justify-between gap-4">
-				<p className="text-[11px] tracked text-fg-dim leading-relaxed max-w-xl">
+				<Typography variant="muted" as="p" className="max-w-xl">
 					Daily threshold alerts by user × platform. Each row is one (date · user · platform)
 					trigger. Acknowledge to mark seen, resolve to close.
-				</p>
+				</Typography>
 				<Tabs value={status} onValueChange={(v) => setStatus(v as Status)}>
 					<TabsList>
 						<TabsTrigger value="open">OPEN</TabsTrigger>
@@ -66,33 +73,15 @@ export function AlertsPage(): React.JSX.Element {
 				<Table className="w-full tabular text-xs">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
-							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
-								#
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-left">
-								DATE
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-left">
-								USER
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-left">
-								PLATFORM
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-right">
-								SPEND
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-right">
-								LIMIT
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-right">
-								RATIO
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-left">
-								STATUS
-							</TableHead>
-							<TableHead className="h-9 px-3 text-[10px] tracked text-fg-dim text-right">
-								ACTION
-							</TableHead>
+							<TableHead className="w-14 text-right">#</TableHead>
+							<TableHead>DATE</TableHead>
+							<TableHead>USER</TableHead>
+							<TableHead>PLATFORM</TableHead>
+							<TableHead className="text-right">SPEND</TableHead>
+							<TableHead className="text-right">LIMIT</TableHead>
+							<TableHead className="text-right">RATIO</TableHead>
+							<TableHead>STATUS</TableHead>
+							<TableHead className="text-right">ACTION</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -105,20 +94,22 @@ export function AlertsPage(): React.JSX.Element {
 									ratio >= 5 ? "text-amber-hot" : ratio >= 2 ? "text-amber" : "text-fg"
 								return (
 									<TableRow key={a.id}>
-										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+										<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
-										<TableCell className="px-3 py-2.5 text-fg-mid">{formatDate(a.date)}</TableCell>
+										<TableCell className="px-3 py-2.5 text-fg-muted">
+											{formatDate(a.date)}
+										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<UserLink email={a.email} name={a.name} />
 										</TableCell>
-										<TableCell className="px-3 py-2.5 text-[10px] tracked text-fg-mid">
+										<TableCell className="px-3 py-2.5 text-xs text-fg-muted">
 											{platformLabel(a.platform)}
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right text-amber-hot">
 											<Cost cents={a.amountCents} digits={2} />
 										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg-dim">
+										<TableCell className="px-3 py-2.5 text-right text-fg-muted">
 											<Cost cents={a.thresholdCents} digits={2} />
 										</TableCell>
 										<TableCell className={`px-3 py-2.5 text-right ${ratioColor}`}>

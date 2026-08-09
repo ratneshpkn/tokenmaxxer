@@ -16,6 +16,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { colorForModelInMix } from "@/lib/model-color"
 import { useDateRange } from "@/lib/use-date-range"
@@ -29,7 +30,7 @@ export function ModelsPage(): React.JSX.Element {
 	const [metricMode] = useMetricMode()
 	const effectiveMode = isViewer ? "tokens" : metricMode
 
-	const { from, to, winLabel } = useDateRange()
+	const { from, to } = useDateRange()
 	const modelsQuery = useQuery({
 		queryKey: ["models.list", from, to, metricMode],
 		queryFn: () => api.dashboard.modelMix({ from, to }, 200, metricMode),
@@ -84,10 +85,10 @@ export function ModelsPage(): React.JSX.Element {
 		<div className="space-y-4 fade-rise">
 			<DateRangeBar updatedAt={modelsQuery.dataUpdatedAt} />
 			<div className="flex items-end justify-between gap-4">
-				<div className="text-[11px] tracked text-fg-dim leading-relaxed max-w-xl">
+				<Typography variant="label" className="max-w-xl">
 					{data.length} MODELS TRACKED · sorted by{" "}
 					<span className="text-fg">{sortKey.toUpperCase()}</span>
-				</div>
+				</Typography>
 				<SearchInput
 					placeholder="filter by model name…"
 					value={filter}
@@ -100,9 +101,7 @@ export function ModelsPage(): React.JSX.Element {
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
-							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
-								#
-							</TableHead>
+							<TableHead className="w-14 text-right">#</TableHead>
 							<SortHeader
 								label="MODEL"
 								active={sortKey === "model"}
@@ -111,7 +110,7 @@ export function ModelsPage(): React.JSX.Element {
 							/>
 
 							<SortHeader
-								label={`VALUE · ${winLabel}`}
+								label="VALUE"
 								active={sortKey === "cents" || sortKey === "tokens"}
 								dir={sortDir}
 								onClick={() => toggle(effectiveMode === "cost" ? "cents" : "tokens")}
@@ -124,9 +123,7 @@ export function ModelsPage(): React.JSX.Element {
 								onClick={() => toggle("share")}
 								align="right"
 							/>
-							<TableHead className="h-9 px-3 w-[140px] text-[10px] tracked text-fg-dim text-left">
-								TREND · {winLabel}
-							</TableHead>
+							<TableHead className="w-[140px]">TREND</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -139,7 +136,7 @@ export function ModelsPage(): React.JSX.Element {
 								const rowColor = colorForModelInMix(i)
 								return (
 									<TableRow key={m.model}>
-										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+										<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
@@ -157,14 +154,9 @@ export function ModelsPage(): React.JSX.Element {
 											</Link>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right text-fg">
-											<MetricPair
-												cents={isViewer ? null : m.cents}
-												tokens={m.tokens}
-												digits={2}
-												secondaryClassName="text-[10px] text-fg-dim"
-											/>
+											<MetricPair cents={isViewer ? null : m.cents} tokens={m.tokens} digits={2} />
 										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg-dim text-[11px]">
+										<TableCell className="px-3 py-2.5 text-right text-fg-muted text-xs">
 											{pct.toFixed(1)}%
 										</TableCell>
 										<TableCell className="px-3 py-2.5">

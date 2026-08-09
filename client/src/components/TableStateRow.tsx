@@ -1,4 +1,5 @@
 import { TableCell, TableRow } from "@/components/ui/table"
+import { Typography } from "@/components/ui/typography"
 
 interface TableStateRowProps {
 	colSpan: number
@@ -15,8 +16,10 @@ export function TableStateRow({
 }: TableStateRowProps): React.JSX.Element {
 	return (
 		<TableRow>
-			<TableCell colSpan={colSpan} className="text-center text-fg-dim py-8 text-xs tabular">
-				── {isLoading ? loadingText : emptyText} ──
+			<TableCell colSpan={colSpan} className="text-center py-8">
+				<Typography variant="subtle" className="tabular">
+					── {isLoading ? loadingText : emptyText} ──
+				</Typography>
 			</TableCell>
 		</TableRow>
 	)

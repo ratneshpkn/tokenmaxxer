@@ -46,8 +46,8 @@ export function colorForModelInMix(idx: number): string {
  * Assigned by rank in `topModels`; "Other" always gets the dim fallback.
  */
 export function colorForModelTrend(model: string, topModels: string[]): string {
-	if (model === "Other") return "var(--fg-very-dim)"
+	if (model === "Other") return "var(--fg-subtle)"
 	const idx = topModels.indexOf(model)
-	if (idx === -1) return "var(--fg-very-dim)"
+	if (idx === -1) return "var(--fg-subtle)"
 	return TREND_COLORS[idx] ?? TREND_COLORS[TREND_COLORS.length - 1]
 }

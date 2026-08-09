@@ -4,6 +4,7 @@ import { Redirect, useLocation } from "wouter"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 
 export function LoginPage(): React.JSX.Element {
@@ -43,51 +44,52 @@ export function LoginPage(): React.JSX.Element {
 
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-bg">
-			<div className="w-[420px] max-w-[90vw] space-y-5">
+			<div className="w-full max-w-sm space-y-6">
 				<div>
-					<div className="text-[10px] tracked text-fg-dim mb-2">/ TOKENMAXXER · SIGN IN</div>
-					<h1 className="font-display text-5xl text-fg leading-none tracking-tight">
-						Welcome back.
-					</h1>
-					<p className="text-xs text-fg-mid mt-2">{cfg?.orgName || "tokenmaxxer"}</p>
+					<Typography variant="label" as="div" className="mb-2">
+						/ TOKENMAXXER · AUTHENTICATION
+					</Typography>
+					<Typography variant="display-lg" as="h1">
+						SIGN IN
+					</Typography>
+					<Typography variant="subtle" as="p" className="mt-2">
+						Access your Anthropic & Cursor spend dashboard.
+					</Typography>
 				</div>
 
 				{oauthErr === "unauthorized" ? (
-					<div className="border-l-2 border-amber-hot pl-3 py-1 text-[11px] text-amber-hot">
+					<div className="border-l-2 border-amber-hot pl-3 py-1 text-xs text-amber-hot">
 						ACCESS DENIED · this email is not allowed
 					</div>
 				) : null}
 
-				<form onSubmit={handleSubmit} className="space-y-3">
+				<form onSubmit={handleSubmit} className="space-y-4">
 					<div>
-						<Label htmlFor="email" className="text-[10px] tracked text-fg-dim">
-							EMAIL
-						</Label>
+						<Label htmlFor="email">EMAIL</Label>
 						<Input
 							id="email"
 							type="email"
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
 							required
-							autoFocus
+							autoComplete="email"
 							className="mt-1"
 						/>
 					</div>
 					<div>
-						<Label htmlFor="password" className="text-[10px] tracked text-fg-dim">
-							PASSWORD
-						</Label>
+						<Label htmlFor="password">PASSWORD</Label>
 						<Input
 							id="password"
 							type="password"
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
 							required
+							autoComplete="current-password"
 							className="mt-1"
 						/>
 					</div>
 					{error ? (
-						<div className="border-l-2 border-amber-hot pl-3 py-1 text-[11px] text-amber-hot">
+						<div className="border-l-2 border-amber-hot pl-3 py-1 text-xs text-amber-hot">
 							{error}
 						</div>
 					) : null}
@@ -98,9 +100,9 @@ export function LoginPage(): React.JSX.Element {
 
 				{cfg?.googleOauthEnabled ? (
 					<>
-						<div className="flex items-center gap-3 text-[10px] tracked text-fg-very-dim">
+						<Typography variant="th" as="div" className="flex items-center gap-3">
 							<span className="flex-1 h-px bg-line" /> OR <span className="flex-1 h-px bg-line" />
-						</div>
+						</Typography>
 						<Button
 							variant="outline"
 							className="w-full"
@@ -114,12 +116,12 @@ export function LoginPage(): React.JSX.Element {
 				) : null}
 
 				{cfg?.bootstrapNeeded || cfg?.openSignupEnabled ? (
-					<p className="text-[10px] tracked text-fg-dim text-center">
+					<Typography variant="label" as="p" className="text-center block">
 						DON'T HAVE AN ACCOUNT?{" "}
 						<a href="/signup" className="text-amber hover:underline">
 							SIGN UP
 						</a>
-					</p>
+					</Typography>
 				) : null}
 			</div>
 		</div>

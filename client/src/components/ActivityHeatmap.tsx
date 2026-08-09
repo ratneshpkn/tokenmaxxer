@@ -1,5 +1,6 @@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { formatCompact } from "@/lib/utils"
+import { typographyVariants } from "@/components/ui/typography"
+import { cn, formatCompact } from "@/lib/utils"
 
 export interface ActivityDay {
 	date: string // YYYY-MM-DD
@@ -140,7 +141,7 @@ export function ActivityHeatmap({ days, trendMode }: ActivityHeatmapProps): Reac
 		<div className="flex flex-col select-none mx-auto">
 			{/* Month Labels Header */}
 			<div
-				className="flex mb-2 text-[9px] font-mono text-fg-dim/80"
+				className="flex mb-2 text-[9px] font-mono text-fg-subtle"
 				style={{ paddingLeft: "24px" }}
 			>
 				{weeks.map((week, wi) => {
@@ -162,7 +163,7 @@ export function ActivityHeatmap({ days, trendMode }: ActivityHeatmapProps): Reac
 			{/* Grid Row (Days + Heatmap) */}
 			<div className="flex items-start">
 				{/* Day Labels Column */}
-				<div className="flex flex-col gap-[3px] text-[9px] font-mono text-fg-dim/80 pr-2 pt-[1px]">
+				<div className="flex flex-col gap-[3px] text-[9px] font-mono text-fg-subtle pr-2 pt-[1px]">
 					{DAY_LABELS.map((item) => (
 						<div key={item.id} className="h-[20px] flex items-center justify-end w-4 leading-none">
 							{item.label}
@@ -196,24 +197,29 @@ export function ActivityHeatmap({ days, trendMode }: ActivityHeatmapProps): Reac
 													aria-label={`${formatLabel(day.date)} — ${formatCompact(totalTokens)} tokens`}
 												/>
 											</TooltipTrigger>
-											<TooltipContent className="font-mono text-[10px] tracked bg-bg border border-line-strong px-2.5 py-1.5 shadow-md">
+											<TooltipContent
+												className={cn(
+													typographyVariants({ variant: "label" }),
+													"bg-bg border border-line-strong px-2.5 py-1.5 shadow-md",
+												)}
+											>
 												<div className="font-semibold text-fg">{formatLabel(day.date)}</div>
 												{trendMode === "usd" ? (
-													<div className="text-fg-mid font-medium">
+													<div className="text-fg-muted font-medium">
 														{formatCents(totalCents)} · {formatCompact(totalTokens)} tok
 													</div>
 												) : (
-													<div className="text-fg-mid font-medium">
+													<div className="text-fg-muted font-medium">
 														{formatCompact(totalTokens)} tok
 													</div>
 												)}
 												{trendMode === "usd" ? (
-													<div className="text-fg-dim text-[9px] mt-0.5">
+													<div className="text-fg-muted text-[9px] mt-0.5">
 														CC {formatCents(day.cc_cents ?? 0)} · Cursor{" "}
 														{formatCents(day.cu_cents ?? 0)}
 													</div>
 												) : (
-													<div className="text-fg-dim text-[9px] mt-0.5">
+													<div className="text-fg-muted text-[9px] mt-0.5">
 														CC {formatCompact(day.cc_tokens)} · Cursor{" "}
 														{formatCompact(day.cu_tokens)}
 													</div>

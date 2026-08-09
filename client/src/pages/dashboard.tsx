@@ -23,6 +23,7 @@ import { UserLink } from "@/components/UserLink"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Typography } from "@/components/ui/typography"
 import { severity } from "@/lib/alert-severity"
 import { api } from "@/lib/api"
 import { useDateRange } from "@/lib/use-date-range"
@@ -54,15 +55,17 @@ function StatTooltip({
 }): React.JSX.Element | null {
 	if (!active || !payload?.length) return null
 	return (
-		<div className="bg-bg/95 border border-line-strong px-3 py-2 text-[11px] tabular">
-			<div className="text-fg-dim tracked-sm text-[9px] mb-1">{payload[0].payload?.date ?? ""}</div>
+		<div className="bg-bg/95 border border-line-strong px-3 py-2 text-xs tabular">
+			<div className="text-fg-muted tracked-sm text-[9px] mb-1">
+				{payload[0].payload?.date ?? ""}
+			</div>
 			{payload.map((p) => {
 				const dataKeyStr = typeof p.dataKey === "function" ? "" : (p.dataKey ?? "")
 				return (
 					<div key={dataKeyStr} className="flex items-center justify-between gap-4">
 						<span className="flex items-center gap-1.5">
 							<span className="w-2 h-2" style={{ background: p.fill }} />
-							<span className="text-fg-mid">{dataKeyStr}</span>
+							<span className="text-fg-muted">{dataKeyStr}</span>
 						</span>
 						<span className="text-fg">
 							{mode === "usd"
@@ -170,19 +173,19 @@ export function DashboardPage(): React.JSX.Element {
 			<div className="space-y-6 fade-rise">
 				<DateRangeBar updatedAt={summaryQuery.dataUpdatedAt} />
 				<Card className="p-12 text-center">
-					<div className="font-display text-5xl text-fg leading-none tracking-tight mb-3">
+					<Typography variant="display-lg" as="div" className="mb-3">
 						No data yet.
-					</div>
-					<p className="text-sm text-fg-mid max-w-md mx-auto leading-relaxed">
+					</Typography>
+					<Typography variant="muted" as="p" className="max-w-md mx-auto">
 						{isViewer
 							? "An admin needs to run the first sync to populate this dashboard. Check back once data is in."
 							: "Tokenmaxxer needs at least one successful sync to populate the dashboard. Pull the last 365 days from Settings, or wait for the next scheduled cron."}
-					</p>
+					</Typography>
 					<div className="mt-6 flex items-center justify-center gap-3">
 						{!isViewer ? (
 							<Link
 								href="/settings"
-								className="inline-flex items-center gap-2 px-4 h-9 border border-amber text-amber hover:bg-amber/[0.08] text-[11px] tracked transition-colors"
+								className="inline-flex items-center gap-2 px-4 h-9 border border-amber text-amber hover:bg-amber/[0.08] text-xs tracked transition-colors"
 							>
 								▸ OPEN SETTINGS
 							</Link>
@@ -191,7 +194,7 @@ export function DashboardPage(): React.JSX.Element {
 							href="https://github.com/instawork/tokenmaxxer#quick-start"
 							target="_blank"
 							rel="noreferrer"
-							className="inline-flex items-center gap-2 px-4 h-9 border border-line text-fg-dim hover:text-fg hover:border-line-strong text-[11px] tracked transition-colors"
+							className="inline-flex items-center gap-2 px-4 h-9 border border-line text-fg-muted hover:text-fg hover:border-line-strong text-xs tracked transition-colors"
 						>
 							READ THE DOCS ↗
 						</a>
@@ -204,11 +207,15 @@ export function DashboardPage(): React.JSX.Element {
 								["03", "Set thresholds", "Daily $ caps per platform. Alerts fire automatically."],
 							].map(([n, title, body]) => (
 								<div key={n} className="bg-bg p-5">
-									<div className="font-display text-2xl text-fg-very-dim leading-none">{n}</div>
-									<div className="mt-2 text-[11px] tracked text-fg">
+									<Typography variant="heading" className="text-2xl text-fg-subtle">
+										{n}
+									</Typography>
+									<Typography variant="section-title" as="div" className="mt-2">
 										{String(title).toUpperCase()}
-									</div>
-									<p className="mt-1 text-xs text-fg-mid leading-relaxed">{body}</p>
+									</Typography>
+									<Typography variant="muted" as="p" className="mt-1">
+										{body}
+									</Typography>
 								</div>
 							))}
 						</div>
@@ -226,7 +233,7 @@ export function DashboardPage(): React.JSX.Element {
 					variant="outline"
 					size="sm"
 					onClick={() => setShowFlexCard(true)}
-					className="h-7 text-[10px] tracked bg-transparent border-line hover:bg-elev2"
+					className="h-7 text-xs tracked bg-transparent border-line hover:bg-elev2"
 				>
 					<Share2 className="w-3 h-3 mr-1.5" /> SHARE STATS
 				</Button>
@@ -235,21 +242,23 @@ export function DashboardPage(): React.JSX.Element {
 			{/* ── Headline KPI band ─────────────────────────────────────────── */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">
 				<div className={`col-span-12 ${isViewer ? "md:col-span-6" : "md:col-span-4"} bg-bg p-6`}>
-					<div className="text-[10px] tracked text-fg-dim mb-3">
+					<Typography variant="label" as="div" className="mb-3">
 						{isViewer ? "TOTAL TOKENS" : "TOTAL"} · {winLabel}
-					</div>
+					</Typography>
 					{summary ? (
 						<div className="num-tick">
 							<MetricPair
 								cents={isViewer ? null : totalCents}
 								tokens={totalTokens}
 								digits={0}
-								primaryClassName="font-display text-[80px] leading-none tracking-tight text-fg"
-								secondaryClassName="mt-2 text-[11px] tracked text-fg-mid"
+								primaryClassName="font-display text-5xl sm:text-6xl md:text-[80px] leading-none tracking-tight text-fg"
+								secondaryClassName="mt-2"
 							/>
-							<div className="mt-2 text-[11px] tracked text-fg-mid flex items-center gap-3">
+							<div className="mt-2 flex items-center gap-3">
 								<span className="text-mint">●</span>
-								<span>{(totals?.cc_users ?? 0) + (totals?.cu_users ?? 0)} ACTIVE USERS</span>
+								<Typography variant="label">
+									{(totals?.cc_users ?? 0) + (totals?.cu_users ?? 0)} ACTIVE USERS
+								</Typography>
 							</div>
 						</div>
 					) : (
@@ -258,81 +267,80 @@ export function DashboardPage(): React.JSX.Element {
 				</div>
 
 				<div className="col-span-6 md:col-span-2 bg-bg p-6 flex flex-col justify-between">
-					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-amber" /> CLAUDE CODE
-					</div>
+					</Typography>
 					<div>
 						<MetricPair
 							cents={isViewer ? null : ccCents}
 							tokens={ccTokens}
 							digits={0}
 							primaryClassName="font-mono text-3xl tabular text-fg leading-none"
-							secondaryClassName="text-[10px] tracked text-fg-dim mt-2"
+							secondaryClassName="mt-2"
 						/>
-						<div className="text-[10px] tracked text-fg-dim mt-1">
+						<Typography variant="label" as="div" className="mt-1">
 							{totals?.cc_users ?? 0} users
-						</div>
+						</Typography>
 					</div>
 				</div>
 
 				<div className="col-span-6 md:col-span-2 bg-bg p-6 flex flex-col justify-between">
-					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-sky" /> CURSOR
-					</div>
+					</Typography>
 					<div>
 						<MetricPair
 							cents={isViewer ? null : cuCents}
 							tokens={cuTokens}
 							digits={0}
 							primaryClassName="font-mono text-3xl tabular text-fg leading-none"
-							secondaryClassName="text-[10px] tracked text-fg-dim mt-2"
+							secondaryClassName="mt-2"
 						/>
-						<div className="text-[10px] tracked text-fg-dim mt-1">
+						<Typography variant="label" as="div" className="mt-1">
 							{totals?.cu_users ?? 0} users
-						</div>
+						</Typography>
 					</div>
 				</div>
 
 				<div className="col-span-12 md:col-span-2 bg-bg p-6 flex flex-col justify-between">
-					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-mint" /> GITHUB
-					</div>
+					</Typography>
 					<div>
 						<div className="font-mono text-3xl tabular text-fg leading-none">
 							{totals?.gh_prs_merged ?? 0}
 						</div>
-						<div className="text-[10px] tracked text-fg-dim mt-2">PRs merged ({prsPerDay}/day)</div>
-						<div className="text-[10px] tracked text-fg-very-dim mt-1">
+						<Typography variant="label" as="div" className="mt-2">
+							PRs merged ({prsPerDay}/day)
+						</Typography>
+						<Typography variant="caption" as="div" className="mt-1">
 							{totals != null
 								? ((totals.gh_additions ?? 0) + (totals.gh_deletions ?? 0)).toLocaleString()
 								: "0"}{" "}
 							lines · {totals?.gh_users ?? 0} users
-						</div>
+						</Typography>
 					</div>
 				</div>
 
 				{!isViewer ? (
 					<div className="col-span-12 md:col-span-2 bg-bg p-6 flex flex-col justify-between">
-						<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+						<Typography variant="label" as="div" className="flex items-center gap-2">
 							{(totals?.open_alerts ?? 0) > 0 ? (
 								<span className="pip-danger" />
 							) : (
 								<span className="pip-live" />
 							)}
 							ALERTS
-						</div>
+						</Typography>
 						<div>
 							<div
 								className={`font-mono text-3xl tabular leading-none ${(totals?.open_alerts ?? 0) > 0 ? "text-amber-hot" : "text-mint"}`}
 							>
 								{String(totals?.open_alerts ?? 0).padStart(2, "0")}
 							</div>
-							<Link
-								href="/alerts"
-								className="text-[10px] tracked text-fg-dim hover:text-amber mt-2 inline-block"
-							>
-								▸ VIEW ALERTS
-							</Link>
+							<Typography asChild variant="label" className="hover:text-amber mt-2 inline-block">
+								<Link href="/alerts">▸ VIEW ALERTS</Link>
+							</Typography>
 						</div>
 					</div>
 				) : null}
@@ -352,7 +360,7 @@ export function DashboardPage(): React.JSX.Element {
 					}}
 				>
 					{trend.length === 0 ? (
-						<div className="h-full flex items-center justify-center text-xs text-fg-dim">
+						<div className="h-full flex items-center justify-center text-xs text-fg-muted">
 							── awaiting data ──
 						</div>
 					) : (
@@ -363,12 +371,12 @@ export function DashboardPage(): React.JSX.Element {
 									dataKey="date"
 									axisLine={false}
 									tickLine={false}
-									tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+									tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 								/>
 								<YAxis
 									axisLine={false}
 									tickLine={false}
-									tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+									tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 									tickFormatter={(v: number) =>
 										trendMode === "usd" ? `$${Math.round(v)}` : formatCompact(v)
 									}
@@ -384,11 +392,6 @@ export function DashboardPage(): React.JSX.Element {
 						</ResponsiveContainer>
 					)}
 				</div>
-				<div className="px-5 py-2 border-t border-line text-[10px] text-fg-very-dim leading-relaxed">
-					Claude Code costs are pro-rated from Anthropic's daily cost_report by api_key token share,
-					then attributed to the api_key creator. Totals match the Anthropic Console to within
-					rounding; for exact invoice reconciliation, use the Console.
-				</div>
 			</Card>
 
 			{/* ── GitHub Activity Trend chart ───────────────────────────────── */}
@@ -401,7 +404,7 @@ export function DashboardPage(): React.JSX.Element {
 					}}
 				>
 					{gitTrend.length === 0 ? (
-						<div className="h-full flex items-center justify-center text-xs text-fg-dim">
+						<div className="h-full flex items-center justify-center text-xs text-fg-muted">
 							── awaiting data ──
 						</div>
 					) : (
@@ -412,12 +415,12 @@ export function DashboardPage(): React.JSX.Element {
 									dataKey="date"
 									axisLine={false}
 									tickLine={false}
-									tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+									tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 								/>
 								<YAxis
 									axisLine={false}
 									tickLine={false}
-									tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+									tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 									tickFormatter={(v: number) => formatCompact(Math.abs(v))}
 									width={48}
 								/>
@@ -430,16 +433,13 @@ export function DashboardPage(): React.JSX.Element {
 						</ResponsiveContainer>
 					)}
 				</div>
-				<div className="px-5 py-2 border-t border-line text-[10px] text-fg-very-dim leading-relaxed">
-					GitHub pull requests merged daily across all tracked users.
-				</div>
 			</Card>
 
 			{/* ── Model mix · stacked bar + ranked list with sparklines ─────── */}
 			<Card>
 				<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-					<span className="text-[11px] tracked text-fg">MODEL MIX · {winLabel}</span>
-					<span className="text-[10px] tracked text-fg-dim flex items-center gap-3">
+					<Typography variant="section-title">MODEL MIX · {winLabel}</Typography>
+					<Typography variant="label" className="flex items-center gap-3">
 						<span>
 							<span className="inline-block w-2 h-2 bg-amber mr-1.5" />
 							CLAUDE CODE
@@ -448,7 +448,7 @@ export function DashboardPage(): React.JSX.Element {
 							<span className="inline-block w-2 h-2 bg-sky mr-1.5" />
 							CURSOR
 						</span>
-					</span>
+					</Typography>
 				</div>
 				<ModelMixSection modelMix={modelMix ?? []} isViewer={isViewer} />
 			</Card>
@@ -460,9 +460,9 @@ export function DashboardPage(): React.JSX.Element {
 						title={isViewer || metricMode === "tokens" ? "TOP USERS" : "TOP SPENDERS"}
 						subtitle={winLabel}
 						action={
-							<Link href="/users" className="text-[10px] tracked text-fg-dim hover:text-amber">
-								▸ VIEW ROSTER
-							</Link>
+							<Typography asChild variant="label" className="hover:text-amber">
+								<Link href="/users">▸ VIEW ROSTER</Link>
+							</Typography>
 						}
 					/>
 					<ol className="divide-y divide-line/60">
@@ -472,13 +472,13 @@ export function DashboardPage(): React.JSX.Element {
 									key={r.email}
 									className="grid grid-cols-12 items-center gap-3 px-5 py-3 hover:bg-elev2/40 transition-colors"
 								>
-									<span className="col-span-1 font-display text-2xl tabular text-fg-very-dim leading-none">
-										{String(i + 1).padStart(2, "0")}
+									<span className="col-span-1 font-mono text-xs tabular text-fg-subtle">
+										{String(i + 1).padStart(3, "0")}
 									</span>
 									<UserLink
 										email={r.email}
 										name={r.name}
-										className="col-span-5 text-xs truncate min-w-0"
+										className="col-span-5 text-sm truncate min-w-0"
 									/>
 									<div className="col-span-4">
 										<Sparkline
@@ -487,19 +487,18 @@ export function DashboardPage(): React.JSX.Element {
 											height={24}
 										/>
 									</div>
-									<span className="col-span-2 text-right text-xs tabular text-fg">
+									<span className="col-span-2 text-right text-sm tabular text-fg">
 										<MetricPair
 											cents={isViewer ? null : r.total_cents}
 											tokens={r.total_tokens}
 											digits={2}
-											secondaryClassName="text-[10px] text-fg-dim"
 										/>
 									</span>
 								</li>
 							)
 						})}
 						{top && top.length === 0 ? (
-							<li className="px-5 py-6 text-xs text-fg-dim">
+							<li className="px-5 py-6 text-xs text-fg-muted">
 								{isViewer ? "── no usage in window ──" : "── no spend in window ──"}
 							</li>
 						) : null}
@@ -509,7 +508,7 @@ export function DashboardPage(): React.JSX.Element {
 				{!isViewer ? (
 					<Card className="lg:col-span-5">
 						<div className="px-5 py-3 border-b border-line flex items-center justify-between">
-							<span className="text-[11px] tracked text-amber-hot flex items-center gap-2">
+							<span className="text-xs tracked text-amber-hot flex items-center gap-2">
 								{totalOpenAlerts > 0 ? (
 									<span className="pip-danger" />
 								) : (
@@ -517,10 +516,10 @@ export function DashboardPage(): React.JSX.Element {
 								)}
 								OPEN ALERTS
 								{totalOpenAlerts > severeAlerts.length ? (
-									<span className="text-fg-dim">({totalOpenAlerts})</span>
+									<span className="text-fg-muted">({totalOpenAlerts})</span>
 								) : null}
 							</span>
-							<Link href="/alerts" className="text-[10px] tracked text-fg-dim hover:text-amber">
+							<Link href="/alerts" className="text-xs tracked text-fg-muted hover:text-amber">
 								▸ ALL ALERTS
 							</Link>
 						</div>
@@ -542,17 +541,17 @@ export function DashboardPage(): React.JSX.Element {
 													>
 														<span className="text-fg">{a.name || a.email}</span>
 														{a.name ? (
-															<span className="text-[10px] text-fg-very-dim ml-2">{a.email}</span>
+															<span className="text-xs text-fg-subtle ml-2">{a.email}</span>
 														) : null}
 													</Link>
 												</span>
-												<span className="text-[10px] tracked text-fg-dim shrink-0">
+												<span className="text-xs tracked text-fg-muted shrink-0">
 													{a.platform === "claude_code" ? "CC" : "CU"}
 												</span>
 											</div>
-											<div className="mt-1 flex items-center justify-between text-[11px] tabular pl-3.5">
+											<div className="mt-1 flex items-center justify-between text-xs tabular pl-3.5">
 												<Cost cents={a.amountCents} digits={2} className={sev.text} />
-												<span className="text-fg-very-dim">
+												<span className="text-fg-subtle">
 													/ <Cost cents={a.thresholdCents} digits={2} /> → ▲ {a._ratio.toFixed(1)}x
 												</span>
 											</div>
@@ -561,7 +560,7 @@ export function DashboardPage(): React.JSX.Element {
 								})}
 							</ul>
 						) : (
-							<div className="px-5 py-6 text-xs text-fg-dim">── all clear ──</div>
+							<div className="px-5 py-6 text-xs text-fg-muted">── all clear ──</div>
 						)}
 					</Card>
 				) : null}

@@ -25,6 +25,7 @@ import {
 	TableRow,
 } from "@/components/ui/table"
 import { toast } from "@/components/ui/toast"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { platformLabel } from "@/lib/platform"
 import { formatCents, formatDate, formatDuration } from "@/lib/utils"
@@ -97,10 +98,18 @@ function useDebouncedValidation(
 
 function StatusPip({ state }: { state: ValidationState }): React.JSX.Element | null {
 	if (state === "idle") return null
-	if (state === "checking")
-		return <span className="text-[10px] tracked text-fg-dim">⏳ CHECKING…</span>
-	if (state === "ok") return <span className="text-[10px] tracked text-mint">✓ VALID</span>
-	return <span className="text-[10px] tracked text-amber-hot">✗ INVALID</span>
+	if (state === "checking") return <Typography variant="label">⏳ CHECKING…</Typography>
+	if (state === "ok")
+		return (
+			<Typography variant="label" className="text-mint">
+				✓ VALID
+			</Typography>
+		)
+	return (
+		<Typography variant="label" className="text-amber-hot">
+			✗ INVALID
+		</Typography>
+	)
 }
 
 export function SettingsPage(): React.JSX.Element {
@@ -375,21 +384,21 @@ export function SettingsPage(): React.JSX.Element {
 			{/* Workspace Configuration */}
 			<Card>
 				<div className="px-5 py-3 border-b border-line flex justify-between items-center">
-					<span className="text-[11px] tracked text-fg">WORKSPACE CONFIGURATION</span>
+					<span className="text-xs tracked text-fg">WORKSPACE CONFIGURATION</span>
 					{updateConfig.isPending && (
-						<span className="text-[10px] tracked text-amber">⏳ SAVING CHANGES…</span>
+						<span className="text-xs tracked text-amber">⏳ SAVING CHANGES…</span>
 					)}
 				</div>
 				<div className="p-5 space-y-6">
 					{/* Section 1: Org Details */}
 					<div>
 						<div className="flex justify-between items-center mb-3">
-							<div className="text-[10px] tracked text-amber">/ 01 · ORGANIZATION</div>
+							<div className="text-xs tracked text-amber">/ 01 · ORGANIZATION</div>
 							{editingSection === null && (
 								<button
 									type="button"
 									onClick={() => setEditingSection("org")}
-									className="flex items-center gap-1.5 text-[9px] tracked text-fg-dim hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
+									className="flex items-center gap-1.5 text-[9px] tracked text-fg-muted hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
 									title="Edit Organization Details"
 								>
 									<Edit2 className="h-2.5 w-2.5" strokeWidth={1.5} />
@@ -402,21 +411,21 @@ export function SettingsPage(): React.JSX.Element {
 							/* Read-Only Org Details */
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">ORG NAME</Label>
+									<Label className="text-xs tracked text-fg-muted">ORG NAME</Label>
 									<p className="mt-1 text-fg text-sm">{adminCfg?.orgName || "—"}</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">ALLOWED EMAIL DOMAIN</Label>
+									<Label className="text-xs tracked text-fg-muted">ALLOWED EMAIL DOMAIN</Label>
 									<p className="mt-1 text-fg text-sm">{adminCfg?.allowedEmailDomain || "Any"}</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">SELF-SIGNUP</Label>
+									<Label className="text-xs tracked text-fg-muted">SELF-SIGNUP</Label>
 									<p className="mt-1 text-fg text-sm">
 										{adminCfg?.openSignupEnabled ? "Enabled (domain-gated)" : "Invite-only"}
 									</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">SPEND VISIBILITY</Label>
+									<Label className="text-xs tracked text-fg-muted">SPEND VISIBILITY</Label>
 									<p className="mt-1 text-fg text-sm">
 										{adminCfg?.spendVisibility === "admin_only"
 											? "Admin Only"
@@ -431,7 +440,7 @@ export function SettingsPage(): React.JSX.Element {
 							<div className="space-y-4">
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
-										<Label htmlFor="orgName" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="orgName" className="text-xs tracked text-fg-muted">
 											ORG NAME
 										</Label>
 										<Input
@@ -443,7 +452,7 @@ export function SettingsPage(): React.JSX.Element {
 										/>
 									</div>
 									<div>
-										<Label htmlFor="domain" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="domain" className="text-xs tracked text-fg-muted">
 											ALLOWED EMAIL DOMAIN (OPTIONAL)
 										</Label>
 										<Input
@@ -455,8 +464,8 @@ export function SettingsPage(): React.JSX.Element {
 										/>
 									</div>
 									<div>
-										<Label className="text-[10px] tracked text-fg-dim">SELF-SIGNUP</Label>
-										<div className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none">
+										<Label className="text-xs tracked text-fg-muted">SELF-SIGNUP</Label>
+										<div className="mt-2 flex items-center gap-2 text-xs text-fg-muted select-none">
 											<Checkbox
 												id="openSignup"
 												checked={openSignup}
@@ -469,7 +478,7 @@ export function SettingsPage(): React.JSX.Element {
 										</div>
 									</div>
 									<div>
-										<Label className="text-[10px] tracked text-fg-dim">SPEND VISIBILITY</Label>
+										<Label className="text-xs tracked text-fg-muted">SPEND VISIBILITY</Label>
 										<Select
 											value={spendVisibility}
 											onValueChange={(val) =>
@@ -491,7 +500,7 @@ export function SettingsPage(): React.JSX.Element {
 									<button
 										type="button"
 										onClick={() => handleCancel("org")}
-										className="text-xs px-3 h-7 text-fg-dim hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
+										className="text-xs px-3 h-7 text-fg-muted hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
 									>
 										CANCEL
 									</button>
@@ -512,12 +521,12 @@ export function SettingsPage(): React.JSX.Element {
 					{/* Section 2: Google OAuth */}
 					<div>
 						<div className="flex justify-between items-center mb-3">
-							<div className="text-[10px] tracked text-amber">/ 02 · GOOGLE OAUTH</div>
+							<div className="text-xs tracked text-amber">/ 02 · GOOGLE OAUTH</div>
 							{editingSection === null && (
 								<button
 									type="button"
 									onClick={() => setEditingSection("oauth")}
-									className="flex items-center gap-1.5 text-[9px] tracked text-fg-dim hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
+									className="flex items-center gap-1.5 text-[9px] tracked text-fg-muted hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
 									title="Edit Google OAuth Configuration"
 								>
 									<Edit2 className="h-2.5 w-2.5" strokeWidth={1.5} />
@@ -530,7 +539,7 @@ export function SettingsPage(): React.JSX.Element {
 							/* Read-Only Google OAuth */
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">STATUS</Label>
+									<Label className="text-xs tracked text-fg-muted">STATUS</Label>
 									<p className="mt-1 text-fg text-sm">
 										{adminCfg?.googleOauthEnabled ? "Enabled" : "Disabled"}
 									</p>
@@ -538,13 +547,13 @@ export function SettingsPage(): React.JSX.Element {
 								{adminCfg?.googleOauthEnabled && (
 									<>
 										<div>
-											<Label className="text-[10px] tracked text-fg-dim">CLIENT ID</Label>
+											<Label className="text-xs tracked text-fg-muted">CLIENT ID</Label>
 											<p className="mt-1 text-fg text-sm font-mono truncate max-w-xs">
 												{adminCfg?.googleClientId || "—"}
 											</p>
 										</div>
 										<div>
-											<Label className="text-[10px] tracked text-fg-dim">CLIENT SECRET</Label>
+											<Label className="text-xs tracked text-fg-muted">CLIENT SECRET</Label>
 											<p className="mt-1 text-fg text-sm font-mono">
 												{adminCfg?.googleClientSecretSet
 													? "•••••••••••• (configured)"
@@ -552,7 +561,7 @@ export function SettingsPage(): React.JSX.Element {
 											</p>
 										</div>
 										<div>
-											<Label className="text-[10px] tracked text-fg-dim">REDIRECT URI</Label>
+											<Label className="text-xs tracked text-fg-muted">REDIRECT URI</Label>
 											<p className="mt-1 text-fg text-sm font-mono truncate max-w-xs">
 												{adminCfg?.googleOauthRedirectUri || "—"}
 											</p>
@@ -565,8 +574,8 @@ export function SettingsPage(): React.JSX.Element {
 							<div className="space-y-4">
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
-										<Label className="text-[10px] tracked text-fg-dim">STATUS</Label>
-										<div className="mt-2 flex items-center gap-2 text-[11px] text-fg-mid select-none">
+										<Label className="text-xs tracked text-fg-muted">STATUS</Label>
+										<div className="mt-2 flex items-center gap-2 text-xs text-fg-muted select-none">
 											<Checkbox
 												id="googleOauthEnabled"
 												checked={googleOauthEnabled}
@@ -581,7 +590,7 @@ export function SettingsPage(): React.JSX.Element {
 									{googleOauthEnabled && (
 										<>
 											<div>
-												<Label htmlFor="googleClientId" className="text-[10px] tracked text-fg-dim">
+												<Label htmlFor="googleClientId" className="text-xs tracked text-fg-muted">
 													GOOGLE CLIENT ID
 												</Label>
 												<Input
@@ -596,7 +605,7 @@ export function SettingsPage(): React.JSX.Element {
 												<div className="flex items-center justify-between mb-1">
 													<Label
 														htmlFor="googleClientSecret"
-														className="text-[10px] tracked text-fg-dim"
+														className="text-xs tracked text-fg-muted"
 													>
 														GOOGLE CLIENT SECRET
 													</Label>
@@ -605,7 +614,7 @@ export function SettingsPage(): React.JSX.Element {
 															<button
 																type="button"
 																onClick={() => setClearGoogleSecret(true)}
-																className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+																className="text-[9px] text-fg-muted hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
 															>
 																[Clear Secret]
 															</button>
@@ -642,7 +651,7 @@ export function SettingsPage(): React.JSX.Element {
 											<div>
 												<Label
 													htmlFor="googleOauthRedirectUri"
-													className="text-[10px] tracked text-fg-dim"
+													className="text-xs tracked text-fg-muted"
 												>
 													REDIRECT URI
 												</Label>
@@ -661,7 +670,7 @@ export function SettingsPage(): React.JSX.Element {
 									<button
 										type="button"
 										onClick={() => handleCancel("oauth")}
-										className="text-xs px-3 h-7 text-fg-dim hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
+										className="text-xs px-3 h-7 text-fg-muted hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
 									>
 										CANCEL
 									</button>
@@ -682,12 +691,12 @@ export function SettingsPage(): React.JSX.Element {
 					{/* Section 3: Credentials & API Keys */}
 					<div>
 						<div className="flex justify-between items-center mb-3">
-							<div className="text-[10px] tracked text-amber">/ 03 · CREDENTIALS & API KEYS</div>
+							<div className="text-xs tracked text-amber">/ 03 · CREDENTIALS & API KEYS</div>
 							{editingSection === null && (
 								<button
 									type="button"
 									onClick={() => setEditingSection("creds")}
-									className="flex items-center gap-1.5 text-[9px] tracked text-fg-dim hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
+									className="flex items-center gap-1.5 text-[9px] tracked text-fg-muted hover:text-amber cursor-pointer transition-colors border-none bg-transparent outline-none"
 									title="Edit Credentials & API Keys"
 								>
 									<Edit2 className="h-2.5 w-2.5" strokeWidth={1.5} />
@@ -700,7 +709,7 @@ export function SettingsPage(): React.JSX.Element {
 							/* Read-Only Credentials & API Keys */
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">ANTHROPIC ADMIN API KEY</Label>
+									<Label className="text-xs tracked text-fg-muted">ANTHROPIC ADMIN API KEY</Label>
 									<p className="mt-1 text-fg text-sm font-mono">
 										{adminCfg?.anthropicAdminApiKeySet
 											? "•••••••••••• (configured)"
@@ -708,7 +717,7 @@ export function SettingsPage(): React.JSX.Element {
 									</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">CURSOR ADMIN API KEY</Label>
+									<Label className="text-xs tracked text-fg-muted">CURSOR ADMIN API KEY</Label>
 									<p className="mt-1 text-fg text-sm font-mono">
 										{adminCfg?.cursorAdminApiKeySet
 											? "•••••••••••• (configured)"
@@ -716,19 +725,19 @@ export function SettingsPage(): React.JSX.Element {
 									</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">SLACK BOT TOKEN</Label>
+									<Label className="text-xs tracked text-fg-muted">SLACK BOT TOKEN</Label>
 									<p className="mt-1 text-fg text-sm font-mono">
 										{adminCfg?.slackBotTokenSet ? "•••••••••••• (configured)" : "Not configured"}
 									</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">SLACK CHANNEL ID</Label>
+									<Label className="text-xs tracked text-fg-muted">SLACK CHANNEL ID</Label>
 									<p className="mt-1 text-fg text-sm font-mono">
 										{adminCfg?.slackChannelId || "—"}
 									</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">GITHUB ACCESS TOKEN</Label>
+									<Label className="text-xs tracked text-fg-muted">GITHUB ACCESS TOKEN</Label>
 									<p className="mt-1 text-fg text-sm font-mono">
 										{adminCfg?.githubAccessTokenSet
 											? "•••••••••••• (configured)"
@@ -736,7 +745,7 @@ export function SettingsPage(): React.JSX.Element {
 									</p>
 								</div>
 								<div>
-									<Label className="text-[10px] tracked text-fg-dim">GITHUB ORGANIZATION</Label>
+									<Label className="text-xs tracked text-fg-muted">GITHUB ORGANIZATION</Label>
 									<p className="mt-1 text-fg text-sm font-mono">{adminCfg?.githubOrg || "—"}</p>
 								</div>
 							</div>
@@ -746,7 +755,7 @@ export function SettingsPage(): React.JSX.Element {
 								<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 									<div>
 										<div className="flex items-center justify-between mb-1">
-											<Label htmlFor="anthropic" className="text-[10px] tracked text-fg-dim">
+											<Label htmlFor="anthropic" className="text-xs tracked text-fg-muted">
 												ANTHROPIC ADMIN API KEY
 											</Label>
 											<StatusPip state={anthropicVal.state} />
@@ -763,13 +772,13 @@ export function SettingsPage(): React.JSX.Element {
 											type="password"
 										/>
 										{anthropicVal.error ? (
-											<p className="text-[10px] text-amber-hot mt-1">{anthropicVal.error}</p>
+											<p className="text-xs text-amber-hot mt-1">{anthropicVal.error}</p>
 										) : null}
 									</div>
 
 									<div>
 										<div className="flex items-center justify-between mb-1">
-											<Label htmlFor="cursor" className="text-[10px] tracked text-fg-dim">
+											<Label htmlFor="cursor" className="text-xs tracked text-fg-muted">
 												CURSOR ADMIN API KEY
 											</Label>
 											<StatusPip state={cursorVal.state} />
@@ -786,13 +795,13 @@ export function SettingsPage(): React.JSX.Element {
 											type="password"
 										/>
 										{cursorVal.error ? (
-											<p className="text-[10px] text-amber-hot mt-1">{cursorVal.error}</p>
+											<p className="text-xs text-amber-hot mt-1">{cursorVal.error}</p>
 										) : null}
 									</div>
 
 									<div>
 										<div className="flex items-center justify-between mb-1">
-											<Label htmlFor="slackToken" className="text-[10px] tracked text-fg-dim">
+											<Label htmlFor="slackToken" className="text-xs tracked text-fg-muted">
 												SLACK BOT TOKEN
 											</Label>
 											<div className="flex items-center gap-2">
@@ -800,7 +809,7 @@ export function SettingsPage(): React.JSX.Element {
 													<button
 														type="button"
 														onClick={() => setClearSlackToken(true)}
-														className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+														className="text-[9px] text-fg-muted hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
 													>
 														[Clear Token]
 													</button>
@@ -835,12 +844,12 @@ export function SettingsPage(): React.JSX.Element {
 											disabled={clearSlackToken}
 										/>
 										{slackVal.error ? (
-											<p className="text-[10px] text-amber-hot mt-1">{slackVal.error}</p>
+											<p className="text-xs text-amber-hot mt-1">{slackVal.error}</p>
 										) : null}
 									</div>
 
 									<div>
-										<Label htmlFor="slackChannel" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="slackChannel" className="text-xs tracked text-fg-muted">
 											SLACK CHANNEL ID
 										</Label>
 										<Input
@@ -854,7 +863,7 @@ export function SettingsPage(): React.JSX.Element {
 
 									<div>
 										<div className="flex items-center justify-between mb-1">
-											<Label htmlFor="githubToken" className="text-[10px] tracked text-fg-dim">
+											<Label htmlFor="githubToken" className="text-xs tracked text-fg-muted">
 												GITHUB ACCESS TOKEN
 											</Label>
 											<div className="flex items-center gap-2">
@@ -862,7 +871,7 @@ export function SettingsPage(): React.JSX.Element {
 													<button
 														type="button"
 														onClick={() => setClearGithubToken(true)}
-														className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+														className="text-[9px] text-fg-muted hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
 													>
 														[Clear Token]
 													</button>
@@ -897,12 +906,12 @@ export function SettingsPage(): React.JSX.Element {
 											disabled={clearGithubToken}
 										/>
 										{githubVal.error ? (
-											<p className="text-[10px] text-amber-hot mt-1">{githubVal.error}</p>
+											<p className="text-xs text-amber-hot mt-1">{githubVal.error}</p>
 										) : null}
 									</div>
 
 									<div>
-										<Label htmlFor="githubOrg" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="githubOrg" className="text-xs tracked text-fg-muted">
 											GITHUB ORGANIZATION
 										</Label>
 										<Input
@@ -915,14 +924,14 @@ export function SettingsPage(): React.JSX.Element {
 									</div>
 
 									<div className="pt-4 border-t border-line/60">
-										<div className="text-[11px] font-medium text-fg mb-3 font-mono">
+										<div className="text-xs font-medium text-fg mb-3 font-mono">
 											PR ENRICHMENT & AI CLASSIFICATION PROVIDER
 										</div>
 										<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 											<div>
 												<Label
 													htmlFor="enrichmentProvider"
-													className="text-[10px] tracked text-fg-dim"
+													className="text-xs tracked text-fg-muted"
 												>
 													PROVIDER
 												</Label>
@@ -951,7 +960,7 @@ export function SettingsPage(): React.JSX.Element {
 											<div>
 												<Label
 													htmlFor="enrichmentModelName"
-													className="text-[10px] tracked text-fg-dim"
+													className="text-xs tracked text-fg-muted"
 												>
 													MODEL NAME
 												</Label>
@@ -968,7 +977,7 @@ export function SettingsPage(): React.JSX.Element {
 												<div className="flex items-center justify-between mb-1">
 													<Label
 														htmlFor="enrichmentApiKey"
-														className="text-[10px] tracked text-fg-dim"
+														className="text-xs tracked text-fg-muted"
 													>
 														ENRICHMENT API KEY
 													</Label>
@@ -976,7 +985,7 @@ export function SettingsPage(): React.JSX.Element {
 														<button
 															type="button"
 															onClick={() => setClearEnrichmentKey(true)}
-															className="text-[9px] text-fg-dim hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
+															className="text-[9px] text-fg-muted hover:text-amber-hot uppercase tracking-wider cursor-pointer font-mono border-none bg-transparent outline-none"
 														>
 															[Clear Key]
 														</button>
@@ -1013,7 +1022,7 @@ export function SettingsPage(): React.JSX.Element {
 											<div className="md:col-span-2">
 												<Label
 													htmlFor="enrichmentBaseUrl"
-													className="text-[10px] tracked text-fg-dim"
+													className="text-[10px] tracked text-fg-muted"
 												>
 													CUSTOM PROXY / BASE URL (OPTIONAL)
 												</Label>
@@ -1032,7 +1041,7 @@ export function SettingsPage(): React.JSX.Element {
 									<button
 										type="button"
 										onClick={() => handleCancel("creds")}
-										className="text-xs px-3 h-7 text-fg-dim hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
+										className="text-xs px-3 h-7 text-fg-muted hover:text-fg border border-line hover:border-line-strong transition-colors cursor-pointer bg-transparent"
 									>
 										CANCEL
 									</button>
@@ -1065,7 +1074,7 @@ export function SettingsPage(): React.JSX.Element {
 				<SectionHeader
 					title="ACTIVE ACCOUNTS"
 					action={
-						<span className="text-[10px] tracked text-fg-dim">
+						<span className="text-[10px] tracked text-fg-muted">
 							{appUsers.length} ACCOUNT{appUsers.length === 1 ? "" : "S"}
 						</span>
 					}
@@ -1073,18 +1082,10 @@ export function SettingsPage(): React.JSX.Element {
 				<Table className="w-full tabular text-xs">
 					<TableHeader>
 						<TableRow>
-							<TableHead className="h-8 px-5 text-left text-[10px] tracked text-fg-dim">
-								USER
-							</TableHead>
-							<TableHead className="h-8 px-5 text-left text-[10px] tracked text-fg-dim w-48">
-								ROLE
-							</TableHead>
-							<TableHead className="h-8 px-5 text-right text-[10px] tracked text-fg-dim">
-								JOINED
-							</TableHead>
-							<TableHead className="h-8 px-5 text-right text-[10px] tracked text-fg-dim">
-								LAST LOGIN
-							</TableHead>
+							<TableHead className="px-5">USER</TableHead>
+							<TableHead className="px-5 w-48">ROLE</TableHead>
+							<TableHead className="px-5 text-right">JOINED</TableHead>
+							<TableHead className="px-5 text-right">LAST LOGIN</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -1092,7 +1093,7 @@ export function SettingsPage(): React.JSX.Element {
 							<TableRow key={u.id}>
 								<TableCell className="px-5 py-3">
 									<div className="text-fg">{u.name || "—"}</div>
-									<div className="text-fg-dim text-[11px]">{u.email}</div>
+									<div className="text-fg-muted text-xs">{u.email}</div>
 								</TableCell>
 								<TableCell className="px-5 py-3">
 									{me?.role === "admin" && me?.id !== u.id ? (
@@ -1115,15 +1116,15 @@ export function SettingsPage(): React.JSX.Element {
 											</SelectContent>
 										</Select>
 									) : (
-										<Badge variant="secondary" className="uppercase text-[10px] tracked font-mono">
+										<Badge variant="secondary" className="uppercase text-xs tracked font-mono">
 											{u.role}
 										</Badge>
 									)}
 								</TableCell>
-								<TableCell className="px-5 py-3 text-right text-fg-dim">
+								<TableCell className="px-5 py-3 text-right text-fg-muted">
 									{new Date(u.createdAt).toLocaleDateString()}
 								</TableCell>
-								<TableCell className="px-5 py-3 text-right text-fg-dim">
+								<TableCell className="px-5 py-3 text-right text-fg-muted">
 									{u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleDateString() : "Never"}
 								</TableCell>
 							</TableRow>
@@ -1138,7 +1139,7 @@ export function SettingsPage(): React.JSX.Element {
 				<div className="p-5 space-y-4">
 					<div className="flex gap-2 items-end">
 						<div className="flex-1">
-							<Label className="text-[10px] tracked text-fg-dim">EMAIL</Label>
+							<Label className="text-xs tracked text-fg-muted">EMAIL</Label>
 							<Input
 								value={inviteEmail}
 								onChange={(e) => setInviteEmail(e.target.value)}
@@ -1147,7 +1148,7 @@ export function SettingsPage(): React.JSX.Element {
 							/>
 						</div>
 						<div className="w-32">
-							<Label className="text-[10px] tracked text-fg-dim">ROLE</Label>
+							<Label className="text-xs tracked text-fg-muted">ROLE</Label>
 							<Select
 								value={inviteRole}
 								onValueChange={(val) => setInviteRole(val as "viewer" | "admin")}
@@ -1172,26 +1173,18 @@ export function SettingsPage(): React.JSX.Element {
 						<Table className="w-full tabular text-xs">
 							<TableHeader>
 								<TableRow>
-									<TableHead className="h-8 px-2 text-left text-[10px] tracked text-fg-dim">
-										EMAIL
-									</TableHead>
-									<TableHead className="h-8 px-2 text-left text-[10px] tracked text-fg-dim">
-										ROLE
-									</TableHead>
-									<TableHead className="h-8 px-2 text-left text-[10px] tracked text-fg-dim">
-										EXPIRES
-									</TableHead>
-									<TableHead className="h-8 px-2 text-right text-[10px] tracked text-fg-dim">
-										ACTION
-									</TableHead>
+									<TableHead className="px-2">EMAIL</TableHead>
+									<TableHead className="px-2">ROLE</TableHead>
+									<TableHead className="px-2">EXPIRES</TableHead>
+									<TableHead className="px-2 text-right">ACTION</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
 								{invites.map((i) => (
 									<TableRow key={i.id}>
 										<TableCell className="px-2 py-2 text-fg">{i.email}</TableCell>
-										<TableCell className="px-2 py-2 text-fg-mid">{i.role}</TableCell>
-										<TableCell className="px-2 py-2 text-fg-dim">
+										<TableCell className="px-2 py-2 text-fg-muted">{i.role}</TableCell>
+										<TableCell className="px-2 py-2 text-fg-muted">
 											{new Date(i.expiresAt).toLocaleDateString()}
 										</TableCell>
 										<TableCell className="px-2 py-2 text-right">
@@ -1208,7 +1201,7 @@ export function SettingsPage(): React.JSX.Element {
 							</TableBody>
 						</Table>
 					) : (
-						<p className="text-xs text-fg-dim">— no pending invitations —</p>
+						<p className="text-xs text-fg-muted">— no pending invitations —</p>
 					)}
 				</div>
 			</Card>
@@ -1217,17 +1210,17 @@ export function SettingsPage(): React.JSX.Element {
 			<Card>
 				<SectionHeader
 					title="GLOBAL DAILY THRESHOLDS"
-					action={<span className="text-[10px] tracked text-fg-dim">PER USER · PER PLATFORM</span>}
+					action={<Typography variant="label">PER USER · PER PLATFORM</Typography>}
 				/>
 				<div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-line">
 					<div className="p-5 space-y-3">
-						<div className="flex items-center gap-2 text-[10px] tracked">
+						<div className="flex items-center gap-2 text-xs tracked">
 							<span className="w-1.5 h-1.5 bg-amber" />
-							<span className="text-fg-dim">CLAUDE CODE · DAILY $ THRESHOLD</span>
+							<span className="text-fg-muted">CLAUDE CODE · DAILY $ THRESHOLD</span>
 						</div>
 						<div className="flex items-center gap-2">
 							<div className="relative flex-1 max-w-[180px]">
-								<span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-dim font-mono text-xs pointer-events-none">
+								<span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted font-mono text-xs pointer-events-none">
 									$
 								</span>
 								<Input
@@ -1249,20 +1242,20 @@ export function SettingsPage(): React.JSX.Element {
 								SAVE
 							</Button>
 						</div>
-						<div className="text-[10px] tracked text-fg-dim">
+						<div className="text-xs tracked text-fg-muted">
 							ACTIVE THRESHOLD:{" "}
 							<span className="text-fg font-mono">{formatCents(ccGlobalCents)}</span>
 						</div>
 					</div>
 
 					<div className="p-5 space-y-3">
-						<div className="flex items-center gap-2 text-[10px] tracked">
+						<div className="flex items-center gap-2 text-xs tracked">
 							<span className="w-1.5 h-1.5 bg-sky" />
-							<span className="text-fg-dim">CURSOR · DAILY $ THRESHOLD</span>
+							<span className="text-fg-muted">CURSOR · DAILY $ THRESHOLD</span>
 						</div>
 						<div className="flex items-center gap-2">
 							<div className="relative flex-1 max-w-[180px]">
-								<span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-dim font-mono text-xs pointer-events-none">
+								<span className="absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted font-mono text-xs pointer-events-none">
 									$
 								</span>
 								<Input
@@ -1284,7 +1277,7 @@ export function SettingsPage(): React.JSX.Element {
 								SAVE
 							</Button>
 						</div>
-						<div className="text-[10px] tracked text-fg-dim">
+						<div className="text-xs tracked text-fg-muted">
 							ACTIVE THRESHOLD:{" "}
 							<span className="text-fg font-mono">{formatCents(cuGlobalCents)}</span>
 						</div>
@@ -1293,36 +1286,28 @@ export function SettingsPage(): React.JSX.Element {
 
 				{userOverrides.length > 0 ? (
 					<div className="border-t border-line p-5">
-						<div className="text-[10px] tracked text-fg-dim mb-3">PER-USER OVERRIDES</div>
+						<div className="text-xs tracked text-fg-muted mb-3">PER-USER OVERRIDES</div>
 						<Table className="w-full tabular text-xs">
 							<TableHeader>
 								<TableRow>
-									<TableHead className="h-8 px-2 text-left text-[10px] tracked text-fg-dim">
-										USER
-									</TableHead>
-									<TableHead className="h-8 px-2 text-left text-[10px] tracked text-fg-dim">
-										PLATFORM
-									</TableHead>
-									<TableHead className="h-8 px-2 text-right text-[10px] tracked text-fg-dim">
-										DAILY $
-									</TableHead>
-									<TableHead className="h-8 px-2 text-left text-[10px] tracked text-fg-dim">
-										STATE
-									</TableHead>
+									<TableHead className="px-2">USER</TableHead>
+									<TableHead className="px-2">PLATFORM</TableHead>
+									<TableHead className="px-2 text-right">DAILY $</TableHead>
+									<TableHead className="px-2">STATE</TableHead>
 								</TableRow>
 							</TableHeader>
 							<TableBody>
 								{userOverrides.map((t) => (
 									<TableRow key={t.id}>
 										<TableCell className="px-2 py-2 text-fg">{t.email}</TableCell>
-										<TableCell className="px-2 py-2 text-fg-mid">
+										<TableCell className="px-2 py-2 text-fg-muted">
 											{platformLabel(t.platform)}
 										</TableCell>
 										<TableCell className="px-2 py-2 text-right text-amber">
 											{formatCents(t.dailyCents)}
 										</TableCell>
-										<TableCell className="px-2 py-2 text-[10px] tracked">
-											<span className={t.enabled ? "text-mint" : "text-fg-dim"}>
+										<TableCell className="px-2 py-2 text-xs tracked">
+											<span className={t.enabled ? "text-mint" : "text-fg-muted"}>
 												● {t.enabled ? "armed" : "disabled"}
 											</span>
 										</TableCell>
@@ -1338,7 +1323,7 @@ export function SettingsPage(): React.JSX.Element {
 			<Card>
 				<SectionHeader
 					title="MANUAL SYNC"
-					action={<span className="text-[10px] tracked text-fg-dim">RUNS IN THE BACKGROUND</span>}
+					action={<Typography variant="label">RUNS IN THE BACKGROUND</Typography>}
 				/>
 				<div className="p-5 grid grid-cols-2 md:grid-cols-5 gap-3">
 					{(
@@ -1354,11 +1339,13 @@ export function SettingsPage(): React.JSX.Element {
 							key={job}
 							variant="outline"
 							onClick={() => triggerSync.mutate({ job, full })}
-							className="h-auto text-left p-3 flex-col items-start justify-start border-line hover:border-amber hover:bg-amber/[0.04]"
+							className="h-auto text-left p-3 flex-col items-start justify-start border-line hover:border-amber hover:bg-amber/[0.04] whitespace-normal w-full"
 						>
-							<div className="text-[10px] tracked text-fg-dim">▶ RUN</div>
+							<Typography variant="label">▶ RUN</Typography>
 							<div className="font-mono text-sm tracked text-fg mt-1">{label}</div>
-							<div className="text-[10px] text-fg-very-dim mt-1">{sub}</div>
+							<Typography variant="caption" className="mt-1">
+								{sub}
+							</Typography>
 						</Button>
 					))}
 				</div>
@@ -1370,33 +1357,19 @@ export function SettingsPage(): React.JSX.Element {
 				<Table className="w-full tabular text-xs">
 					<TableHeader>
 						<TableRow>
-							<TableHead className="h-8 px-3 text-left text-[10px] tracked text-fg-dim">
-								JOB
-							</TableHead>
-							<TableHead className="h-8 px-3 text-left text-[10px] tracked text-fg-dim">
-								STATUS
-							</TableHead>
-							<TableHead className="h-8 px-3 text-left text-[10px] tracked text-fg-dim">
-								TRIGGER
-							</TableHead>
-							<TableHead className="h-8 px-3 text-left text-[10px] tracked text-fg-dim">
-								STARTED
-							</TableHead>
-							<TableHead className="h-8 px-3 text-right text-[10px] tracked text-fg-dim">
-								DURATION
-							</TableHead>
-							<TableHead className="h-8 px-3 text-right text-[10px] tracked text-fg-dim">
-								ROWS
-							</TableHead>
-							<TableHead className="h-8 px-3 text-left text-[10px] tracked text-fg-dim">
-								NOTE
-							</TableHead>
+							<TableHead className="px-3">JOB</TableHead>
+							<TableHead className="px-3">STATUS</TableHead>
+							<TableHead className="px-3">TRIGGER</TableHead>
+							<TableHead className="px-3">STARTED</TableHead>
+							<TableHead className="px-3 text-right">DURATION</TableHead>
+							<TableHead className="px-3 text-right">ROWS</TableHead>
+							<TableHead className="px-3">NOTE</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
 						{runs.length === 0 ? (
 							<TableRow>
-								<TableCell colSpan={7} className="text-center text-fg-dim py-6 text-xs">
+								<TableCell colSpan={7} className="text-center text-fg-muted py-6 text-xs">
 									── no runs ──
 								</TableCell>
 							</TableRow>
@@ -1405,23 +1378,23 @@ export function SettingsPage(): React.JSX.Element {
 								<TableRow key={r.id}>
 									<TableCell className="px-3 py-2 text-fg">{r.job}</TableCell>
 									<TableCell className="px-3 py-2">
-										<span className={`text-[10px] tracked ${STATUS_COLOR[r.status]}`}>
+										<span className={`text-xs tracked ${STATUS_COLOR[r.status]}`}>
 											● {r.status}
 										</span>
 									</TableCell>
-									<TableCell className="px-3 py-2 text-fg-mid text-[10px] tracked">
+									<TableCell className="px-3 py-2 text-fg-muted text-xs tracked">
 										{r.triggeredBy ?? "—"}
 									</TableCell>
-									<TableCell className="px-3 py-2 text-fg-dim text-[11px]">
+									<TableCell className="px-3 py-2 text-fg-muted text-xs">
 										{formatDate(r.startedAt)}
 									</TableCell>
-									<TableCell className="px-3 py-2 text-right text-fg-mid text-[11px]">
+									<TableCell className="px-3 py-2 text-right text-fg-muted text-xs">
 										{formatDuration(r.startedAt, r.completedAt)}
 									</TableCell>
 									<TableCell className="px-3 py-2 text-right text-fg">
 										{r.rowsUpserted.toLocaleString()}
 									</TableCell>
-									<TableCell className="px-3 py-2 text-amber-hot text-[11px] truncate max-w-md">
+									<TableCell className="px-3 py-2 text-amber-hot text-xs truncate max-w-md">
 										{r.error ?? ""}
 									</TableCell>
 								</TableRow>

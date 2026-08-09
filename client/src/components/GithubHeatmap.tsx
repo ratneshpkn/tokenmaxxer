@@ -1,6 +1,7 @@
 import type { GithubHeatmapItem } from "@shared/api-types"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { formatNumber } from "@/lib/utils"
+import { typographyVariants } from "@/components/ui/typography"
+import { cn, formatNumber } from "@/lib/utils"
 import { computeQuartileBuckets } from "./ActivityHeatmap"
 
 const BUCKET_CLASS: Record<number, string> = {
@@ -83,7 +84,7 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 	return (
 		<div className="flex flex-col select-none mx-auto">
 			<div
-				className="flex mb-2 text-[9px] font-mono text-fg-dim/80"
+				className="flex mb-2 text-[9px] font-mono text-fg-subtle"
 				style={{ paddingLeft: "24px" }}
 			>
 				{weeks.map((week, wi) => {
@@ -103,7 +104,7 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 			</div>
 
 			<div className="flex items-start">
-				<div className="flex flex-col gap-[3px] text-[9px] font-mono text-fg-dim/80 pr-2 pt-[1px]">
+				<div className="flex flex-col gap-[3px] text-[9px] font-mono text-fg-subtle pr-2 pt-[1px]">
 					{DAY_LABELS.map((item) => (
 						<div key={item.id} className="h-[20px] flex items-center justify-end w-4 leading-none">
 							{item.label}
@@ -137,13 +138,18 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 													aria-label={`${formatLabel(day.date)} — ${prCount} PRs, ${linesChanged} lines`}
 												/>
 											</TooltipTrigger>
-											<TooltipContent className="font-mono text-[10px] tracked bg-bg border border-line-strong px-2.5 py-1.5 shadow-md">
+											<TooltipContent
+												className={cn(
+													typographyVariants({ variant: "label" }),
+													"bg-bg border border-line-strong px-2.5 py-1.5 shadow-md",
+												)}
+											>
 												<div className="font-semibold text-fg">{formatLabel(day.date)}</div>
-												<div className="text-fg-mid font-medium mt-1">
+												<div className="text-fg-muted font-medium mt-1">
 													{prCount} {prCount === 1 ? "PR" : "PRs"} ({day.prs_opened} opened,{" "}
 													{day.prs_merged} merged)
 												</div>
-												<div className="text-fg-dim text-[9px] mt-0.5">
+												<div className="text-fg-muted text-[9px] mt-0.5">
 													{formatNumber(linesChanged)} lines (+{formatNumber(day.additions)} / -
 													{formatNumber(day.deletions)})
 												</div>

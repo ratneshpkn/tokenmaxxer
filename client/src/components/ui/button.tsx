@@ -11,19 +11,20 @@ const buttonVariants = cva(
 			variant: {
 				default: "bg-amber text-black hover:bg-amber/90 font-medium border border-amber",
 				destructive:
-					"border border-line bg-transparent text-fg-mid hover:text-amber-hot hover:border-amber-hot/60",
+					"border border-line bg-transparent text-fg-muted hover:text-amber-hot hover:border-amber-hot/60",
 				outline:
-					"border border-line bg-transparent text-fg-mid hover:text-fg hover:border-line-strong hover:bg-elev2",
+					"border border-line bg-transparent text-fg-muted hover:text-fg hover:border-line-strong hover:bg-elev2",
 				secondary: "bg-elev2 text-fg border border-line hover:bg-elev3",
-				ghost: "hover:bg-elev2 hover:text-fg text-fg-mid",
+				ghost: "hover:bg-elev2 hover:text-fg text-fg-muted",
 				link: "text-amber underline-offset-4 hover:underline",
-				amber: "border border-line bg-transparent text-fg-mid hover:text-amber hover:border-amber",
-				mint: "border border-line bg-transparent text-fg-mid hover:text-mint hover:border-mint",
+				amber:
+					"border border-line bg-transparent text-fg-muted hover:text-amber hover:border-amber",
+				mint: "border border-line bg-transparent text-fg-muted hover:text-mint hover:border-mint",
 			},
 			size: {
 				default: "h-9 px-4 py-2 text-xs",
-				xs: "h-6 px-2 text-[10px] tracked",
-				sm: "h-7 px-2.5 text-[10px] tracked font-medium",
+				xs: "h-6 px-2 text-xs tracked",
+				sm: "h-7 px-2.5 text-xs tracked font-medium",
 				lg: "h-11 px-8 text-sm",
 				icon: "size-8 p-0",
 			},

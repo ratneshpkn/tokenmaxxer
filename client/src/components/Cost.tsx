@@ -30,9 +30,7 @@ export function Cost({
 	const [privacyOn] = usePrivacyMode()
 
 	if (cents === null || cents === undefined) {
-		return (
-			<span className={className ? `${className} text-fg-very-dim` : "text-fg-very-dim"}>—</span>
-		)
+		return <span className={className ? `${className} text-fg-subtle` : "text-fg-subtle"}>—</span>
 	}
 
 	const n = typeof cents === "string" ? Number(cents) : cents

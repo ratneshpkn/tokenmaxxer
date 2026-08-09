@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp } from "lucide-react"
 import { TableHead } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 
@@ -18,19 +19,28 @@ export function SortHeader({
 	onClick,
 	className,
 }: SortHeaderProps): React.JSX.Element {
-	const arrow = !active ? "" : dir === "asc" ? " ▲" : " ▼"
 	return (
 		<TableHead
 			onClick={onClick}
 			className={cn(
-				"h-9 px-3 text-[10px] tracked font-medium select-none cursor-pointer",
+				"select-none cursor-pointer group",
 				align === "right" ? "text-right" : "text-left",
-				active ? "text-amber" : "text-fg-dim hover:text-fg",
+				active ? "text-amber" : "hover:text-fg",
 				className,
 			)}
 		>
-			{label}
-			{arrow}
+			<span className="inline-flex items-center gap-1">
+				<span>{label}</span>
+				{active ? (
+					dir === "asc" ? (
+						<ChevronUp className="size-3 text-amber shrink-0" />
+					) : (
+						<ChevronDown className="size-3 text-amber shrink-0" />
+					)
+				) : (
+					<ChevronUp className="size-3 text-fg-subtle group-hover:text-fg-muted opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+				)}
+			</span>
 		</TableHead>
 	)
 }

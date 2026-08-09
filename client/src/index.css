@@ -21,9 +21,8 @@
 
 		/* Text */
 		--fg: oklch(19.13% 0 0);
-		--fg-mid: oklch(46.4% 0 0);
-		--fg-dim: oklch(64.01% 0 0);
-		--fg-very-dim: oklch(78.26% 0 0);
+		--fg-muted: oklch(44% 0 0);
+		--fg-subtle: oklch(58% 0 0);
 
 		/* Accents */
 		--amber: oklch(69.72% 0.186 49.36);
@@ -48,7 +47,7 @@
 		--secondary: oklch(95.51% 0 0);
 		--secondary-foreground: var(--fg);
 		--muted: oklch(97.02% 0 0);
-		--muted-foreground: var(--fg-mid);
+		--muted-foreground: var(--fg-muted);
 		--accent: var(--amber);
 		--accent-foreground: oklch(100% 0 0);
 		--destructive: var(--rose);
@@ -66,7 +65,7 @@
 		/* shadcn Sidebar tokens — aliased to our existing surface/accent tokens
      * so the sidebar matches the rest of the app in both themes. */
 		--sidebar-background: var(--bg-elev);
-		--sidebar-foreground: var(--fg-mid);
+		--sidebar-foreground: var(--fg-muted);
 		--sidebar-primary: var(--amber);
 		--sidebar-primary-foreground: oklch(100% 0 0);
 		--sidebar-accent: var(--bg-elev-2);
@@ -86,10 +85,9 @@
 		--line-strong: oklch(34.07% 0 0);
 
 		/* Text */
-		--fg: oklch(94.03% 0.0029 84.56);
-		--fg-mid: oklch(68.3% 0 0);
-		--fg-dim: oklch(49.26% 0 0);
-		--fg-very-dim: oklch(34.07% 0 0);
+		--fg: oklch(96% 0.0029 84.56);
+		--fg-muted: oklch(74% 0 0);
+		--fg-subtle: oklch(56% 0 0);
 
 		/* Accents */
 		--amber: oklch(74.34% 0.1775 53.98);
@@ -110,7 +108,7 @@
 
 		/* Sidebar tokens in dark — same aliasing pattern. */
 		--sidebar-background: var(--bg);
-		--sidebar-foreground: var(--fg-mid);
+		--sidebar-foreground: var(--fg-muted);
 		--sidebar-primary: var(--amber);
 		--sidebar-primary-foreground: oklch(14.48% 0 0);
 		--sidebar-accent: var(--bg-elev);
@@ -185,7 +183,7 @@
 		background: var(--line-strong);
 	}
 	::-webkit-scrollbar-thumb:hover {
-		background: var(--fg-dim);
+		background: var(--fg-muted);
 	}
 }
 
@@ -203,9 +201,8 @@
 	--color-line: var(--line);
 	--color-line-strong: var(--line-strong);
 	--color-fg: var(--fg);
-	--color-fg-mid: var(--fg-mid);
-	--color-fg-dim: var(--fg-dim);
-	--color-fg-very-dim: var(--fg-very-dim);
+	--color-fg-muted: var(--fg-muted);
+	--color-fg-subtle: var(--fg-subtle);
 	--color-amber: var(--amber);
 	--color-amber-hot: var(--amber-hot);
 	--color-mint: var(--mint);
@@ -364,7 +361,7 @@
 	opacity: 0.5;
 }
 .recharts-text {
-	fill: var(--fg-dim);
+	fill: var(--fg-muted);
 	font-size: 10px;
 	letter-spacing: 0.05em;
 }

@@ -16,13 +16,13 @@ export function SearchInput({
 }: SearchInputProps): React.JSX.Element {
 	return (
 		<div className={`relative flex items-center ${className}`}>
-			<Search className="absolute left-2.5 size-3.5 text-fg-dim pointer-events-none" />
+			<Search className="absolute left-2.5 size-3.5 text-fg-muted pointer-events-none" />
 			<Input
 				type="text"
 				placeholder={placeholder}
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
-				className="pl-8 h-8 text-xs placeholder:text-fg-very-dim"
+				className="pl-8 h-8 text-xs placeholder:text-fg-subtle"
 			/>
 		</div>
 	)

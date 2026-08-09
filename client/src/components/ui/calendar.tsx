@@ -18,21 +18,20 @@ export function Calendar({
 			classNames={{
 				months: "flex flex-col sm:flex-row gap-4 relative",
 				month: "space-y-3",
-				month_caption:
-					"flex justify-center items-center h-7 text-[11px] tracked font-medium relative",
+				month_caption: "flex justify-center items-center h-7 text-xs tracked font-medium relative",
 				caption_label: "text-fg font-medium text-xs",
 				nav: "flex items-center justify-between w-full absolute top-0 inset-x-0 h-7 z-10 pointer-events-none",
 				button_previous: cn(
-					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-mid bg-bg cursor-pointer",
+					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-muted bg-bg cursor-pointer",
 					"hover:border-amber hover:text-amber transition-colors pointer-events-auto",
 				),
 				button_next: cn(
-					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-mid bg-bg cursor-pointer",
+					"h-6 w-6 inline-flex items-center justify-center border border-line text-fg-muted bg-bg cursor-pointer",
 					"hover:border-amber hover:text-amber transition-colors pointer-events-auto",
 				),
 				month_grid: "w-full border-collapse",
 				weekdays: "flex",
-				weekday: "text-fg-very-dim w-8 text-[9px] tracked font-normal text-center py-1",
+				weekday: "text-fg-subtle w-8 text-[9px] tracked font-normal text-center py-1",
 				week: "flex w-full mt-1",
 				day: cn(
 					"relative h-8 w-8 text-center p-0",
@@ -40,7 +39,7 @@ export function Calendar({
 					"[&:has([aria-selected].day-range-end)]:bg-amber/20",
 				),
 				day_button: cn(
-					"h-8 w-8 inline-flex items-center justify-center font-mono text-[11px] tabular",
+					"h-8 w-8 inline-flex items-center justify-center font-mono text-xs tabular",
 					"hover:bg-amber/20 hover:text-fg transition-colors outline-none",
 					"aria-selected:bg-amber aria-selected:text-black",
 					"focus-visible:ring-1 focus-visible:ring-amber",
@@ -50,8 +49,8 @@ export function Calendar({
 				range_middle: "aria-selected:bg-amber/20 aria-selected:text-fg",
 				selected: "bg-amber text-black hover:bg-amber",
 				today: "border border-line-strong",
-				outside: "text-fg-very-dim",
-				disabled: "text-fg-very-dim opacity-40 pointer-events-none",
+				outside: "text-fg-subtle",
+				disabled: "text-fg-subtle opacity-40 pointer-events-none",
 				...classNames,
 			}}
 			components={{

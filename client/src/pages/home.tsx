@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "wouter"
 import { Button } from "@/components/ui/button"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 
 export function HomePage(): React.JSX.Element {
@@ -25,25 +26,29 @@ export function HomePage(): React.JSX.Element {
 			</div>
 
 			<header className="relative px-8 pt-6 flex items-center justify-between">
-				<div className="text-[10px] tracked text-fg-dim">/ TOKENMAXXER · v0.1</div>
+				<Typography variant="label">/ TOKENMAXXER · v0.1</Typography>
 				<a
 					href="https://github.com/instawork/tokenmaxxer"
 					target="_blank"
 					rel="noreferrer"
-					className="text-[10px] tracked text-fg-dim hover:text-amber"
+					className="hover:text-amber"
 				>
-					★ GITHUB ↗
+					<Typography variant="label">★ GITHUB ↗</Typography>
 				</a>
 			</header>
 
 			<main className="relative flex-1 px-8 py-12 max-w-5xl mx-auto w-full">
 				<div className="mb-16">
-					<div className="font-display text-7xl md:text-8xl leading-[0.9] text-fg">token</div>
-					<div className="font-display text-7xl md:text-8xl leading-[0.9] text-amber">maxxer.</div>
-					<p className="mt-6 text-fg-mid leading-relaxed max-w-xl text-sm">
+					<Typography variant="hero" as="div">
+						token
+					</Typography>
+					<Typography variant="hero" as="div" className="text-amber">
+						maxxer.
+					</Typography>
+					<Typography variant="muted" as="p" className="mt-6 max-w-xl">
 						Per-engineer spend dashboard for Claude Code and Cursor Teams. Self-hosted. Open source.
 						No <code>.env</code> required.
-					</p>
+					</Typography>
 					<div className="mt-8 flex items-center gap-3">
 						<Link href={primaryHref}>
 							<Button>{primaryLabel}</Button>
@@ -57,7 +62,9 @@ export function HomePage(): React.JSX.Element {
 				</div>
 
 				<div className="mb-16">
-					<div className="text-[10px] tracked text-fg-dim mb-6">/ HOW IT WORKS</div>
+					<Typography variant="label" as="div" className="mb-6">
+						/ HOW IT WORKS
+					</Typography>
 					<div className="grid grid-cols-1 md:grid-cols-3 gap-px bg-line/60 border border-line">
 						{[
 							{
@@ -77,11 +84,15 @@ export function HomePage(): React.JSX.Element {
 							},
 						].map((step) => (
 							<div key={step.n} className="bg-bg p-6">
-								<div className="font-display text-3xl tabular text-fg-very-dim leading-none">
+								<Typography variant="metric-md" as="div" className="text-fg-subtle">
 									{step.n}
-								</div>
-								<div className="mt-3 text-[11px] tracked text-fg">{step.title.toUpperCase()}</div>
-								<p className="mt-2 text-xs text-fg-mid leading-relaxed">{step.body}</p>
+								</Typography>
+								<Typography variant="section-title" as="div" className="mt-3">
+									{step.title.toUpperCase()}
+								</Typography>
+								<Typography variant="subtle" as="p" className="mt-2">
+									{step.body}
+								</Typography>
 							</div>
 						))}
 					</div>
@@ -94,7 +105,7 @@ export function HomePage(): React.JSX.Element {
 						className="w-full h-auto block"
 						onError={(e) => {
 							;(e.currentTarget.parentElement as HTMLDivElement).innerHTML =
-								'<div class="px-8 py-16 text-center text-fg-dim text-xs tracked">DASHBOARD PREVIEW · screenshot pending</div>'
+								'<div class="px-8 py-16 text-center text-fg-muted text-xs tracked">DASHBOARD PREVIEW · screenshot pending</div>'
 						}}
 					/>
 				</div>
@@ -104,15 +115,15 @@ export function HomePage(): React.JSX.Element {
 						href="https://github.com/instawork/tokenmaxxer"
 						target="_blank"
 						rel="noreferrer"
-						className="text-[10px] tracked text-fg-dim hover:text-amber"
+						className="hover:text-amber"
 					>
-						VIEW ON GITHUB →
+						<Typography variant="label">VIEW ON GITHUB →</Typography>
 					</a>
 				</div>
 			</main>
 
 			<footer className="relative px-8 py-6 border-t border-line">
-				<div className="text-[9px] tracked text-fg-very-dim">
+				<div className="text-[9px] tracked text-fg-subtle">
 					{orgName.toUpperCase()} · TOKENMAXXER
 				</div>
 			</footer>

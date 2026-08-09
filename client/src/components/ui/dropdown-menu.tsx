@@ -1,6 +1,7 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
 import { Check } from "lucide-react"
 import { forwardRef } from "react"
+import { typographyVariants } from "@/components/ui/typography"
 import { cn } from "@/lib/utils"
 
 export const DropdownMenu = DropdownMenuPrimitive.Root
@@ -35,7 +36,7 @@ export const DropdownMenuItem = forwardRef<
 	<DropdownMenuPrimitive.Item
 		ref={ref}
 		className={cn(
-			"relative flex cursor-pointer select-none items-center px-2.5 py-1.5 text-[11px] tracked outline-none transition-colors",
+			"relative flex cursor-pointer select-none items-center px-2.5 py-1.5 text-xs tracked outline-none transition-colors",
 			"data-[highlighted]:bg-amber/10 data-[highlighted]:text-fg",
 			"data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
 			inset && "pl-8",
@@ -52,7 +53,12 @@ export const DropdownMenuLabel = forwardRef<
 >(({ className, inset, ...props }, ref) => (
 	<DropdownMenuPrimitive.Label
 		ref={ref}
-		className={cn("px-2.5 py-1.5 text-[10px] tracked text-fg-very-dim", inset && "pl-8", className)}
+		className={cn(
+			"px-2.5 py-1.5",
+			typographyVariants({ variant: "label" }),
+			inset && "pl-8",
+			className,
+		)}
 		{...props}
 	/>
 ))
@@ -77,7 +83,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
 	<DropdownMenuPrimitive.CheckboxItem
 		ref={ref}
 		className={cn(
-			"relative flex cursor-pointer select-none items-center py-1.5 pl-8 pr-2 text-[11px] tracked outline-none transition-colors",
+			"relative flex cursor-pointer select-none items-center py-1.5 pl-8 pr-2 text-xs tracked outline-none transition-colors",
 			"data-[highlighted]:bg-amber/10 data-[highlighted]:text-fg",
 			"data-[disabled]:pointer-events-none data-[disabled]:opacity-40",
 			className,
