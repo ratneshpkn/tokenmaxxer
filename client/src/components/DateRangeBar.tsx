@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Typography } from "@/components/ui/typography"
 import { daysBetween, type Preset } from "@/lib/date-range"
 import { useDateRange } from "@/lib/use-date-range"
 
@@ -88,7 +89,7 @@ export function DateRangeBar({ updatedAt }: DateRangeBarProps): React.JSX.Elemen
 	today.setHours(23, 59, 59, 999)
 
 	return (
-		<div className="space-y-2">
+		<div className="flex flex-col gap-2">
 			<div className="flex items-center gap-2 flex-wrap">
 				<Tabs value={isCustom ? "" : preset} onValueChange={(v) => v && setPreset(v as Preset)}>
 					<TabsList>
@@ -133,20 +134,19 @@ export function DateRangeBar({ updatedAt }: DateRangeBarProps): React.JSX.Elemen
 				</Popover>
 			</div>
 
-			<div className="flex items-center justify-between text-[10px] tracked text-fg-dim">
+			<Typography variant="label" className="flex items-center gap-2 flex-wrap">
+				<span className="text-fg">{formatLabelDate(from).toUpperCase()}</span>
+				<span className="text-fg-subtle">→</span>
+				<span className="text-fg">{formatLabelDate(to).toUpperCase()}</span>
+				<span className="text-fg-subtle">·</span>
 				<span>
-					<span className="text-fg">{formatLabelDate(from).toUpperCase()}</span>
-					<span className="mx-2 text-fg-very-dim">→</span>
-					<span className="text-fg">{formatLabelDate(to).toUpperCase()}</span>
-					<span className="mx-2 text-fg-very-dim">·</span>
-					<span>
-						{days} DAY{days === 1 ? "" : "S"}
-					</span>
-					<span className="mx-2 text-fg-very-dim">·</span>
-					<span className="text-fg-very-dim">PT</span>
+					{days} DAY{days === 1 ? "" : "S"}
 				</span>
-				{updatedAt ? <span>AS OF {formatTime(updatedAt)} PT</span> : null}
-			</div>
+				<span className="text-fg-subtle">·</span>
+				<span className="text-fg-subtle">
+					{updatedAt ? `AS OF ${formatTime(updatedAt)} PT` : "PT"}
+				</span>
+			</Typography>
 		</div>
 	)
 }

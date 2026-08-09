@@ -4,6 +4,7 @@ import {
 	type TdHTMLAttributes,
 	type ThHTMLAttributes,
 } from "react"
+import { typographyVariants } from "@/components/ui/typography"
 import { cn } from "@/lib/utils"
 
 export const Table = forwardRef<HTMLTableElement, HTMLAttributes<HTMLTableElement>>(
@@ -11,7 +12,7 @@ export const Table = forwardRef<HTMLTableElement, HTMLAttributes<HTMLTableElemen
 		<div className="relative w-full overflow-auto">
 			<table
 				ref={ref}
-				className={cn("w-full caption-bottom text-xs tabular", className)}
+				className={cn("w-full caption-bottom text-sm tabular", className)}
 				{...props}
 			/>
 		</div>
@@ -49,7 +50,8 @@ export const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLT
 		<th
 			ref={ref}
 			className={cn(
-				"h-8 px-3 text-left align-middle text-[10px] tracked text-fg-dim font-medium select-none",
+				"h-9 px-3 text-left align-middle select-none",
+				typographyVariants({ variant: "th" }),
 				className,
 			)}
 			{...props}
@@ -60,7 +62,7 @@ TableHead.displayName = "TableHead"
 
 export const TableCell = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLTableCellElement>>(
 	({ className, ...props }, ref) => (
-		<td ref={ref} className={cn("px-3 py-2 align-middle", className)} {...props} />
+		<td ref={ref} className={cn("px-3 py-2.5 align-middle", className)} {...props} />
 	),
 )
 TableCell.displayName = "TableCell"

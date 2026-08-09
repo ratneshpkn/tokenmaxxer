@@ -97,16 +97,16 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 						</div>
 						<div className="flex-1 min-w-0 text-xs">
 							{t.title && <div className="font-semibold mb-0.5 leading-tight">{t.title}</div>}
-							<div className="text-fg-mid whitespace-pre-wrap break-words leading-normal">
+							<div className="text-fg-muted whitespace-pre-wrap break-words leading-normal">
 								{t.description}
 							</div>
 						</div>
 						<button
 							type="button"
 							onClick={() => dismiss(t.id)}
-							className="shrink-0 text-fg-dim hover:text-fg transition-colors p-0.5 rounded outline-none"
+							className="shrink-0 text-fg-muted hover:text-fg transition-colors p-0.5 rounded outline-none"
 						>
-							<X className="h-3.5 w-3.5" />
+							<X className="size-3.5" />
 							<span className="sr-only">Close</span>
 						</button>
 					</div>

@@ -1,4 +1,5 @@
 import { Cost } from "@/components/Cost"
+import { typographyVariants } from "@/components/ui/typography"
 import { useMetricMode } from "@/lib/use-metric-mode"
 import { cn, formatCompact } from "@/lib/utils"
 
@@ -32,18 +33,25 @@ export function MetricPair({
 	const [mode] = useMetricMode()
 	const tokenStr = `${formatCompact(Number(tokens ?? 0))} tok`
 
+	const primaryClasses = cn(typographyVariants({ variant: "mono" }), primaryClassName)
+	const secondaryClasses = cn(
+		"block",
+		typographyVariants({ variant: "subtle" }),
+		secondaryClassName,
+	)
+
 	// Viewer: cents is null. Tokens is the only metric, no secondary.
 	if (cents === null || cents === undefined) {
-		return <span className={cn(className, primaryClassName)}>{tokenStr}</span>
+		return <span className={cn(className, primaryClasses)}>{tokenStr}</span>
 	}
 
 	const showCostPrimary = mode === "cost"
 	return (
 		<span className={className}>
-			<span className={primaryClassName}>
+			<span className={primaryClasses}>
 				{showCostPrimary ? <Cost cents={cents} digits={digits} /> : tokenStr}
 			</span>
-			<span className={cn("block", secondaryClassName)}>
+			<span className={secondaryClasses}>
 				{showCostPrimary ? tokenStr : <Cost cents={cents} digits={digits} />}
 			</span>
 		</span>

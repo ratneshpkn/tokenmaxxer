@@ -11,7 +11,7 @@ export const TabsList = forwardRef<
 	<TabsPrimitive.List
 		ref={ref}
 		className={cn(
-			"inline-flex items-center border border-line bg-transparent text-fg-dim",
+			"inline-flex items-center border border-line bg-transparent text-fg-muted",
 			className,
 		)}
 		{...props}
@@ -26,7 +26,7 @@ export const TabsTrigger = forwardRef<
 	<TabsPrimitive.Trigger
 		ref={ref}
 		className={cn(
-			"px-2.5 py-1 text-[10px] tracked font-medium border-r border-line last:border-r-0 transition-colors",
+			"px-2.5 py-1 text-xs tracked font-medium border-r border-line last:border-r-0 transition-colors",
 			"focus-visible:outline-none focus-visible:bg-amber/10 focus-visible:text-fg",
 			"hover:text-fg",
 			"data-[state=active]:bg-amber data-[state=active]:text-black",

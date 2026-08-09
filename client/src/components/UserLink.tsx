@@ -1,4 +1,5 @@
 import { Link } from "wouter"
+import { Typography } from "@/components/ui/typography"
 
 interface UserLinkProps {
 	email: string
@@ -13,11 +14,13 @@ export function UserLink({ email, name, className = "" }: UserLinkProps): React.
 			href={`/users/${encodeURIComponent(email)}`}
 			className={`group inline-flex flex-col min-w-0 ${className}`}
 		>
-			<span className="text-fg group-hover:text-amber font-medium truncate text-xs transition-colors">
+			<span className="text-fg group-hover:text-amber font-medium truncate text-sm transition-colors">
 				{label}
 			</span>
 			{name?.trim() ? (
-				<span className="text-[10px] text-fg-very-dim font-mono truncate">{email}</span>
+				<Typography variant="subtle" className="font-mono truncate">
+					{email}
+				</Typography>
 			) : null}
 		</Link>
 	)

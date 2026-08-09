@@ -24,7 +24,7 @@ export function ModelMixSection({
 	const [metricMode] = useMetricMode()
 
 	if (!modelMix || modelMix.length === 0) {
-		return <div className="px-5 py-6 text-xs text-fg-dim">── no model data in window ──</div>
+		return <div className="px-5 py-6 text-xs text-fg-muted">── no model data in window ──</div>
 	}
 
 	const totalCents = modelMix.reduce((acc, m) => acc + Number(m.cents ?? 0), 0)
@@ -67,25 +67,20 @@ export function ModelMixSection({
 						key={s.model}
 						className="grid grid-cols-12 items-center gap-3 px-5 py-2.5 hover:bg-elev2/40 transition-colors"
 					>
-						<span className="col-span-1 font-display text-2xl tabular text-fg-very-dim leading-none">
-							{String(i + 1).padStart(2, "0")}
+						<span className="col-span-1 font-mono text-xs tabular text-fg-subtle">
+							{String(i + 1).padStart(3, "0")}
 						</span>
-						<span className="col-span-4 text-xs truncate min-w-0">
+						<span className="col-span-4 text-sm truncate min-w-0">
 							<span
 								className="inline-block w-2 h-2 mr-2 align-middle"
 								style={{ background: s.color }}
 							/>
 							<span className="text-fg">{s.model}</span>
 						</span>
-						<span className="col-span-2 text-right text-xs tabular text-fg">
-							<MetricPair
-								cents={isViewer ? null : s.cents}
-								tokens={s.tokens}
-								digits={2}
-								secondaryClassName="text-[10px] text-fg-dim"
-							/>
+						<span className="col-span-2 text-right text-sm tabular text-fg">
+							<MetricPair cents={isViewer ? null : s.cents} tokens={s.tokens} digits={2} />
 						</span>
-						<span className="col-span-1 text-right text-[10px] tabular text-fg-dim">
+						<span className="col-span-1 text-right text-xs tabular text-fg-muted">
 							{s.pct.toFixed(1)}%
 						</span>
 						<div className="col-span-4">
@@ -105,19 +100,14 @@ export function ModelMixSection({
 				))}
 				{tail.length > 0 ? (
 					<li className="grid grid-cols-12 items-center gap-3 px-5 py-2.5">
-						<span className="col-span-1 font-display text-2xl tabular text-fg-very-dim leading-none">
-							{String(topN.length + 1).padStart(2, "0")}
+						<span className="col-span-1 font-mono text-xs tabular text-fg-subtle">
+							{String(topN.length + 1).padStart(3, "0")}
 						</span>
-						<span className="col-span-4 text-xs text-fg-dim">other ({tail.length} models)</span>
-						<span className="col-span-2 text-right text-xs tabular text-fg-dim">
-							<MetricPair
-								cents={isViewer ? null : tailCents}
-								tokens={tailTokens}
-								digits={2}
-								secondaryClassName="text-[10px] text-fg-very-dim"
-							/>
+						<span className="col-span-4 text-sm text-fg-muted">other ({tail.length} models)</span>
+						<span className="col-span-2 text-right text-sm tabular text-fg-muted">
+							<MetricPair cents={isViewer ? null : tailCents} tokens={tailTokens} digits={2} />
 						</span>
-						<span className="col-span-1 text-right text-[10px] tabular text-fg-dim">
+						<span className="col-span-1 text-right text-xs tabular text-fg-muted">
 							{tailPct.toFixed(1)}%
 						</span>
 						<div className="col-span-4" />

@@ -1,5 +1,6 @@
 import * as LabelPrimitive from "@radix-ui/react-label"
 import { forwardRef } from "react"
+import { typographyVariants } from "@/components/ui/typography"
 import { cn } from "@/lib/utils"
 
 export const Label = forwardRef<
@@ -9,7 +10,8 @@ export const Label = forwardRef<
 	<LabelPrimitive.Root
 		ref={ref}
 		className={cn(
-			"text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+			typographyVariants({ variant: "label" }),
+			"leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
 			className,
 		)}
 		{...props}

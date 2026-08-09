@@ -4,6 +4,7 @@ import { useLocation } from "wouter"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 
 type ValidationState = "idle" | "checking" | "ok" | "bad"
@@ -60,7 +61,7 @@ function useDebouncedValidation(
 function StatusPip({ state }: { state: ValidationState }): React.JSX.Element | null {
 	if (state === "idle") return null
 	if (state === "checking")
-		return <span className="text-[10px] tracked text-fg-dim">⏳ CHECKING…</span>
+		return <span className="text-[10px] tracked text-fg-muted">⏳ CHECKING…</span>
 	if (state === "ok") return <span className="text-[10px] tracked text-mint">✓ VALID</span>
 	return <span className="text-[10px] tracked text-amber-hot">✗ INVALID</span>
 }
@@ -190,23 +191,25 @@ export function SetupPage(): React.JSX.Element {
 	return (
 		<div className="min-h-screen bg-bg text-fg font-mono">
 			<div className="max-w-3xl mx-auto px-8 py-12">
-				<div className="text-[10px] tracked text-fg-dim mb-2">/ TOKENMAXXER · SETUP</div>
-				<h1 className="font-display text-6xl text-fg leading-none tracking-tight">
+				<Typography variant="label" as="div" className="mb-2">
+					/ TOKENMAXXER · SETUP
+				</Typography>
+				<Typography variant="hero" as="h1" className="text-6xl">
 					First-time setup.
-				</h1>
-				<p className="text-xs text-fg-mid mt-2">
+				</Typography>
+				<Typography variant="subtle" as="p" className="mt-2">
 					One-time configuration. You can edit any of this later in Settings.
-				</p>
+				</Typography>
 
 				{phase === "form" ? (
 					<form onSubmit={handleSubmit} className="mt-10 space-y-10">
 						<section>
-							<div className="text-[10px] tracked text-amber mb-3">/ 01 · ORGANIZATION</div>
+							<Typography variant="label" as="div" className="text-amber mb-3">
+								/ 01 · ORGANIZATION
+							</Typography>
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div>
-									<Label htmlFor="orgName" className="text-[10px] tracked text-fg-dim">
-										ORG NAME
-									</Label>
+									<Label htmlFor="orgName">ORG NAME</Label>
 									<Input
 										id="orgName"
 										value={orgName}
@@ -217,7 +220,7 @@ export function SetupPage(): React.JSX.Element {
 									/>
 								</div>
 								<div>
-									<Label htmlFor="domain" className="text-[10px] tracked text-fg-dim">
+									<Label htmlFor="domain" className="text-[10px] tracked text-fg-muted">
 										ALLOWED EMAIL DOMAIN (OPTIONAL)
 									</Label>
 									<Input
@@ -229,7 +232,7 @@ export function SetupPage(): React.JSX.Element {
 									/>
 								</div>
 							</div>
-							<label className="mt-3 flex items-center gap-2 text-[11px] text-fg-mid">
+							<label className="mt-3 flex items-center gap-2 text-[11px] text-fg-muted">
 								<input
 									type="checkbox"
 									checked={openSignup}
@@ -247,7 +250,7 @@ export function SetupPage(): React.JSX.Element {
 							<div className="space-y-4">
 								<div>
 									<div className="flex items-center justify-between mb-1">
-										<Label htmlFor="anthropic" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="anthropic" className="text-[10px] tracked text-fg-muted">
 											ANTHROPIC ADMIN API KEY
 										</Label>
 										<StatusPip state={anthropicVal.state} />
@@ -266,7 +269,7 @@ export function SetupPage(): React.JSX.Element {
 								</div>
 								<div>
 									<div className="flex items-center justify-between mb-1">
-										<Label htmlFor="cursor" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="cursor" className="text-[10px] tracked text-fg-muted">
 											CURSOR ADMIN API KEY
 										</Label>
 										<StatusPip state={cursorVal.state} />
@@ -293,7 +296,7 @@ export function SetupPage(): React.JSX.Element {
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div className="md:col-span-2">
 									<div className="flex items-center justify-between mb-1">
-										<Label htmlFor="githubToken" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="githubToken" className="text-[10px] tracked text-fg-muted">
 											GITHUB PERSONAL ACCESS TOKEN
 										</Label>
 										<StatusPip state={githubVal.state} />
@@ -310,7 +313,7 @@ export function SetupPage(): React.JSX.Element {
 									) : null}
 								</div>
 								<div className="md:col-span-2">
-									<Label htmlFor="githubOrg" className="text-[10px] tracked text-fg-dim">
+									<Label htmlFor="githubOrg" className="text-[10px] tracked text-fg-muted">
 										GITHUB ORGANIZATION NAME
 									</Label>
 									<Input
@@ -330,7 +333,7 @@ export function SetupPage(): React.JSX.Element {
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div className="md:col-span-2">
 									<div className="flex items-center justify-between mb-1">
-										<Label htmlFor="slackToken" className="text-[10px] tracked text-fg-dim">
+										<Label htmlFor="slackToken" className="text-[10px] tracked text-fg-muted">
 											SLACK BOT TOKEN
 										</Label>
 										<StatusPip state={slackVal.state} />
@@ -344,7 +347,7 @@ export function SetupPage(): React.JSX.Element {
 									/>
 								</div>
 								<div>
-									<Label htmlFor="slackChannel" className="text-[10px] tracked text-fg-dim">
+									<Label htmlFor="slackChannel" className="text-[10px] tracked text-fg-muted">
 										SLACK CHANNEL ID
 									</Label>
 									<Input
@@ -357,7 +360,7 @@ export function SetupPage(): React.JSX.Element {
 								</div>
 								<div className="grid grid-cols-2 gap-2">
 									<div>
-										<Label className="text-[10px] tracked text-fg-dim">CC ALERT $/DAY</Label>
+										<Label className="text-[10px] tracked text-fg-muted">CC ALERT $/DAY</Label>
 										<Input
 											type="number"
 											value={ccThreshold}
@@ -366,7 +369,7 @@ export function SetupPage(): React.JSX.Element {
 										/>
 									</div>
 									<div>
-										<Label className="text-[10px] tracked text-fg-dim">CU ALERT $/DAY</Label>
+										<Label className="text-[10px] tracked text-fg-muted">CU ALERT $/DAY</Label>
 										<Input
 											type="number"
 											value={cuThreshold}
@@ -401,7 +404,7 @@ function SyncProgress({
 }): React.JSX.Element {
 	function pillFor(job: string) {
 		const r = runs.find((x) => x.job === job)
-		if (!r) return <span className="text-[10px] tracked text-fg-dim">⏳ STARTING…</span>
+		if (!r) return <span className="text-[10px] tracked text-fg-muted">⏳ STARTING…</span>
 		if (r.status === "running")
 			return <span className="text-[10px] tracked text-amber">⏳ RUNNING</span>
 		if (r.status === "success")

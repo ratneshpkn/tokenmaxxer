@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import { Cost } from "@/components/Cost"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Typography } from "@/components/ui/typography"
 import { useMetricMode } from "@/lib/use-metric-mode"
 import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { formatCompact } from "@/lib/utils"
@@ -30,30 +31,22 @@ export function FlexCardModal({
 	cuTokens,
 	activeDays,
 	daysInWindow,
-}: FlexCardModalProps) {
+}: FlexCardModalProps): React.JSX.Element {
 	const cardRef = useRef<HTMLDivElement>(null)
 	const [downloading, setDownloading] = useState(false)
-	const [metricMode] = useMetricMode()
 	const [privacyOn] = usePrivacyMode()
+	const [metricMode] = useMetricMode()
 	const showCost = !privacyOn && totalCents !== null
 
 	const handleDownload = async () => {
 		if (!cardRef.current) return
-		setDownloading(true)
 		try {
-			await new Promise((r) => setTimeout(r, 100))
-			const dataUrl = await htmlToImage.toPng(cardRef.current, {
-				quality: 1,
-				pixelRatio: 3,
-				backgroundColor: "#0d0d0d",
-				style: {
-					transform: "none",
-				},
-			})
-			const a = document.createElement("a")
-			a.href = dataUrl
-			a.download = `tokenmaxxer-${userName.replace(/\s+/g, "-").toLowerCase()}-flex.png`
-			a.click()
+			setDownloading(true)
+			const dataUrl = await htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 })
+			const link = document.createElement("a")
+			link.download = `${userName.toLowerCase().replace(/[^a-z0-9]/g, "-")}-tokenmaxxer-stats.png`
+			link.href = dataUrl
+			link.click()
 		} catch (err) {
 			console.error("Failed to generate image", err)
 		} finally {
@@ -63,13 +56,12 @@ export function FlexCardModal({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="max-w-xl p-0 overflow-hidden bg-bg border-line">
-				<DialogHeader className="p-4 border-b border-line bg-elev2/40">
-					<DialogTitle className="text-sm font-mono tracking-tight">Share Your Stats</DialogTitle>
+			<DialogContent className="sm:max-w-[540px] p-0 bg-bg border-line overflow-hidden">
+				<DialogHeader className="sr-only">
+					<DialogTitle>Shareable Stats Card</DialogTitle>
 				</DialogHeader>
 
-				<div className="p-8 bg-elev flex items-center justify-center">
-					{/* The actual flex card that gets screenshotted */}
+				<div className="p-6 overflow-x-auto flex justify-center bg-bg/50">
 					<div
 						ref={cardRef}
 						className="w-full max-w-[480px] bg-bg border border-line flex flex-col relative overflow-hidden"
@@ -81,22 +73,22 @@ export function FlexCardModal({
 							<div className="flex justify-between items-start">
 								<div>
 									<h2 className="font-display text-4xl tracking-tight text-fg">{userName}</h2>
-									<div className="text-[10px] tracked text-fg-dim mt-1 uppercase">
+									<Typography variant="label" as="div" className="mt-1">
 										Tokenmaxxer Profile · {daysInWindow}D Window
-									</div>
+									</Typography>
 								</div>
-								<div className="text-[10px] tracked text-fg-very-dim uppercase flex items-center gap-1.5 mt-5">
+								<Typography variant="th" as="div" className="flex items-center gap-1.5 mt-5">
 									<span className="w-1.5 h-1.5 bg-amber inline-block" />
 									<span className="w-1.5 h-1.5 bg-sky inline-block" />
-								</div>
+								</Typography>
 							</div>
 
 							<div className="grid grid-cols-2 gap-px bg-line/60 border border-line">
 								{!showCost ? (
 									<div className="bg-bg p-4 flex flex-col justify-center col-span-2">
-										<div className="text-[10px] tracked text-fg-dim mb-2 uppercase">
+										<Typography variant="label" as="div" className="mb-2">
 											Total Tokens
-										</div>
+										</Typography>
 										<div className="font-display text-4xl text-fg leading-none tracking-tight tabular">
 											{formatCompact(totalTokens)}
 										</div>
@@ -104,9 +96,9 @@ export function FlexCardModal({
 								) : metricMode === "cost" ? (
 									<>
 										<div className="bg-bg p-4 flex flex-col justify-center">
-											<div className="text-[10px] tracked text-fg-dim mb-2 uppercase">
+											<Typography variant="label" as="div" className="mb-2">
 												Total Cost
-											</div>
+											</Typography>
 											<Cost
 												cents={totalCents}
 												digits={2}
@@ -114,9 +106,9 @@ export function FlexCardModal({
 											/>
 										</div>
 										<div className="bg-bg p-4 flex flex-col justify-center">
-											<div className="text-[10px] tracked text-fg-dim mb-2 uppercase">
+											<Typography variant="label" as="div" className="mb-2">
 												Total Tokens
-											</div>
+											</Typography>
 											<div className="font-mono text-3xl text-fg leading-none tabular">
 												{formatCompact(totalTokens)}
 											</div>
@@ -125,17 +117,17 @@ export function FlexCardModal({
 								) : (
 									<>
 										<div className="bg-bg p-4 flex flex-col justify-center">
-											<div className="text-[10px] tracked text-fg-dim mb-2 uppercase">
+											<Typography variant="label" as="div" className="mb-2">
 												Total Tokens
-											</div>
+											</Typography>
 											<div className="font-display text-4xl text-fg leading-none tracking-tight tabular">
 												{formatCompact(totalTokens)}
 											</div>
 										</div>
 										<div className="bg-bg p-4 flex flex-col justify-center">
-											<div className="text-[10px] tracked text-fg-dim mb-2 uppercase">
+											<Typography variant="label" as="div" className="mb-2">
 												Total Cost
-											</div>
+											</Typography>
 											<Cost
 												cents={totalCents}
 												digits={2}
@@ -146,28 +138,28 @@ export function FlexCardModal({
 								)}
 
 								<div className="bg-bg p-4 flex flex-col justify-center col-span-2">
-									<div className="text-[10px] tracked text-fg-dim mb-2 uppercase">
+									<Typography variant="label" as="div" className="mb-2">
 										Platform Split
-									</div>
+									</Typography>
 									<div className="flex items-center gap-6">
 										<div className="flex items-center gap-2">
 											<span className="w-1.5 h-1.5 bg-amber inline-block shrink-0 translate-y-[1px]" />
 											<span className="font-mono text-sm text-fg">{formatCompact(ccTokens)}</span>
-											<span className="text-[10px] text-fg-dim">CLAUDE CODE</span>
+											<Typography variant="label">CLAUDE CODE</Typography>
 										</div>
 										<div className="flex items-center gap-2">
 											<span className="w-1.5 h-1.5 bg-sky inline-block shrink-0 translate-y-[1px]" />
 											<span className="font-mono text-sm text-fg">{formatCompact(cuTokens)}</span>
-											<span className="text-[10px] text-fg-dim">CURSOR</span>
+											<Typography variant="label">CURSOR</Typography>
 										</div>
 									</div>
 								</div>
 							</div>
 
 							<div className="flex items-center justify-between mt-2">
-								<div className="text-[10px] tracked text-fg-dim">
+								<Typography variant="label" as="div">
 									<span className="text-fg">{activeDays}</span> ACTIVE DAYS
-								</div>
+								</Typography>
 								<div className="font-display text-lg tracking-tight text-fg text-right opacity-90 italic">
 									"Are you even tokenmaxxing?"
 								</div>
@@ -183,9 +175,9 @@ export function FlexCardModal({
 						className="bg-fg text-bg hover:bg-fg/90"
 					>
 						{downloading ? (
-							<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+							<Loader2 className="size-4 animate-spin" data-icon="inline-start" />
 						) : (
-							<Download className="mr-2 h-4 w-4" />
+							<Download className="size-4" data-icon="inline-start" />
 						)}
 						Download as Image
 					</Button>

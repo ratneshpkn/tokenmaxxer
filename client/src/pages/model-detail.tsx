@@ -31,6 +31,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
@@ -187,7 +188,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 	return (
 		<div className="space-y-6 fade-rise">
 			<div className="flex items-center justify-between">
-				<div className="flex items-center gap-3 text-[10px] tracked text-fg-dim">
+				<Typography variant="label" as="div" className="flex items-center gap-3">
 					<Link href="/models" className="hover:text-amber">
 						◀ MODELS
 					</Link>
@@ -207,13 +208,13 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 						)}
 						{model}
 					</span>
-				</div>
+				</Typography>
 			</div>
 
 			{profile?.raw_models && profile.raw_models.length > 0 && (
 				<div className="flex flex-wrap gap-1.5">
 					{profile.raw_models.map((rm) => (
-						<Badge key={rm} variant="secondary" className="font-mono text-[10px]">
+						<Badge key={rm} variant="secondary" className="font-mono text-xs">
 							{rm}
 						</Badge>
 					))}
@@ -225,33 +226,35 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 			{/* Headline strip */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">
 				<div className="col-span-12 md:col-span-4 bg-bg p-6">
-					<div className="text-[10px] tracked text-fg-dim mb-3">MODEL · {winLabel} TOTAL</div>
+					<Typography variant="label" as="div" className="mb-3">
+						MODEL · {winLabel} TOTAL
+					</Typography>
 					<MetricPair
 						cents={isViewer ? null : (profile?.total_cents ?? 0)}
 						tokens={profile?.total_tokens ?? 0}
 						digits={2}
-						primaryClassName="font-display text-[72px] leading-none tracking-tight text-fg"
-						secondaryClassName="mt-3 text-[11px] tracked text-fg-mid"
+						primaryClassName="font-display text-4xl sm:text-5xl md:text-[72px] leading-none tracking-tight text-fg"
+						secondaryClassName="mt-3"
 					/>
-					<div className="mt-2 text-[11px] tracked text-fg-mid flex items-center gap-3">
+					<div className="mt-2 flex items-center gap-3">
 						<span className="text-mint">●</span>
-						<span>{profile?.active_users ?? 0} ACTIVE USERS</span>
+						<Typography variant="label">{profile?.active_users ?? 0} ACTIVE USERS</Typography>
 					</div>
 				</div>
 
 				<div
 					className={`col-span-6 md:col-span-4 bg-bg p-6 flex flex-col justify-between ${platformFilter === "cursor" ? "opacity-50" : ""}`}
 				>
-					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-amber" /> CLAUDE CODE
-					</div>
+					</Typography>
 					<div>
 						<MetricPair
 							cents={isViewer ? null : (profile?.cc_cents ?? 0)}
 							tokens={profile?.cc_tokens ?? 0}
 							digits={2}
 							primaryClassName="font-mono text-3xl tabular text-fg leading-none"
-							secondaryClassName="text-[10px] tracked text-fg-dim mt-2"
+							secondaryClassName="mt-2"
 						/>
 					</div>
 				</div>
@@ -259,16 +262,16 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 				<div
 					className={`col-span-6 md:col-span-4 bg-bg p-6 flex flex-col justify-between ${platformFilter === "claude_code" ? "opacity-50" : ""}`}
 				>
-					<div className="text-[10px] tracked text-fg-dim flex items-center gap-2">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-sky" /> CURSOR
-					</div>
+					</Typography>
 					<div>
 						<MetricPair
 							cents={isViewer ? null : (profile?.cu_cents ?? 0)}
 							tokens={profile?.cu_tokens ?? 0}
 							digits={2}
 							primaryClassName="font-mono text-3xl tabular text-fg leading-none"
-							secondaryClassName="text-[10px] tracked text-fg-dim mt-2"
+							secondaryClassName="mt-2"
 						/>
 					</div>
 				</div>
@@ -288,7 +291,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 					}}
 				>
 					{chartData.length === 0 ? (
-						<div className="h-full flex items-center justify-center text-xs text-fg-dim">
+						<div className="h-full flex items-center justify-center text-xs text-fg-muted">
 							── no trend data ──
 						</div>
 					) : (
@@ -300,12 +303,12 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 										dataKey="date"
 										axisLine={false}
 										tickLine={false}
-										tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+										tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 									/>
 									<YAxis
 										axisLine={false}
 										tickLine={false}
-										tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+										tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 										tickFormatter={(v: number) =>
 											trendMode === "cost" ? `$${Math.round(v / 100)}` : formatCompact(v)
 										}
@@ -342,12 +345,12 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 										dataKey="date"
 										axisLine={false}
 										tickLine={false}
-										tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+										tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 									/>
 									<YAxis
 										axisLine={false}
 										tickLine={false}
-										tick={{ fill: "var(--fg-dim)", fontSize: 10 }}
+										tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
 										tickFormatter={(v: number) =>
 											trendMode === "cost" ? `$${Math.round(v / 100)}` : formatCompact(v)
 										}
@@ -404,9 +407,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
-							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
-								#
-							</TableHead>
+							<TableHead className="w-14 text-right">#</TableHead>
 							<SortHeader
 								label="USER"
 								active={sortKey === "email"}
@@ -414,7 +415,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 								onClick={() => toggle("email")}
 							/>
 							<SortHeader
-								label={`VALUE · ${winLabel}`}
+								label="VALUE"
 								active={sortKey === "cents" || sortKey === "tokens"}
 								dir={sortDir}
 								onClick={() => toggle(trendMode === "cost" ? "cents" : "tokens")}
@@ -427,9 +428,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 								onClick={() => toggle("share")}
 								align="right"
 							/>
-							<TableHead className="h-9 px-3 w-[140px] text-[10px] tracked text-fg-dim text-left">
-								TREND · {winLabel}
-							</TableHead>
+							<TableHead className="w-[140px]">TREND</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -443,21 +442,16 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 							rows.map((u, i) => {
 								return (
 									<TableRow key={u.email}>
-										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+										<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<UserLink email={u.email} name={u.name} />
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right text-fg">
-											<MetricPair
-												cents={isViewer ? null : u.cents}
-												tokens={u.tokens}
-												digits={2}
-												secondaryClassName="text-[10px] text-fg-dim"
-											/>
+											<MetricPair cents={isViewer ? null : u.cents} tokens={u.tokens} digits={2} />
 										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg-dim text-[11px]">
+										<TableCell className="px-3 py-2.5 text-right text-fg-muted text-xs">
 											{Number(u.share_pct).toFixed(1)}%
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
@@ -469,7 +463,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 															? (u.trend_cents ?? u.trend_tokens)
 															: u.trend_tokens
 												}
-												color="var(--fg-mid)"
+												color="var(--fg-muted)"
 												height={22}
 											/>
 										</TableCell>
@@ -491,9 +485,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
-							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
-								#
-							</TableHead>
+							<TableHead className="w-14 text-right">#</TableHead>
 							<SortHeader
 								label="RAW MODEL"
 								active={rawSortKey === "raw_model"}
@@ -501,7 +493,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 								onClick={() => toggleRawSort("raw_model")}
 							/>
 							<SortHeader
-								label={`VALUE · ${winLabel}`}
+								label="VALUE"
 								active={rawSortKey === "cents" || rawSortKey === "tokens"}
 								dir={rawSortDir}
 								onClick={() => toggleRawSort(trendMode === "cost" ? "cents" : "tokens")}
@@ -514,9 +506,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 								onClick={() => toggleRawSort("share")}
 								align="right"
 							/>
-							<TableHead className="h-9 px-3 w-[140px] text-[10px] tracked text-fg-dim text-left">
-								TREND · {winLabel}
-							</TableHead>
+							<TableHead className="w-[140px]">TREND</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -530,7 +520,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 							rawModelRows.map((u, i) => {
 								return (
 									<TableRow key={u.raw_model}>
-										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+										<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
@@ -539,14 +529,9 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 											</div>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right text-fg">
-											<MetricPair
-												cents={isViewer ? null : u.cents}
-												tokens={u.tokens}
-												digits={2}
-												secondaryClassName="text-[10px] text-fg-dim"
-											/>
+											<MetricPair cents={isViewer ? null : u.cents} tokens={u.tokens} digits={2} />
 										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg-dim text-[11px]">
+										<TableCell className="px-3 py-2.5 text-right text-fg-muted text-xs">
 											{Number(u.share_pct).toFixed(1)}%
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
@@ -558,7 +543,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 															? (u.trend_cents ?? u.trend_tokens)
 															: u.trend_tokens
 												}
-												color="var(--fg-mid)"
+												color="var(--fg-muted)"
 												height={22}
 											/>
 										</TableCell>

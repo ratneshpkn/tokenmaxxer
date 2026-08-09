@@ -40,6 +40,7 @@ import {
 	SidebarProvider,
 	SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Typography, typographyVariants } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { useMetricMode } from "@/lib/use-metric-mode"
 import { usePrivacyMode } from "@/lib/use-privacy-mode"
@@ -106,10 +107,11 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 												isActive={active}
 												tooltip={n.label.toUpperCase()}
 												className={cn(
-													"border-l-2 rounded-none py-3 pl-5 pr-3 text-xs tracked",
+													"border-l-2 rounded-none py-3 pl-5 pr-3",
+													typographyVariants({ variant: "label" }),
 													active
 														? "border-amber bg-amber/[0.06] text-fg"
-														: "border-transparent text-fg-dim hover:text-fg hover:border-line-strong",
+														: "border-transparent text-fg-muted hover:text-fg hover:border-line-strong",
 												)}
 											>
 												<Link href={n.to}>
@@ -117,7 +119,7 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 													<span>
 														{n.label.toUpperCase()}
 														{n.to === "/alerts" && alertCount > 0 ? (
-															<span className="text-fg-very-dim ml-1.5">· {alertCount}</span>
+															<span className="text-fg-subtle ml-1.5">· {alertCount}</span>
 														) : null}
 													</span>
 												</Link>
@@ -129,14 +131,14 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 						</SidebarGroupContent>
 					</SidebarGroup>
 				</SidebarContent>
-				<SidebarFooter className="border-t border-line text-[10px] tracked text-fg-very-dim px-5 py-3 group-data-[collapsible=icon]:hidden">
-					v0.1
+				<SidebarFooter className="border-t border-line px-5 py-3 group-data-[collapsible=icon]:hidden">
+					<Typography variant="th">v0.1</Typography>
 				</SidebarFooter>
 			</Sidebar>
 
 			<SidebarInset className="bg-bg">
 				<div className="h-12 border-b border-line flex items-center justify-between gap-2 px-4">
-					<SidebarTrigger className="text-fg-mid hover:text-fg" />
+					<SidebarTrigger className="text-fg-muted hover:text-fg" />
 					<div className="flex items-center gap-2">
 						{isAdmin ? (
 							<Button
@@ -172,25 +174,32 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 								)}
 							</Button>
 						) : null}
+
+						{/* Profile Dropdown */}
 						<DropdownMenu>
 							<DropdownMenuTrigger asChild>
 								<Button variant="outline" size="sm" className="h-8 px-2 gap-2">
 									<Avatar>
 										<AvatarFallback>{initials(me?.email)}</AvatarFallback>
 									</Avatar>
-									<span className="text-[10px] tracked hidden sm:inline">
+									<Typography variant="label" className="hidden sm:inline">
 										{me?.email?.split("@")[0]}
-									</span>
+									</Typography>
 								</Button>
 							</DropdownMenuTrigger>
 							<DropdownMenuContent>
 								<DropdownMenuLabel>SIGNED IN AS</DropdownMenuLabel>
-								<div className="px-2.5 pb-1.5 text-xs text-fg">{me?.email}</div>
+								<Typography variant="subtle" as="div" className="px-2.5 pb-1.5 text-fg">
+									{me?.email}
+								</Typography>
 								{isAdmin ? (
-									<div className="px-2.5 pb-1.5 text-[10px] tracked">
-										<span className="text-amber border border-amber/40 px-1 leading-none">
+									<div className="px-2.5 pb-1.5">
+										<Typography
+											variant="label"
+											className="text-amber border border-amber/40 px-1 leading-none"
+										>
 											ADMIN
-										</span>
+										</Typography>
 									</div>
 								) : null}
 								<DropdownMenuSeparator />

@@ -1,4 +1,5 @@
 import { forwardRef, type HTMLAttributes } from "react"
+import { typographyVariants } from "@/components/ui/typography"
 import { cn } from "@/lib/utils"
 
 export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
@@ -19,11 +20,7 @@ CardHeader.displayName = "CardHeader"
 
 export const CardTitle = forwardRef<HTMLHeadingElement, HTMLAttributes<HTMLHeadingElement>>(
 	({ className, ...props }, ref) => (
-		<h3
-			ref={ref}
-			className={cn("text-[11px] tracked text-fg-mid font-medium", className)}
-			{...props}
-		/>
+		<h3 ref={ref} className={cn(typographyVariants({ variant: "label" }), className)} {...props} />
 	),
 )
 CardTitle.displayName = "CardTitle"
@@ -32,7 +29,7 @@ export const CardDescription = forwardRef<
 	HTMLParagraphElement,
 	HTMLAttributes<HTMLParagraphElement>
 >(({ className, ...props }, ref) => (
-	<p ref={ref} className={cn("text-xs text-fg-dim", className)} {...props} />
+	<p ref={ref} className={cn(typographyVariants({ variant: "muted" }), className)} {...props} />
 ))
 CardDescription.displayName = "CardDescription"
 

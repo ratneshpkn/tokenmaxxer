@@ -26,6 +26,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table"
+import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { useDateRange } from "@/lib/use-date-range"
 import { useMetricMode } from "@/lib/use-metric-mode"
@@ -34,7 +35,7 @@ import { formatNumber } from "@/lib/utils"
 type SortKey = "email" | "cc_cents" | "cu_cents" | "total" | "gh_lines" | "prs"
 
 export function UsersPage(): React.JSX.Element {
-	const { from, to, winLabel } = useDateRange()
+	const { from, to } = useDateRange()
 	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
 	const isViewer = me ? me.role !== "admin" : false
 	const [metricMode] = useMetricMode()
@@ -117,13 +118,13 @@ export function UsersPage(): React.JSX.Element {
 	}
 
 	return (
-		<div className="space-y-4 fade-rise">
+		<div className="flex flex-col gap-4 fade-rise">
 			<DateRangeBar updatedAt={usersQuery.dataUpdatedAt} />
 			<div className="flex items-end justify-between gap-4">
-				<div className="text-[11px] tracked text-fg-dim leading-relaxed max-w-xl">
+				<Typography variant="label" className="max-w-xl">
 					{data.length} USERS TRACKED · sorted by{" "}
 					<span className="text-fg">{getSortLabel(sortKey)}</span>
-				</div>
+				</Typography>
 				<div className="flex items-center gap-2 max-w-xs w-full">
 					<SearchInput
 						placeholder="filter by email or name…"
@@ -133,8 +134,8 @@ export function UsersPage(): React.JSX.Element {
 					/>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
-							<Button variant="outline" size="icon" className="shrink-0 h-9 w-9 bg-bg border-line">
-								<Filter className="w-4 h-4 text-fg-dim" />
+							<Button variant="outline" size="icon" className="shrink-0 size-9 bg-bg border-line">
+								<Filter className="size-4 text-fg-muted" />
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent className="w-64 max-h-[60vh] overflow-y-auto" align="end">
@@ -161,7 +162,7 @@ export function UsersPage(): React.JSX.Element {
 									<div className="flex flex-col min-w-0">
 										<span className="truncate">{r.name || r.email}</span>
 										{r.name && (
-											<span className="text-[9px] text-fg-very-dim truncate">{r.email}</span>
+											<span className="text-[9px] text-fg-subtle truncate">{r.email}</span>
 										)}
 									</div>
 								</DropdownMenuCheckboxItem>
@@ -175,9 +176,7 @@ export function UsersPage(): React.JSX.Element {
 				<Table className="w-full tabular text-xs table-fixed">
 					<TableHeader className="border-b border-line bg-elev2/40">
 						<TableRow>
-							<TableHead className="h-9 w-10 px-3 text-[10px] tracked text-fg-very-dim text-right">
-								#
-							</TableHead>
+							<TableHead className="w-14 text-right">#</TableHead>
 							<SortHeader
 								label="USER"
 								active={sortKey === "email"}
@@ -185,14 +184,14 @@ export function UsersPage(): React.JSX.Element {
 								onClick={() => toggle("email")}
 							/>
 							<SortHeader
-								label={`CLAUDE CODE · ${winLabel}`}
+								label="CLAUDE CODE"
 								active={sortKey === "cc_cents"}
 								dir={sortDir}
 								onClick={() => toggle("cc_cents")}
 								align="right"
 							/>
 							<SortHeader
-								label={`CURSOR · ${winLabel}`}
+								label="CURSOR"
 								active={sortKey === "cu_cents"}
 								dir={sortDir}
 								onClick={() => toggle("cu_cents")}
@@ -225,15 +224,13 @@ export function UsersPage(): React.JSX.Element {
 								align="right"
 							/>
 							<SortHeader
-								label={`TOTAL · ${winLabel}`}
+								label="TOTAL"
 								active={sortKey === "total"}
 								dir={sortDir}
 								onClick={() => toggle("total")}
 								align="right"
 							/>
-							<TableHead className="h-9 px-3 w-[140px] text-[10px] tracked text-fg-dim text-left">
-								TREND · {winLabel}
-							</TableHead>
+							<TableHead className="w-[140px]">TREND</TableHead>
 						</TableRow>
 					</TableHeader>
 					<TableBody>
@@ -247,7 +244,7 @@ export function UsersPage(): React.JSX.Element {
 										: Number(r.cc_cents) + Number(r.cu_cents)
 								return (
 									<TableRow key={r.email}>
-										<TableCell className="px-3 py-2.5 text-right text-[10px] tabular text-fg-very-dim">
+										<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
@@ -268,8 +265,6 @@ export function UsersPage(): React.JSX.Element {
 												cents={isViewer ? null : r.cc_cents}
 												tokens={r.cc_tokens}
 												digits={2}
-												primaryClassName="text-fg"
-												secondaryClassName="text-[10px] text-fg-very-dim"
 											/>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right">
@@ -277,8 +272,6 @@ export function UsersPage(): React.JSX.Element {
 												cents={isViewer ? null : r.cu_cents}
 												tokens={r.cu_tokens}
 												digits={2}
-												primaryClassName="text-fg"
-												secondaryClassName="text-[10px] text-fg-very-dim"
 											/>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right select-none">
@@ -287,11 +280,11 @@ export function UsersPage(): React.JSX.Element {
 													? `${formatNumber(r.gh_prs_merged)} PR${r.gh_prs_merged === 1 ? "" : "s"}`
 													: "—"}
 											</span>
-											<span className="block font-mono text-mint font-medium text-[10px]">
+											<span className="block font-mono text-mint font-medium text-xs">
 												{(r.gh_additions ?? 0) + (r.gh_deletions ?? 0) > 0
 													? `${formatNumber((r.gh_additions ?? 0) + (r.gh_deletions ?? 0))} lines `
 													: "0 lines "}
-												<span className="text-fg-very-dim">
+												<span className="text-fg-subtle">
 													(+{formatNumber(r.gh_additions ?? 0)}/-{formatNumber(r.gh_deletions ?? 0)}
 													)
 												</span>
@@ -302,7 +295,6 @@ export function UsersPage(): React.JSX.Element {
 												cents={isViewer ? null : total}
 												tokens={Number(r.cc_tokens) + Number(r.cu_tokens)}
 												digits={2}
-												secondaryClassName="text-[10px] text-fg-dim"
 											/>
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
