@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { Filter } from "lucide-react"
 import { useMemo, useState } from "react"
-import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
 import { SearchInput } from "@/components/SearchInput"
 import { SortHeader } from "@/components/SortHeader"
@@ -119,7 +118,6 @@ export function UsersPage(): React.JSX.Element {
 
 	return (
 		<div className="flex flex-col gap-4 fade-rise">
-			<DateRangeBar updatedAt={usersQuery.dataUpdatedAt} />
 			<div className="flex items-end justify-between gap-4">
 				<Typography variant="label" className="max-w-xl">
 					{data.length} USERS TRACKED · sorted by{" "}

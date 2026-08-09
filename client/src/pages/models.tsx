@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useMemo, useState } from "react"
 import { Link } from "wouter"
-import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
 import { SearchInput } from "@/components/SearchInput"
 import { SortHeader } from "@/components/SortHeader"
@@ -83,7 +82,6 @@ export function ModelsPage(): React.JSX.Element {
 
 	return (
 		<div className="space-y-4 fade-rise">
-			<DateRangeBar updatedAt={modelsQuery.dataUpdatedAt} />
 			<div className="flex items-end justify-between gap-4">
 				<Typography variant="label" className="max-w-xl">
 					{data.length} MODELS TRACKED · sorted by{" "}
