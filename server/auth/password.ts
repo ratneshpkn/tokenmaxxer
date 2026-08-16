@@ -2,6 +2,8 @@ import { type AppUser, appUsers } from "@shared/schema"
 import { eq, sql } from "drizzle-orm"
 import { db } from "../db"
 
+import { invalidateConfigCache } from "../lib/config"
+
 export async function hashPassword(plain: string): Promise<string> {
 	return Bun.password.hash(plain, {
 		algorithm: "bcrypt",
@@ -18,10 +20,8 @@ export async function verifyPassword(
 }
 
 /**
- * Atomic admin claim: the first password signup against an empty bootstrap state
- * wins admin. Subsequent concurrent signups become 'viewer'. Implemented via a
- * single UPDATE … WHERE bootstrap_admin_user_id IS NULL RETURNING — only one
- * caller can claim.
+ * Atomic admin claim: the first user created when the app_users table is empty
+ * wins the bootstrap admin role. Subsequent concurrent signups become 'viewer'.
  */
 export async function createUserAndMaybeClaimAdmin(
 	email: string,
@@ -29,36 +29,31 @@ export async function createUserAndMaybeClaimAdmin(
 	name: string | null = null,
 ): Promise<AppUser> {
 	return db.transaction(async (tx) => {
+		const [userCount] = await tx.select({ count: sql<number>`count(*)::int` }).from(appUsers)
+		const isFirstUser = (userCount?.count ?? 0) === 0
+
 		const [user] = await tx
 			.insert(appUsers)
 			.values({
 				email: email.toLowerCase(),
 				name,
-				role: "viewer", // default; may be promoted below
+				role: isFirstUser ? "admin" : "viewer",
 				passwordHash,
 				lastLoginAt: new Date(),
 			})
 			.returning()
 		if (!user) throw new Error("user insert returned no row")
 
-		// Try to claim the admin slot
-		const claim = await tx.execute<{ bootstrap_admin_user_id: string }>(sql`
-      update app_config
-         set bootstrap_admin_user_id = ${user.id}
-       where id = 1
-         and bootstrap_admin_user_id is null
-      returning bootstrap_admin_user_id
-    `)
-
-		if (claim.rows.length > 0) {
-			// We won — promote
-			const [promoted] = await tx
-				.update(appUsers)
-				.set({ role: "admin" })
-				.where(eq(appUsers.id, user.id))
-				.returning()
-			return promoted ?? user
+		if (isFirstUser) {
+			await tx.execute(sql`
+				update app_config
+				   set bootstrap_admin_user_id = ${user.id}
+				 where id = 1
+				   and bootstrap_admin_user_id is null
+			`)
+			invalidateConfigCache()
 		}
+
 		return user
 	})
 }

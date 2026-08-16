@@ -1,7 +1,9 @@
-import type { AppUser } from "@shared/schema"
+import { type AppUser, appUsers } from "@shared/schema"
+import { sql } from "drizzle-orm"
 import type { Context, Hono } from "hono"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
+import { db } from "../db"
 import { loadConfig, parseAllowedDomains } from "../lib/config"
 import { registerAdminConfigRoutes } from "./admin-config"
 import { registerAlertRoutes } from "./alerts"
@@ -30,6 +32,9 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 	// expected email domain instead of a hardcoded one.
 	app.get("/api/config", async (c) => {
 		const cfg = await loadConfig()
+		const [userCountRow] = await db.select({ count: sql<number>`count(*)::int` }).from(appUsers)
+		const bootstrapNeeded = (userCountRow?.count ?? 0) === 0
+
 		return c.json({
 			allowedEmailDomain: cfg.allowedEmailDomain ?? "",
 			allowedEmailDomains: parseAllowedDomains(cfg.allowedEmailDomain),
@@ -38,7 +43,7 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 			passwordAuthDisabled: cfg.passwordAuthDisabled,
 			openSignupEnabled: cfg.openSignupEnabled,
 			setupCompleted: cfg.setupCompletedAt != null,
-			bootstrapNeeded: cfg.bootstrapAdminUserId == null,
+			bootstrapNeeded,
 			spendVisibility: cfg.spendVisibility,
 		})
 	})

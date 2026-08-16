@@ -186,4 +186,27 @@ describe("auth password routes and admin config validation", () => {
 		const body = (await res.json()) as { ok: boolean }
 		expect(body.ok).toBe(true)
 	})
+
+	it("POST /api/auth/signup > rejects uninvited signup even if bootstrapAdminUserId is null when users already exist", async () => {
+		// Simulate null bootstrapAdminUserId (e.g. from Google-only signup or partial restore)
+		await db.execute(sql`update app_config set bootstrap_admin_user_id = null where id = 1`)
+		await saveConfig({
+			passwordAuthDisabled: false,
+			openSignupEnabled: false,
+			allowedEmailDomain: "auth-test.com",
+		})
+
+		const res = await app.request("/api/auth/signup", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				email: "uninvited@auth-test.com",
+				password: "password12345",
+			}),
+		})
+
+		expect(res.status).toBe(403)
+		const body = (await res.json()) as { message: string }
+		expect(body.message).toContain("invite-only")
+	})
 })
