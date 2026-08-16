@@ -11,7 +11,7 @@ import type { AppEnv } from "../auth/session"
 import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
 import { loadConfig } from "../lib/config"
-import { coerceTrendArrays, stripCostForViewer } from "../lib/route-helpers"
+import { coerceTrendArrays, resolveWindow, stripCostForViewer } from "../lib/route-helpers"
 import { startSyncRun } from "../scripts/lib/shared"
 import { currentRole, currentUser } from "./index"
 
@@ -25,10 +25,17 @@ const usageQuery = z
 
 const listQuery = z
 	.object({
-		from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-		to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+		from: z
+			.string()
+			.regex(/^\d{4}-\d{2}-\d{2}$/)
+			.optional(),
+		to: z
+			.string()
+			.regex(/^\d{4}-\d{2}-\d{2}$/)
+			.optional(),
+		teamId: z.string().uuid().optional(),
 	})
-	.refine((q) => q.from <= q.to, { message: "from must be <= to" })
+	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
 
 const heatmapQuery = z
 	.object({
@@ -58,12 +65,26 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		if (!parse.success) {
 			return c.json({ message: "Invalid query", issues: parse.error.issues }, 400)
 		}
-		const { from, to } = parse.data
+		const { effFrom: from, effTo: to } = resolveWindow(
+			{ from: parse.data.from, to: parse.data.to },
+			30,
+		)
+		const { teamId } = parse.data
 
 		const isViewer = currentRole(c) !== "admin"
 		const orderExpr = isViewer
 			? sql`(coalesce(cc.tokens,0) + coalesce(cu.tokens,0)) desc`
 			: sql`(coalesce(cc.cents,0) + coalesce(cu.cents,0)) desc`
+
+		const teamFilterCc = teamId
+			? sql`join team_memberships tm_cc on tm_cc.user_email = daily_claude_code_attribution.email and tm_cc.team_id = ${teamId}`
+			: sql``
+		const teamFilterCu = teamId
+			? sql`join team_memberships tm_cu on tm_cu.user_email = daily_cursor_usage.email and tm_cu.team_id = ${teamId}`
+			: sql``
+		const teamFilterTu = teamId
+			? sql`join team_memberships tm_tu on tm_tu.user_email = tu.email and tm_tu.team_id = ${teamId}`
+			: sql``
 
 		const result = await db.execute<UserListRow>(sql`
       with cc as (
@@ -71,6 +92,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
                coalesce(sum(attributed_cents),0)::bigint as cents,
                coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
           from daily_claude_code_attribution
+          ${teamFilterCc}
          where date between ${from} and ${to}
          group by email
       ),
@@ -79,12 +101,12 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
                coalesce(sum(charged_cents),0)::bigint as cents,
                coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
           from daily_cursor_usage
+          ${teamFilterCu}
          where date between ${from} and ${to}
          group by email
       ),
       gh as (
         select email,
-
                coalesce(sum(prs_merged),0)::bigint as prs_merged,
                coalesce(sum(additions),0)::bigint as additions,
                coalesce(sum(deletions),0)::bigint as deletions
@@ -133,8 +155,15 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
              coalesce(gh.additions,0) as gh_additions,
              coalesce(gh.deletions,0) as gh_deletions,
              (select array_agg(cents order by date) from trends tr where tr.email = tu.email) as trend_cents,
-             (select array_agg(tokens order by date) from trends tr where tr.email = tu.email) as trend_tokens
+             (select array_agg(tokens order by date) from trends tr where tr.email = tu.email) as trend_tokens,
+             coalesce((
+               select json_agg(json_build_object('id', t.id, 'name', t.name) order by t.name asc)
+                 from team_memberships tm_user
+                 join teams t on t.id = tm_user.team_id
+                where tm_user.user_email = tu.email
+             ), '[]'::json) as teams
         from tracked_users tu
+        ${teamFilterTu}
         left join cc on cc.email = tu.email
         left join cu on cu.email = tu.email
         left join gh on gh.email = tu.email
@@ -513,7 +542,13 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 	app.get("/api/users/:email", isAuthenticated, async (c) => {
 		const email = String(c.req.param("email")).toLowerCase()
 		const r = await db.execute(sql`
-      select tu.email, tu.name, tu.anthropic_user_id, tu.cursor_user_id, tu.github_username
+      select tu.email, tu.name, tu.anthropic_user_id, tu.cursor_user_id, tu.github_username,
+             coalesce((
+               select json_agg(json_build_object('id', t.id, 'name', t.name) order by t.name asc)
+                 from team_memberships tm
+                 join teams t on t.id = tm.team_id
+                where tm.user_email = tu.email
+             ), '[]'::json) as teams
         from tracked_users tu
        where tu.email = ${email}
     `)

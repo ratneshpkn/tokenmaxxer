@@ -77,10 +77,16 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 		queryFn: () => api.models.rawModels(model, from, to, platformFilter),
 	})
 
+	const teamsQuery = useQuery({
+		queryKey: ["models.teams", model, from, to, platformFilter],
+		queryFn: () => api.models.teams(model, from, to, platformFilter),
+	})
+
 	const profile = profileQuery.data
 	const topUsers = topUsersQuery.data ?? []
 	const trendData = trendQuery.data ?? []
 	const rawModels = rawModelsQuery.data ?? []
+	const teamBreakdown = teamsQuery.data ?? []
 
 	const [filter, setFilter] = useState("")
 	const [sortKey, setSortKey] = useState<SortKey>(isViewer ? "tokens" : "cents")
@@ -551,6 +557,49 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 					</TableBody>
 				</Table>
 			</Card>
+
+			{/* Team Usage Section */}
+			{teamBreakdown.length > 0 ? (
+				<Card className="overflow-hidden border border-line">
+					<SectionHeader
+						title="TEAM USAGE"
+						subtitle={`${teamBreakdown.length} TEAMS USING THIS MODEL`}
+					/>
+					<Table className="w-full tabular text-xs table-fixed">
+						<TableHeader className="border-b border-line bg-elev2/40">
+							<TableRow>
+								<TableHead className="w-14 text-right">#</TableHead>
+								<TableHead>TEAM</TableHead>
+								<TableHead className="text-right">VALUE</TableHead>
+								<TableHead className="w-24 text-right">SHARE</TableHead>
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{teamBreakdown.map((t, i) => (
+								<TableRow key={t.teamId}>
+									<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
+										{String(i + 1).padStart(3, "0")}
+									</TableCell>
+									<TableCell className="px-3 py-2.5 font-mono text-fg font-medium">
+										<Link
+											href={`/users?teamId=${t.teamId}`}
+											className="hover:text-amber transition-colors"
+										>
+											{t.teamName}
+										</Link>
+									</TableCell>
+									<TableCell className="px-3 py-2.5 text-right text-fg font-mono">
+										<MetricPair cents={isViewer ? null : t.cents} tokens={t.tokens} digits={2} />
+									</TableCell>
+									<TableCell className="px-3 py-2.5 text-right text-fg-muted font-mono text-xs">
+										{Number(t.share_pct).toFixed(1)}%
+									</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
+				</Card>
+			) : null}
 		</div>
 	)
 }

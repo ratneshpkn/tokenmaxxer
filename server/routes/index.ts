@@ -12,6 +12,7 @@ import { registerInvitationRoutes } from "./invitations"
 import { registerModelRoutes } from "./models"
 import { registerSetupRoutes } from "./setup"
 import { registerSyncRoutes } from "./sync"
+import { registerTeamRoutes } from "./teams"
 import { registerThresholdRoutes } from "./thresholds"
 import { registerUserRoutes } from "./users"
 
@@ -56,6 +57,7 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 	registerAuthPasswordRoutes(app)
 	registerUserRoutes(app)
 	registerDashboardRoutes(app)
+	registerTeamRoutes(app)
 	registerAlertRoutes(app)
 	registerThresholdRoutes(app)
 	registerSyncRoutes(app)
