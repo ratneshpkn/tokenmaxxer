@@ -1,17 +1,17 @@
-import { ChevronDown } from "lucide-react"
+import { Calendar as CalendarIcon, ChevronDown } from "lucide-react"
 import { useState } from "react"
 import type { DateRange as DayPickerRange } from "react-day-picker"
 import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Typography } from "@/components/ui/typography"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { daysBetween, type Preset } from "@/lib/date-range"
 import { useDateRange } from "@/lib/use-date-range"
+import { cn } from "@/lib/utils"
 
 interface DateRangeBarProps {
-	/** Optional last-refetched timestamp (React Query's dataUpdatedAt). */
-	updatedAt?: number
+	className?: string
 }
 
 const PRESET_LABELS: Record<Preset, string> = {
@@ -31,18 +31,6 @@ function formatLabelDate(ymd: string): string {
 	})
 }
 
-function formatTime(ms: number): string {
-	const d = new Date(ms)
-	return d.toLocaleTimeString("en-US", {
-		hour: "2-digit",
-		minute: "2-digit",
-		timeZone: "America/Los_Angeles",
-		hour12: false,
-	})
-}
-
-/** Format a Date as YYYY-MM-DD using its *local* components (so a JST or PT user
- * picking "April 1" in the calendar gets "2026-04-01", not the UTC-rolled-back day). */
 function localYmd(d: Date): string {
 	const y = d.getFullYear()
 	const m = String(d.getMonth() + 1).padStart(2, "0")
@@ -50,24 +38,24 @@ function localYmd(d: Date): string {
 	return `${y}-${m}-${day}`
 }
 
-/** Build a draft DayPickerRange from the current resolved {from, to} when in custom mode. */
 function draftFromUrl(preset: string, from: string, to: string): DayPickerRange | undefined {
 	if (preset !== "custom") return undefined
-	return { from: new Date(`${from}T00:00:00Z`), to: new Date(`${to}T00:00:00Z`) }
+	const [fy, fm, fd] = from.split("-").map(Number)
+	const [ty, tm, td] = to.split("-").map(Number)
+	return { from: new Date(fy, fm - 1, fd), to: new Date(ty, tm - 1, td) }
 }
 
-export function DateRangeBar({ updatedAt }: DateRangeBarProps): React.JSX.Element {
+export function DateRangeBar({ className }: DateRangeBarProps): React.JSX.Element {
 	const { from, to, preset, setPreset, setCustom } = useDateRange()
 	const [open, setOpen] = useState(false)
 	const [draft, setDraft] = useState<DayPickerRange | undefined>(() =>
 		draftFromUrl(preset, from, to),
 	)
+	const isMobile = useIsMobile()
 
 	const days = daysBetween(from, to)
 	const isCustom = preset === "custom"
 
-	// When the popover opens, sync the draft with whatever the URL currently says.
-	// Without this, going custom→preset→custom would pre-select the stale prior dates.
 	function handleOpenChange(next: boolean): void {
 		if (next) setDraft(draftFromUrl(preset, from, to))
 		setOpen(next)
@@ -84,69 +72,102 @@ export function DateRangeBar({ updatedAt }: DateRangeBarProps): React.JSX.Elemen
 		setOpen(false)
 	}
 
-	// Disallow future dates in the picker
 	const today = new Date()
 	today.setHours(23, 59, 59, 999)
 
-	return (
-		<div className="flex flex-col gap-2">
-			<div className="flex items-center gap-2 flex-wrap">
-				<Tabs value={isCustom ? "" : preset} onValueChange={(v) => v && setPreset(v as Preset)}>
-					<TabsList>
-						{(Object.keys(PRESET_LABELS) as Preset[]).map((p) => (
-							<TabsTrigger key={p} value={p}>
-								{PRESET_LABELS[p]}
-							</TabsTrigger>
-						))}
-					</TabsList>
-				</Tabs>
+	const labelPreset = isCustom ? "CUSTOM" : PRESET_LABELS[preset]
 
-				<Popover open={open} onOpenChange={handleOpenChange}>
-					<PopoverTrigger asChild>
-						<Button variant={isCustom ? "default" : "outline"} size="sm">
-							<span>CUSTOM</span>
-							{isCustom ? (
-								<span className="font-mono">
-									{formatLabelDate(from)} → {formatLabelDate(to)}
-								</span>
-							) : null}
-							<ChevronDown className="size-3" strokeWidth={1.5} />
-						</Button>
-					</PopoverTrigger>
-					<PopoverContent className="w-auto p-0">
+	return (
+		<div className={cn("flex items-center", className)}>
+			<Popover open={open} onOpenChange={handleOpenChange}>
+				<PopoverTrigger asChild>
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 px-2.5 gap-2 text-xs font-mono border-line bg-bg hover:bg-elev2 transition-colors"
+						aria-label="Select date range"
+					>
+						<CalendarIcon className="size-3.5 text-fg-muted shrink-0" strokeWidth={1.5} />
+						<span className="font-semibold text-fg">{labelPreset}</span>
+						<span className="text-fg-subtle hidden sm:inline">·</span>
+						<span className="hidden sm:inline text-fg-muted">
+							{formatLabelDate(from)} – {formatLabelDate(to)}
+						</span>
+						{isCustom ? (
+							<>
+								<span className="hidden md:inline text-fg-subtle">·</span>
+								<span className="hidden md:inline text-fg-subtle">{days}D</span>
+							</>
+						) : null}
+						<ChevronDown className="size-3 text-fg-subtle shrink-0" strokeWidth={1.5} />
+					</Button>
+				</PopoverTrigger>
+				<PopoverContent className="w-auto p-3 space-y-3 bg-bg border-line shadow-lg" align="start">
+					{/* Preset buttons bar */}
+					<div className="flex items-center gap-1 pb-2 border-b border-line">
+						{(Object.keys(PRESET_LABELS) as Preset[]).map((p) => {
+							const isActive = !isCustom && preset === p
+							return (
+								<Button
+									key={p}
+									variant={isActive ? "amber" : "ghost"}
+									size="sm"
+									aria-pressed={isActive}
+									className={cn(
+										"h-7 px-2.5 text-xs font-mono transition-colors",
+										isActive ? "font-bold" : "text-fg-muted hover:text-fg",
+									)}
+									onClick={() => {
+										setPreset(p)
+										setOpen(false)
+									}}
+								>
+									{PRESET_LABELS[p]}
+								</Button>
+							)
+						})}
+					</div>
+
+					{/* Custom Calendar Picker */}
+					<div className="overflow-x-auto">
 						<Calendar
 							mode="range"
-							numberOfMonths={2}
+							numberOfMonths={isMobile ? 1 : 2}
 							defaultMonth={draft?.from ?? new Date()}
 							selected={draft}
 							onSelect={setDraft}
 							disabled={{ after: today }}
 						/>
-						<div className="flex items-center justify-end gap-2 p-2 border-t border-line">
-							<Button variant="ghost" size="sm" onClick={handleCancel}>
+					</div>
+
+					{/* Footer info & action buttons */}
+					<div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-line">
+						<Typography variant="label" className="text-fg-muted text-[11px]">
+							{draft?.from && draft?.to ? (
+								<>
+									{formatLabelDate(localYmd(draft.from))} → {formatLabelDate(localYmd(draft.to))} ·{" "}
+									{daysBetween(localYmd(draft.from), localYmd(draft.to))} DAYS
+								</>
+							) : (
+								<>SELECT CUSTOM RANGE</>
+							)}
+						</Typography>
+						<div className="flex items-center gap-2 ml-auto">
+							<Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleCancel}>
 								CANCEL
 							</Button>
-							<Button size="sm" disabled={!draft?.from || !draft?.to} onClick={handleApply}>
+							<Button
+								size="sm"
+								className="h-7 text-xs"
+								disabled={!draft?.from || !draft?.to}
+								onClick={handleApply}
+							>
 								APPLY
 							</Button>
 						</div>
-					</PopoverContent>
-				</Popover>
-			</div>
-
-			<Typography variant="label" className="flex items-center gap-2 flex-wrap">
-				<span className="text-fg">{formatLabelDate(from).toUpperCase()}</span>
-				<span className="text-fg-subtle">→</span>
-				<span className="text-fg">{formatLabelDate(to).toUpperCase()}</span>
-				<span className="text-fg-subtle">·</span>
-				<span>
-					{days} DAY{days === 1 ? "" : "S"}
-				</span>
-				<span className="text-fg-subtle">·</span>
-				<span className="text-fg-subtle">
-					{updatedAt ? `AS OF ${formatTime(updatedAt)} PT` : "PT"}
-				</span>
-			</Typography>
+					</div>
+				</PopoverContent>
+			</Popover>
 		</div>
 	)
 }

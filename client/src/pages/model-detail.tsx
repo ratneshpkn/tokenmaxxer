@@ -13,7 +13,6 @@ import {
 	YAxis,
 } from "recharts"
 import { Link, useSearch } from "wouter"
-import { DateRangeBar } from "@/components/DateRangeBar"
 import { MetricPair } from "@/components/MetricPair"
 import { SearchInput } from "@/components/SearchInput"
 import { SectionHeader } from "@/components/SectionHeader"
@@ -220,8 +219,6 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 					))}
 				</div>
 			)}
-
-			<DateRangeBar updatedAt={profileQuery.dataUpdatedAt} />
 
 			{/* Headline strip */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">

@@ -16,7 +16,6 @@ import {
 import { Link } from "wouter"
 import { ActivityHeatmap } from "@/components/ActivityHeatmap"
 import { Cost } from "@/components/Cost"
-import { DateRangeBar } from "@/components/DateRangeBar"
 import { FlexCardModal } from "@/components/FlexCardModal"
 import { GithubHeatmap } from "@/components/GithubHeatmap"
 import { MetricPair } from "@/components/MetricPair"
@@ -529,8 +528,6 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 					<Share2 className="w-3 h-3 mr-1.5" /> SHARE STATS
 				</Button>
 			</div>
-
-			<DateRangeBar updatedAt={usageQuery.dataUpdatedAt} />
 
 			{/* Headline strip */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">

@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import type { ReactNode } from "react"
 import { Link, useLocation } from "wouter"
+import { DateRangeBar } from "@/components/DateRangeBar"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -75,6 +76,9 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 	const [privacyOn, togglePrivacy] = usePrivacyMode()
 	const [metricMode, toggleMetric] = useMetricMode()
 	const { theme, setTheme } = useTheme()
+
+	const isDateAwareRoute =
+		location === "/" || location.startsWith("/users") || location.startsWith("/models")
 
 	const { data: alertCountData } = useQuery({
 		queryKey: ["alerts.count"],
@@ -138,7 +142,10 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 
 			<SidebarInset className="bg-bg">
 				<div className="h-12 border-b border-line flex items-center justify-between gap-2 px-4">
-					<SidebarTrigger className="text-fg-muted hover:text-fg" />
+					<div className="flex items-center gap-3 min-w-0">
+						<SidebarTrigger className="text-fg-muted hover:text-fg shrink-0" />
+						{isDateAwareRoute ? <DateRangeBar /> : null}
+					</div>
 					<div className="flex items-center gap-2">
 						{isAdmin ? (
 							<Button

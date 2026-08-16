@@ -13,7 +13,6 @@ import {
 } from "recharts"
 import { Link } from "wouter"
 import { Cost } from "@/components/Cost"
-import { DateRangeBar } from "@/components/DateRangeBar"
 import { FlexCardModal } from "@/components/FlexCardModal"
 import { MetricPair } from "@/components/MetricPair"
 import { ModelMixSection } from "@/components/ModelMixSection"
@@ -171,7 +170,6 @@ export function DashboardPage(): React.JSX.Element {
 	if (isEmpty) {
 		return (
 			<div className="space-y-6 fade-rise">
-				<DateRangeBar updatedAt={summaryQuery.dataUpdatedAt} />
 				<Card className="p-12 text-center">
 					<Typography variant="display-lg" as="div" className="mb-3">
 						No data yet.
@@ -227,8 +225,7 @@ export function DashboardPage(): React.JSX.Element {
 
 	return (
 		<div className="space-y-6 fade-rise">
-			<div className="flex items-center justify-between">
-				<DateRangeBar updatedAt={summaryQuery.dataUpdatedAt} />
+			<div className="flex items-center justify-end">
 				<Button
 					variant="outline"
 					size="sm"
