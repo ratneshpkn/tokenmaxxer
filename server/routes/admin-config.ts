@@ -2,7 +2,7 @@ import type { Hono } from "hono"
 import { z } from "zod"
 import type { AppEnv } from "../auth/session"
 import { requireAdmin } from "../auth/session"
-import { loadConfig, saveConfig } from "../lib/config"
+import { loadConfig, parseAllowedDomains, saveConfig } from "../lib/config"
 
 const updateAdminConfigSchema = z.object({
 	orgName: z.string().min(1).max(100).optional(),
@@ -31,6 +31,7 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 		return c.json({
 			orgName: cfg.orgName,
 			allowedEmailDomain: cfg.allowedEmailDomain,
+			allowedEmailDomains: parseAllowedDomains(cfg.allowedEmailDomain),
 			openSignupEnabled: cfg.openSignupEnabled,
 			googleOauthEnabled: cfg.googleOauthEnabled,
 			googleClientId: cfg.googleClientId,

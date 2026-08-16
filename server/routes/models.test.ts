@@ -26,6 +26,12 @@ registerModelRoutes(app)
 
 describe("models routes", () => {
 	beforeAll(async () => {
+		// Ensure singleton app_config row exists
+		await db.execute(sql`
+			insert into app_config (id) values (1)
+			on conflict (id) do nothing
+		`)
+
 		// Clean up any test records
 		await db.execute(sql`delete from daily_claude_code_attribution where model like 'test-%'`)
 		await db.execute(sql`delete from daily_cursor_usage where model like 'test-%'`)

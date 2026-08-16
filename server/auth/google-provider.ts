@@ -2,7 +2,7 @@ import { type AppUser, appUsers } from "@shared/schema"
 import { eq } from "drizzle-orm"
 import type { Context, Hono, Next } from "hono"
 import { db } from "../db"
-import { loadConfig } from "../lib/config"
+import { isEmailDomainAllowed, loadConfig, parseAllowedDomains } from "../lib/config"
 import type { AppEnv } from "./session"
 import { createSession, destroySession } from "./session"
 
@@ -34,14 +34,10 @@ function callbackRoutePath(): string {
 	return DEFAULT_CALLBACK_PATH
 }
 
-async function allowedDomainFromConfig(): Promise<string | null> {
+async function allowedDomainsFromConfig(): Promise<string[]> {
 	const cfg = await loadConfig()
-	return (
-		(cfg.allowedEmailDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null)
-			?.trim()
-			.replace(/^@/, "")
-			.toLowerCase() || null
-	)
+	const domainStr = cfg.allowedEmailDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null
+	return parseAllowedDomains(domainStr)
 }
 
 // Custom in-memory rate limiter middleware for Google OAuth
@@ -89,11 +85,11 @@ export async function setupGoogleAuth(app: Hono<AppEnv>): Promise<void> {
 	console.log(`[auth] Google callback registered at ${cbPath}`)
 
 	app.get("/api/auth/google", oauthLimiter, async (c) => {
-		const domain = await allowedDomainFromConfig()
+		const domains = await allowedDomainsFromConfig()
 		const callbackUrl = resolveCallbackUrl(c)
 		let googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=profile%20email`
-		if (domain) {
-			googleAuthUrl += `&hd=${domain}`
+		if (domains.length === 1) {
+			googleAuthUrl += `&hd=${domains[0]}`
 		}
 		return c.redirect(googleAuthUrl)
 	})
@@ -141,8 +137,8 @@ export async function setupGoogleAuth(app: Hono<AppEnv>): Promise<void> {
 				return c.redirect("/login?error=unauthorized")
 			}
 
-			const domain = await allowedDomainFromConfig()
-			if (domain && !email.endsWith(`@${domain}`)) {
+			const domains = await allowedDomainsFromConfig()
+			if (domains.length > 0 && !isEmailDomainAllowed(email, domains)) {
 				return c.redirect("/login?error=unauthorized")
 			}
 
@@ -170,7 +166,14 @@ export async function setupGoogleAuth(app: Hono<AppEnv>): Promise<void> {
 				// No existing user — Google never auto-creates without explicit permit.
 				// Open self-signup with domain match is the only path here.
 				const cfg2 = await loadConfig()
-				if (cfg2.openSignupEnabled && domain && email.endsWith(`@${domain}`)) {
+				const domains2 = parseAllowedDomains(
+					cfg2.allowedEmailDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null,
+				)
+				if (
+					cfg2.openSignupEnabled &&
+					domains2.length > 0 &&
+					isEmailDomainAllowed(email, domains2)
+				) {
 					const [created] = await db
 						.insert(appUsers)
 						.values({

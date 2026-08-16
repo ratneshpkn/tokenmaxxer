@@ -2,7 +2,7 @@ import type { AppUser } from "@shared/schema"
 import type { Context, Hono } from "hono"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
-import { loadConfig } from "../lib/config"
+import { loadConfig, parseAllowedDomains } from "../lib/config"
 import { registerAdminConfigRoutes } from "./admin-config"
 import { registerAlertRoutes } from "./alerts"
 import { registerAppUserRoutes } from "./app-users"
@@ -31,6 +31,7 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 		const cfg = await loadConfig()
 		return c.json({
 			allowedEmailDomain: cfg.allowedEmailDomain ?? "",
+			allowedEmailDomains: parseAllowedDomains(cfg.allowedEmailDomain),
 			orgName: cfg.orgName,
 			googleOauthEnabled: cfg.googleOauthEnabled,
 			openSignupEnabled: cfg.openSignupEnabled,

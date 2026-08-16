@@ -13,7 +13,7 @@ import {
 import type { AppEnv } from "../auth/session"
 import { createSession } from "../auth/session"
 import { db } from "../db"
-import { loadConfig } from "../lib/config"
+import { isEmailDomainAllowed, loadConfig, parseAllowedDomains } from "../lib/config"
 
 // Burned on the no-user path so the login endpoint takes ~the same wall-clock
 // time whether the email exists or not. Without this, attackers can enumerate
@@ -90,6 +90,8 @@ export function registerAuthPasswordRoutes(app: Hono<AppEnv>): void {
 		let role: "viewer" | "admin" = "viewer"
 		let inviteRow = null as Awaited<ReturnType<typeof findValidInvite>> | null
 
+		const allowedDomains = parseAllowedDomains(cfg.allowedEmailDomain)
+
 		if (noUsersYet) {
 			// First user ever — bootstrap admin path
 			role = "admin"
@@ -99,11 +101,11 @@ export function registerAuthPasswordRoutes(app: Hono<AppEnv>): void {
 				return c.json({ message: "Invalid or expired invite" }, 403)
 			}
 			role = inviteRow.role
-		} else if (cfg.openSignupEnabled && cfg.allowedEmailDomain) {
-			if (!email.toLowerCase().endsWith(`@${cfg.allowedEmailDomain.toLowerCase()}`)) {
+		} else if (cfg.openSignupEnabled && allowedDomains.length > 0) {
+			if (!isEmailDomainAllowed(email, allowedDomains)) {
 				return c.json(
 					{
-						message: `Self-signup restricted to @${cfg.allowedEmailDomain} addresses`,
+						message: `Self-signup restricted to @${allowedDomains.join(", @")} addresses`,
 					},
 					403,
 				)
