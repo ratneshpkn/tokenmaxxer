@@ -87,6 +87,10 @@ export function registerAuthPasswordRoutes(app: Hono<AppEnv>): void {
 
 		// Determine eligibility
 		const noUsersYet = cfg.bootstrapAdminUserId == null
+		if (cfg.passwordAuthDisabled && !noUsersYet && !token) {
+			return c.json({ message: "Password signup is disabled. Please sign in with Google." }, 403)
+		}
+
 		let role: "viewer" | "admin" = "viewer"
 		let inviteRow = null as Awaited<ReturnType<typeof findValidInvite>> | null
 
@@ -147,6 +151,14 @@ export function registerAuthPasswordRoutes(app: Hono<AppEnv>): void {
 	})
 
 	app.post("/api/auth/login", loginLimiter, async (c) => {
+		const cfg = await loadConfig()
+		if (cfg.passwordAuthDisabled) {
+			return c.json(
+				{ message: "Password authentication is disabled. Please sign in with Google." },
+				403,
+			)
+		}
+
 		let body: unknown
 		try {
 			body = await c.req.json()

@@ -26,7 +26,15 @@ beforeAll(async () => {
 })
 
 afterAll(async () => {
-	delete process.env.CONFIG_ENCRYPTION_KEY
+	await db.execute(sql`
+		update app_config set 
+			google_client_secret_enc = null,
+			anthropic_admin_api_key_enc = null,
+			cursor_admin_api_key_enc = null,
+			slack_bot_token_enc = null
+		where id = 1
+	`)
+	process.env.CONFIG_ENCRYPTION_KEY = "00".repeat(32)
 	const { resetCachedKey } = await import("./crypto")
 	resetCachedKey()
 })
@@ -58,10 +66,15 @@ describe("config", () => {
 	})
 
 	it("non-secret fields round-trip without encryption", async () => {
-		await saveConfig({ orgName: "Acme Co", allowedEmailDomain: "acme.test" })
+		await saveConfig({
+			orgName: "Acme Co",
+			allowedEmailDomain: "acme.test",
+			passwordAuthDisabled: true,
+		})
 		const cfg = await loadConfig()
 		expect(cfg.orgName).toBe("Acme Co")
 		expect(cfg.allowedEmailDomain).toBe("acme.test")
+		expect(cfg.passwordAuthDisabled).toBe(true)
 	})
 
 	it("loadConfig throws a critical error if decryption fails due to key mismatch", async () => {

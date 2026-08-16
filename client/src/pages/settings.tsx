@@ -36,7 +36,7 @@ import { toast } from "@/components/ui/toast"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { platformLabel } from "@/lib/platform"
-import { formatCents, formatDate, formatDuration } from "@/lib/utils"
+import { cn, formatCents, formatDate, formatDuration } from "@/lib/utils"
 
 type ValidationState = "idle" | "checking" | "ok" | "bad"
 
@@ -212,6 +212,7 @@ export function SettingsPage(): React.JSX.Element {
 		"admin_only" | "viewer_own" | "viewer_all"
 	>("admin_only")
 	const [googleOauthEnabled, setGoogleOauthEnabled] = useState(false)
+	const [passwordAuthDisabled, setPasswordAuthDisabled] = useState(false)
 	const [googleClientId, setGoogleClientId] = useState("")
 	const [googleClientSecret, setGoogleClientSecret] = useState("")
 	const [googleOauthRedirectUri, setGoogleOauthRedirectUri] = useState("")
@@ -243,6 +244,7 @@ export function SettingsPage(): React.JSX.Element {
 			setOpenSignup(adminCfg.openSignupEnabled || false)
 			setSpendVisibility(adminCfg.spendVisibility || "admin_only")
 			setGoogleOauthEnabled(adminCfg.googleOauthEnabled || false)
+			setPasswordAuthDisabled(adminCfg.passwordAuthDisabled || false)
 			setGoogleClientId(adminCfg.googleClientId || "")
 			setGoogleClientSecret("")
 			setGoogleOauthRedirectUri(adminCfg.googleOauthRedirectUri || "")
@@ -279,6 +281,7 @@ export function SettingsPage(): React.JSX.Element {
 				setSpendVisibility(adminCfg.spendVisibility || "admin_only")
 			} else if (section === "oauth") {
 				setGoogleOauthEnabled(adminCfg.googleOauthEnabled || false)
+				setPasswordAuthDisabled(adminCfg.passwordAuthDisabled || false)
 				setGoogleClientId(adminCfg.googleClientId || "")
 				setGoogleClientSecret("")
 				setGoogleOauthRedirectUri(adminCfg.googleOauthRedirectUri || "")
@@ -319,6 +322,9 @@ export function SettingsPage(): React.JSX.Element {
 			} else if (section === "oauth") {
 				if (googleOauthEnabled !== adminCfg?.googleOauthEnabled) {
 					payload.googleOauthEnabled = googleOauthEnabled
+				}
+				if (passwordAuthDisabled !== adminCfg?.passwordAuthDisabled) {
+					payload.passwordAuthDisabled = passwordAuthDisabled
 				}
 				if (googleClientId !== (adminCfg?.googleClientId || "")) {
 					payload.googleClientId = googleClientId.trim() || null
@@ -674,6 +680,14 @@ export function SettingsPage(): React.JSX.Element {
 										{adminCfg?.googleOauthEnabled ? "Enabled" : "Disabled"}
 									</p>
 								</div>
+								<div>
+									<Label className="text-xs tracked text-fg-muted">AUTH RESTRICTION</Label>
+									<p className="mt-1 text-fg text-sm">
+										{adminCfg?.passwordAuthDisabled
+											? "Password auth disabled (Google Auth only)"
+											: "Password & Google Auth allowed"}
+									</p>
+								</div>
 								{adminCfg?.googleOauthEnabled && (
 									<>
 										<div>
@@ -709,12 +723,44 @@ export function SettingsPage(): React.JSX.Element {
 											<Checkbox
 												id="googleOauthEnabled"
 												checked={googleOauthEnabled}
-												onCheckedChange={(checked) => setGoogleOauthEnabled(Boolean(checked))}
+												onCheckedChange={(checked) => {
+													const isEnabled = Boolean(checked)
+													setGoogleOauthEnabled(isEnabled)
+													if (!isEnabled) {
+														setPasswordAuthDisabled(false)
+													}
+												}}
 											/>
 											<label htmlFor="googleOauthEnabled" className="cursor-pointer">
 												Enable Google OAuth login
 											</label>
 										</div>
+									</div>
+
+									<div>
+										<Label className="text-xs tracked text-fg-muted">AUTH RESTRICTION</Label>
+										<div className="mt-2 flex items-center gap-2 text-xs text-fg-muted select-none">
+											<Checkbox
+												id="passwordAuthDisabled"
+												checked={passwordAuthDisabled}
+												disabled={!googleOauthEnabled}
+												onCheckedChange={(checked) => setPasswordAuthDisabled(Boolean(checked))}
+											/>
+											<label
+												htmlFor="passwordAuthDisabled"
+												className={cn(
+													"cursor-pointer",
+													!googleOauthEnabled && "cursor-not-allowed opacity-50",
+												)}
+											>
+												Disable password login & signup
+											</label>
+										</div>
+										{!googleOauthEnabled && (
+											<p className="text-[10px] text-fg-muted mt-1">
+												Google OAuth must be enabled to disable password authentication.
+											</p>
+										)}
 									</div>
 
 									{googleOauthEnabled && (

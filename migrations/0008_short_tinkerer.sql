@@ -1,0 +1,1 @@
+ALTER TABLE "app_config" ADD COLUMN "password_auth_disabled" boolean DEFAULT false NOT NULL;

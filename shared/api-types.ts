@@ -15,6 +15,7 @@ export interface ConfigResponse {
 	allowedEmailDomains: string[]
 	orgName: string
 	googleOauthEnabled: boolean
+	passwordAuthDisabled: boolean
 	openSignupEnabled: boolean
 	setupCompleted: boolean
 	bootstrapNeeded: boolean
@@ -27,6 +28,7 @@ export interface AdminConfigResponse {
 	allowedEmailDomains: string[]
 	openSignupEnabled: boolean
 	googleOauthEnabled: boolean
+	passwordAuthDisabled: boolean
 	googleClientId: string | null
 	googleOauthRedirectUri: string | null
 	slackChannelId: string | null
@@ -48,6 +50,7 @@ export interface AdminConfigPatch {
 	allowedEmailDomain?: string | null
 	openSignupEnabled?: boolean
 	googleOauthEnabled?: boolean
+	passwordAuthDisabled?: boolean
 	googleClientId?: string | null
 	googleClientSecret?: string | null
 	googleOauthRedirectUri?: string | null

@@ -57,6 +57,13 @@
       "when": 1786850722958,
       "tag": "0007_lethal_amazoness",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786868776443,
+      "tag": "0008_short_tinkerer",
+      "breakpoints": true
     }
   ]
 }
