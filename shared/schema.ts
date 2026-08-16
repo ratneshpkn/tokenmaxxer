@@ -340,6 +340,7 @@ export const appConfig = pgTable("app_config", {
 	allowedEmailDomain: text("allowed_email_domain"),
 	openSignupEnabled: boolean("open_signup_enabled").notNull().default(false),
 	googleOauthEnabled: boolean("google_oauth_enabled").notNull().default(false),
+	passwordAuthDisabled: boolean("password_auth_disabled").notNull().default(false),
 	googleClientId: text("google_client_id"),
 	googleClientSecretEnc: text("google_client_secret_enc"),
 	googleOauthRedirectUri: text("google_oauth_redirect_uri"),

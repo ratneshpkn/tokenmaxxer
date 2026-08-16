@@ -35,6 +35,7 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 			allowedEmailDomains: parseAllowedDomains(cfg.allowedEmailDomain),
 			orgName: cfg.orgName,
 			googleOauthEnabled: cfg.googleOauthEnabled,
+			passwordAuthDisabled: cfg.passwordAuthDisabled,
 			openSignupEnabled: cfg.openSignupEnabled,
 			setupCompleted: cfg.setupCompletedAt != null,
 			bootstrapNeeded: cfg.bootstrapAdminUserId == null,

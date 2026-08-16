@@ -63,59 +63,82 @@ export function LoginPage(): React.JSX.Element {
 					</div>
 				) : null}
 
-				<form onSubmit={handleSubmit} className="space-y-4">
-					<div>
-						<Label htmlFor="email">EMAIL</Label>
-						<Input
-							id="email"
-							type="email"
-							value={email}
-							onChange={(e) => setEmail(e.target.value)}
-							required
-							autoComplete="email"
-							className="mt-1"
-						/>
+				{cfg?.passwordAuthDisabled ? (
+					<div className="space-y-4">
+						{cfg?.googleOauthEnabled ? (
+							<Button
+								variant="default"
+								className="w-full py-6 text-sm"
+								onClick={() => {
+									window.location.href = "/api/auth/google"
+								}}
+							>
+								▶ SIGN IN WITH GOOGLE
+							</Button>
+						) : (
+							<div className="border-l-2 border-amber-hot pl-3 py-2 text-xs text-amber-hot">
+								Password authentication is disabled and Google OAuth is not configured.
+							</div>
+						)}
 					</div>
-					<div>
-						<Label htmlFor="password">PASSWORD</Label>
-						<Input
-							id="password"
-							type="password"
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							required
-							autoComplete="current-password"
-							className="mt-1"
-						/>
-					</div>
-					{error ? (
-						<div className="border-l-2 border-amber-hot pl-3 py-1 text-xs text-amber-hot">
-							{error}
-						</div>
-					) : null}
-					<Button type="submit" disabled={submitting} className="w-full">
-						{submitting ? "SIGNING IN…" : "▶ SIGN IN"}
-					</Button>
-				</form>
-
-				{cfg?.googleOauthEnabled ? (
+				) : (
 					<>
-						<Typography variant="th" as="div" className="flex items-center gap-3">
-							<span className="flex-1 h-px bg-line" /> OR <span className="flex-1 h-px bg-line" />
-						</Typography>
-						<Button
-							variant="outline"
-							className="w-full"
-							onClick={() => {
-								window.location.href = "/api/auth/google"
-							}}
-						>
-							▶ SIGN IN WITH GOOGLE
-						</Button>
-					</>
-				) : null}
+						<form onSubmit={handleSubmit} className="space-y-4">
+							<div>
+								<Label htmlFor="email">EMAIL</Label>
+								<Input
+									id="email"
+									type="email"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+									required
+									autoComplete="email"
+									className="mt-1"
+								/>
+							</div>
+							<div>
+								<Label htmlFor="password">PASSWORD</Label>
+								<Input
+									id="password"
+									type="password"
+									value={password}
+									onChange={(e) => setPassword(e.target.value)}
+									required
+									autoComplete="current-password"
+									className="mt-1"
+								/>
+							</div>
+							{error ? (
+								<div className="border-l-2 border-amber-hot pl-3 py-1 text-xs text-amber-hot">
+									{error}
+								</div>
+							) : null}
+							<Button type="submit" disabled={submitting} className="w-full">
+								{submitting ? "SIGNING IN…" : "▶ SIGN IN"}
+							</Button>
+						</form>
 
-				{cfg?.bootstrapNeeded || cfg?.openSignupEnabled ? (
+						{cfg?.googleOauthEnabled ? (
+							<>
+								<Typography variant="th" as="div" className="flex items-center gap-3">
+									<span className="flex-1 h-px bg-line" /> OR{" "}
+									<span className="flex-1 h-px bg-line" />
+								</Typography>
+								<Button
+									variant="outline"
+									className="w-full"
+									onClick={() => {
+										window.location.href = "/api/auth/google"
+									}}
+								>
+									▶ SIGN IN WITH GOOGLE
+								</Button>
+							</>
+						) : null}
+					</>
+				)}
+
+				{cfg?.bootstrapNeeded || (!cfg?.passwordAuthDisabled && cfg?.openSignupEnabled) ? (
 					<Typography variant="label" as="p" className="text-center block">
 						DON'T HAVE AN ACCOUNT?{" "}
 						<a href="/signup" className="text-amber hover:underline">

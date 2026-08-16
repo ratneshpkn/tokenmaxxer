@@ -46,6 +46,30 @@ export function SignupPage(): React.JSX.Element {
 		}
 	}
 
+	if (cfg?.passwordAuthDisabled && !cfg?.bootstrapNeeded && !inviteToken) {
+		return (
+			<div className="min-h-screen flex items-center justify-center bg-bg">
+				<div className="w-full max-w-sm space-y-6">
+					<div>
+						<Typography variant="label" as="div" className="mb-2">
+							/ TOKENMAXXER · REGISTRATION
+						</Typography>
+						<Typography variant="display-lg" as="h1">
+							Registration Restricted
+						</Typography>
+						<Typography variant="subtle" as="p" className="mt-2">
+							Password registration is disabled for this organization. Please sign in using Google
+							SSO.
+						</Typography>
+					</div>
+					<Button onClick={() => navigate("/login")} className="w-full">
+						▶ GO TO LOGIN
+					</Button>
+				</div>
+			</div>
+		)
+	}
+
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-bg">
 			<div className="w-full max-w-sm space-y-6">

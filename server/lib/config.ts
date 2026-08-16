@@ -10,6 +10,7 @@ export interface ResolvedConfig {
 	allowedEmailDomain: string | null
 	openSignupEnabled: boolean
 	googleOauthEnabled: boolean
+	passwordAuthDisabled: boolean
 	googleClientId: string | null
 	googleClientSecret: string | null // decrypted
 	googleOauthRedirectUri: string | null
@@ -57,6 +58,7 @@ export interface ConfigPatch {
 	allowedEmailDomain?: string | null
 	openSignupEnabled?: boolean
 	googleOauthEnabled?: boolean
+	passwordAuthDisabled?: boolean
 	googleClientId?: string | null
 	googleClientSecret?: string | null
 	googleOauthRedirectUri?: string | null
@@ -121,6 +123,7 @@ export async function loadConfig(): Promise<ResolvedConfig> {
 		allowedEmailDomain: row.allowedEmailDomain,
 		openSignupEnabled: row.openSignupEnabled,
 		googleOauthEnabled: row.googleOauthEnabled,
+		passwordAuthDisabled: row.passwordAuthDisabled,
 		googleClientId: row.googleClientId,
 		googleClientSecret,
 		googleOauthRedirectUri: row.googleOauthRedirectUri,
@@ -152,6 +155,8 @@ export async function saveConfig(patch: ConfigPatch): Promise<ResolvedConfig> {
 	if (patch.allowedEmailDomain !== undefined) update.allowedEmailDomain = patch.allowedEmailDomain
 	if (patch.openSignupEnabled !== undefined) update.openSignupEnabled = patch.openSignupEnabled
 	if (patch.googleOauthEnabled !== undefined) update.googleOauthEnabled = patch.googleOauthEnabled
+	if (patch.passwordAuthDisabled !== undefined)
+		update.passwordAuthDisabled = patch.passwordAuthDisabled
 	if (patch.googleClientId !== undefined) update.googleClientId = patch.googleClientId
 	if (patch.googleClientSecret !== undefined)
 		update.googleClientSecretEnc = encryptOrNull(patch.googleClientSecret)

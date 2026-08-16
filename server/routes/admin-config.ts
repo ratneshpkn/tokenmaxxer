@@ -9,6 +9,7 @@ const updateAdminConfigSchema = z.object({
 	allowedEmailDomain: z.string().nullable().optional(),
 	openSignupEnabled: z.boolean().optional(),
 	googleOauthEnabled: z.boolean().optional(),
+	passwordAuthDisabled: z.boolean().optional(),
 	googleClientId: z.string().nullable().optional(),
 	googleClientSecret: z.string().nullable().optional(),
 	googleOauthRedirectUri: z.string().nullable().optional(),
@@ -34,6 +35,7 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 			allowedEmailDomains: parseAllowedDomains(cfg.allowedEmailDomain),
 			openSignupEnabled: cfg.openSignupEnabled,
 			googleOauthEnabled: cfg.googleOauthEnabled,
+			passwordAuthDisabled: cfg.passwordAuthDisabled,
 			googleClientId: cfg.googleClientId,
 			googleOauthRedirectUri: cfg.googleOauthRedirectUri,
 			slackChannelId: cfg.slackChannelId,
@@ -65,11 +67,41 @@ export function registerAdminConfigRoutes(app: Hono<AppEnv>): void {
 		}
 
 		const data = parse.data
+		const cfg = await loadConfig()
+
+		const targetPasswordAuthDisabled =
+			data.passwordAuthDisabled !== undefined ? data.passwordAuthDisabled : cfg.passwordAuthDisabled
+		const targetGoogleOauthEnabled =
+			data.googleOauthEnabled !== undefined ? data.googleOauthEnabled : cfg.googleOauthEnabled
+		const targetGoogleClientId =
+			data.googleClientId !== undefined ? data.googleClientId : cfg.googleClientId
+		const targetGoogleClientSecret =
+			data.googleClientSecret !== undefined
+				? data.googleClientSecret === ""
+					? null
+					: data.googleClientSecret
+				: cfg.googleClientSecret
+
+		if (targetPasswordAuthDisabled) {
+			const hasClientId = Boolean(targetGoogleClientId?.trim())
+			const hasClientSecret = Boolean(targetGoogleClientSecret?.trim())
+			if (!targetGoogleOauthEnabled || !hasClientId || !hasClientSecret) {
+				return c.json(
+					{
+						message:
+							"Cannot disable password authentication without enabling and configuring Google OAuth (Client ID and Client Secret).",
+					},
+					400,
+				)
+			}
+		}
+
 		const patch: Parameters<typeof saveConfig>[0] = {
 			orgName: data.orgName,
 			allowedEmailDomain: data.allowedEmailDomain,
 			openSignupEnabled: data.openSignupEnabled,
 			googleOauthEnabled: data.googleOauthEnabled,
+			passwordAuthDisabled: data.passwordAuthDisabled,
 			googleClientId: data.googleClientId,
 			googleOauthRedirectUri: data.googleOauthRedirectUri,
 			slackChannelId: data.slackChannelId,
