@@ -1,6 +1,8 @@
+import crypto from "node:crypto"
 import { type AppUser, appUsers } from "@shared/schema"
 import { eq } from "drizzle-orm"
 import type { Context, Hono, Next } from "hono"
+import { deleteCookie, getCookie, setCookie } from "hono/cookie"
 import { db } from "../db"
 import { isEmailDomainAllowed, loadConfig, parseAllowedDomains } from "../lib/config"
 import type { AppEnv } from "./session"
@@ -34,10 +36,12 @@ function callbackRoutePath(): string {
 	return DEFAULT_CALLBACK_PATH
 }
 
-async function allowedDomainsFromConfig(): Promise<string[]> {
-	const cfg = await loadConfig()
-	const domainStr = cfg.allowedEmailDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null
-	return parseAllowedDomains(domainStr)
+const OAUTH_COOKIE_OPTS = {
+	httpOnly: true,
+	secure: process.env.NODE_ENV === "production",
+	sameSite: "Lax" as const,
+	path: "/",
+	maxAge: 600, // 10 minutes
 }
 
 // Custom in-memory rate limiter middleware for Google OAuth
@@ -64,54 +68,83 @@ async function oauthLimiter(c: Context<AppEnv>, next: Next) {
 }
 
 export async function setupGoogleAuth(app: Hono<AppEnv>): Promise<void> {
-	const cfg = await loadConfig()
-	const googleClientId = cfg.googleClientId ?? process.env.GOOGLE_CLIENT_ID
-	const googleClientSecret = cfg.googleClientSecret ?? process.env.GOOGLE_CLIENT_SECRET
-	const googleEnabled = cfg.googleOauthEnabled && !!googleClientId && !!googleClientSecret
-
 	const cbPath = callbackRoutePath()
 
-	if (!googleEnabled) {
-		app.get("/api/auth/google", (c) => c.json({ message: "Google OAuth disabled" }, 404))
-		app.get(cbPath, (c) => c.json({ message: "Google OAuth disabled" }, 404))
-		app.post("/api/auth/logout", (c) => {
-			destroySession(c)
-			return c.json({ ok: true })
-		})
-		console.log("[auth] Google OAuth disabled (no client credentials in app_config or env)")
-		return
-	}
-
-	console.log(`[auth] Google callback registered at ${cbPath}`)
-
 	app.get("/api/auth/google", oauthLimiter, async (c) => {
-		const domains = await allowedDomainsFromConfig()
+		const cfg = await loadConfig()
+		const googleClientId = cfg.googleClientId ?? process.env.GOOGLE_CLIENT_ID
+		const googleClientSecret = cfg.googleClientSecret ?? process.env.GOOGLE_CLIENT_SECRET
+		const googleEnabled = cfg.googleOauthEnabled && !!googleClientId && !!googleClientSecret
+
+		if (!googleEnabled || !googleClientId || !googleClientSecret) {
+			return c.json({ message: "Google OAuth disabled" }, 404)
+		}
+
+		const domains = parseAllowedDomains(
+			cfg.allowedEmailDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null,
+		)
 		const callbackUrl = resolveCallbackUrl(c)
-		let googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=profile%20email`
+
+		const state = crypto.randomBytes(32).toString("hex")
+		const codeVerifier = crypto.randomBytes(32).toString("base64url")
+		const codeChallenge = crypto.createHash("sha256").update(codeVerifier).digest("base64url")
+
+		setCookie(c, "tm.oauth_state", state, OAUTH_COOKIE_OPTS)
+		setCookie(c, "tm.oauth_verifier", codeVerifier, OAUTH_COOKIE_OPTS)
+
+		let googleAuthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(
+			googleClientId,
+		)}&redirect_uri=${encodeURIComponent(
+			callbackUrl,
+		)}&response_type=code&scope=profile%20email&state=${encodeURIComponent(
+			state,
+		)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256`
+
 		if (domains.length === 1) {
-			googleAuthUrl += `&hd=${domains[0]}`
+			googleAuthUrl += `&hd=${encodeURIComponent(domains[0])}`
 		}
 		return c.redirect(googleAuthUrl)
 	})
 
-	app.get(cbPath, oauthLimiter, async (c) => {
+	const handleCallback = async (c: Context<AppEnv>) => {
+		const queryState = c.req.query("state")
 		const code = c.req.query("code")
-		if (!code || !googleClientId || !googleClientSecret) {
+		const savedState = getCookie(c, "tm.oauth_state")
+		const codeVerifier = getCookie(c, "tm.oauth_verifier")
+
+		deleteCookie(c, "tm.oauth_state", { path: "/" })
+		deleteCookie(c, "tm.oauth_verifier", { path: "/" })
+
+		if (!code || !queryState || !savedState || queryState !== savedState) {
+			return c.redirect("/login?error=unauthorized")
+		}
+
+		const cfg = await loadConfig()
+		const googleClientId = cfg.googleClientId ?? process.env.GOOGLE_CLIENT_ID
+		const googleClientSecret = cfg.googleClientSecret ?? process.env.GOOGLE_CLIENT_SECRET
+		const googleEnabled = cfg.googleOauthEnabled && !!googleClientId && !!googleClientSecret
+
+		if (!googleEnabled || !googleClientId || !googleClientSecret) {
 			return c.redirect("/login?error=unauthorized")
 		}
 
 		try {
 			const callbackUrl = resolveCallbackUrl(c)
+			const tokenParams: Record<string, string> = {
+				code,
+				client_id: googleClientId,
+				client_secret: googleClientSecret,
+				redirect_uri: callbackUrl,
+				grant_type: "authorization_code",
+			}
+			if (codeVerifier) {
+				tokenParams.code_verifier = codeVerifier
+			}
+
 			const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
 				method: "POST",
 				headers: { "Content-Type": "application/x-www-form-urlencoded" },
-				body: new URLSearchParams({
-					code,
-					client_id: googleClientId,
-					client_secret: googleClientSecret,
-					redirect_uri: callbackUrl,
-					grant_type: "authorization_code",
-				}).toString(),
+				body: new URLSearchParams(tokenParams).toString(),
 			})
 
 			if (!tokenRes.ok) {
@@ -131,13 +164,20 @@ export async function setupGoogleAuth(app: Hono<AppEnv>): Promise<void> {
 				return c.redirect("/login?error=unauthorized")
 			}
 
-			const profile = (await userInfoRes.json()) as { sub?: string; email?: string; name?: string }
+			const profile = (await userInfoRes.json()) as {
+				sub?: string
+				email?: string
+				name?: string
+				email_verified?: boolean
+			}
 			const email = profile.email?.toLowerCase()
-			if (!email) {
+			if (!email || profile.email_verified !== true) {
 				return c.redirect("/login?error=unauthorized")
 			}
 
-			const domains = await allowedDomainsFromConfig()
+			const domains = parseAllowedDomains(
+				cfg.allowedEmailDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null,
+			)
 			if (domains.length > 0 && !isEmailDomainAllowed(email, domains)) {
 				return c.redirect("/login?error=unauthorized")
 			}
@@ -165,15 +205,7 @@ export async function setupGoogleAuth(app: Hono<AppEnv>): Promise<void> {
 			} else {
 				// No existing user — Google never auto-creates without explicit permit.
 				// Open self-signup with domain match is the only path here.
-				const cfg2 = await loadConfig()
-				const domains2 = parseAllowedDomains(
-					cfg2.allowedEmailDomain ?? process.env.ALLOWED_EMAIL_DOMAIN ?? null,
-				)
-				if (
-					cfg2.openSignupEnabled &&
-					domains2.length > 0 &&
-					isEmailDomainAllowed(email, domains2)
-				) {
+				if (cfg.openSignupEnabled && domains.length > 0 && isEmailDomainAllowed(email, domains)) {
 					const [created] = await db
 						.insert(appUsers)
 						.values({
@@ -204,7 +236,12 @@ export async function setupGoogleAuth(app: Hono<AppEnv>): Promise<void> {
 			console.error("[auth] Google authentication error:", err)
 			return c.redirect("/login?error=unauthorized")
 		}
-	})
+	}
+
+	app.get(cbPath, oauthLimiter, handleCallback)
+	if (cbPath !== DEFAULT_CALLBACK_PATH) {
+		app.get(DEFAULT_CALLBACK_PATH, oauthLimiter, handleCallback)
+	}
 
 	app.post("/api/auth/logout", (c) => {
 		destroySession(c)
