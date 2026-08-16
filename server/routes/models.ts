@@ -525,4 +525,97 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 
 		return c.json(data)
 	})
+
+	app.get("/api/models/:model/teams", isAuthenticated, async (c) => {
+		const parse = summaryQuery.safeParse(c.req.query())
+		if (!parse.success) return c.json({ issues: parse.error.issues }, 400)
+		const model = decodeURIComponent(c.req.param("model"))
+		const { from, to, days, platform } = parse.data
+		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
+
+		const role = currentRole(c)
+		const isViewer = role !== "admin"
+		const cfg = await loadConfig()
+		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
+
+		const includeCC = platform === "all" || platform === "claude_code"
+		const includeCU = platform === "all" || platform === "cursor"
+
+		const aliasLookup = await db.execute(sql`
+			select base_model from model_aliases where raw_model = ${model}
+		`)
+		const baseModelName = (aliasLookup.rows[0]?.base_model as string) || model
+
+		const result = await db.execute(sql`
+			with
+			cc as (
+				select
+					tm.team_id,
+					coalesce(sum(d.attributed_cents), 0)::bigint as cents,
+					coalesce(sum(d.uncached_input_tokens + d.cache_read_input_tokens + d.cache_creation_5m_tokens + d.cache_creation_1h_tokens + d.output_tokens), 0)::bigint as tokens
+				from daily_claude_code_attribution d
+				join team_memberships tm on tm.user_email = d.email
+				left join model_aliases ma on ma.raw_model = d.model
+				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				  and d.date between ${effFrom} and ${effTo}
+				  and ${includeCC}
+				group by tm.team_id
+			),
+			cu as (
+				select
+					tm.team_id,
+					coalesce(sum(d.charged_cents), 0)::bigint as cents,
+					coalesce(sum(d.input_tokens + d.output_tokens + d.cache_read_tokens + d.cache_write_tokens), 0)::bigint as tokens
+				from daily_cursor_usage d
+				join team_memberships tm on tm.user_email = d.email
+				left join model_aliases ma on ma.raw_model = d.model
+				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				  and d.date between ${effFrom} and ${effTo}
+				  and ${includeCU}
+				group by tm.team_id
+			),
+			team_usage as (
+				select
+					t.id as team_id,
+					t.name as team_name,
+					(coalesce(cc.cents, 0) + coalesce(cu.cents, 0))::bigint as cents,
+					(coalesce(cc.tokens, 0) + coalesce(cu.tokens, 0))::bigint as tokens
+				from teams t
+				left join cc on cc.team_id = t.id
+				left join cu on cu.team_id = t.id
+				where (coalesce(cc.tokens, 0) + coalesce(cu.tokens, 0)) > 0
+			),
+			model_total as (
+				select
+					coalesce(sum(cents), 0)::bigint as total_cents,
+					coalesce(sum(tokens), 0)::bigint as total_tokens
+				from team_usage
+			)
+			select
+				tu.team_id,
+				tu.team_name,
+				tu.cents,
+				tu.tokens,
+				case
+					when (select total_cents from model_total) > 0 then (tu.cents::float / (select total_cents from model_total)) * 100
+					else 0
+				end as share_pct_cost,
+				case
+					when (select total_tokens from model_total) > 0 then (tu.tokens::float / (select total_tokens from model_total)) * 100
+					else 0
+				end as share_pct_tokens
+			from team_usage tu
+			order by tokens desc, tu.team_name asc
+		`)
+
+		const rows = (result.rows ?? []).map((row: Record<string, unknown>) => ({
+			teamId: String(row.team_id),
+			teamName: String(row.team_name),
+			tokens: Number(row.tokens),
+			cents: hideCosts ? null : Number(row.cents),
+			share_pct: hideCosts ? Number(row.share_pct_tokens || 0) : Number(row.share_pct_cost || 0),
+		}))
+
+		return c.json(rows)
+	})
 }

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { Filter } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { useSearch } from "wouter"
 import { MetricPair } from "@/components/MetricPair"
 import { SearchInput } from "@/components/SearchInput"
 import { SortHeader } from "@/components/SortHeader"
@@ -34,15 +35,38 @@ import { formatNumber } from "@/lib/utils"
 type SortKey = "email" | "cc_cents" | "cu_cents" | "total" | "gh_lines" | "prs"
 
 export function UsersPage(): React.JSX.Element {
+	const searchString = useSearch()
+	const searchParams = useMemo(() => new URLSearchParams(searchString), [searchString])
+	const paramTeamId = searchParams.get("teamId")
+
 	const { from, to } = useDateRange()
 	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
 	const isViewer = me ? me.role !== "admin" : false
 	const [metricMode] = useMetricMode()
 	const effectiveMode = isViewer ? "tokens" : metricMode
+
+	const [selectedTeamId, setSelectedTeamId] = useState<string>(paramTeamId || "all")
+
+	useEffect(() => {
+		if (paramTeamId) {
+			setSelectedTeamId(paramTeamId)
+		}
+	}, [paramTeamId])
 	const usersQuery = useQuery({
-		queryKey: ["users.list", from, to],
-		queryFn: () => api.users.list({ from, to }),
+		queryKey: ["users.list", from, to, selectedTeamId],
+		queryFn: () =>
+			api.users.list({
+				from,
+				to,
+				teamId: selectedTeamId !== "all" ? selectedTeamId : undefined,
+			}),
 	})
+	const { data: teamsData } = useQuery({
+		queryKey: ["teams"],
+		queryFn: () => api.teams.list(),
+	})
+	const teams = teamsData?.teams ?? []
+
 	const data = usersQuery.data ?? []
 	const isLoading = usersQuery.isLoading
 
@@ -54,8 +78,16 @@ export function UsersPage(): React.JSX.Element {
 	const rows = useMemo(() => {
 		const f = filter.trim().toLowerCase()
 		let filtered = f
-			? data.filter((r) => r.email.toLowerCase().includes(f) || r.name?.toLowerCase().includes(f))
+			? data.filter(
+					(r) =>
+						r.email.toLowerCase().includes(f) ||
+						r.name?.toLowerCase().includes(f) ||
+						r.teams?.some((t) => t.name.toLowerCase().includes(f)),
+				)
 			: data
+		if (selectedTeamId !== "all") {
+			filtered = filtered.filter((r) => r.teams?.some((t) => t.id === selectedTeamId))
+		}
 		if (selectedEmails.size > 0) {
 			filtered = filtered.filter((r) => selectedEmails.has(r.email))
 		}
@@ -87,7 +119,7 @@ export function UsersPage(): React.JSX.Element {
 				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
 			return sortDir === "asc" ? cmp : -cmp
 		})
-	}, [data, filter, selectedEmails, sortKey, sortDir, effectiveMode])
+	}, [data, filter, selectedEmails, sortKey, sortDir, effectiveMode, selectedTeamId])
 
 	const getSortLabel = (key: SortKey): string => {
 		switch (key) {
@@ -123,17 +155,54 @@ export function UsersPage(): React.JSX.Element {
 					{data.length} USERS TRACKED · sorted by{" "}
 					<span className="text-fg">{getSortLabel(sortKey)}</span>
 				</Typography>
-				<div className="flex items-center gap-2 max-w-xs w-full">
+				<div className="flex items-center gap-2">
 					<SearchInput
-						placeholder="filter by email or name…"
+						placeholder="filter by email, name, team…"
 						value={filter}
 						onChange={setFilter}
-						className="flex-1"
+						className="w-52"
 					/>
+					{teams.length > 0 ? (
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-8 text-xs font-mono bg-bg border-line shrink-0"
+								>
+									{selectedTeamId === "all"
+										? "ALL TEAMS"
+										: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end" className="w-48 font-mono text-xs">
+								<DropdownMenuLabel>Filter by Team</DropdownMenuLabel>
+								<DropdownMenuSeparator />
+								<DropdownMenuCheckboxItem
+									checked={selectedTeamId === "all"}
+									onCheckedChange={() => setSelectedTeamId("all")}
+								>
+									ALL TEAMS
+								</DropdownMenuCheckboxItem>
+								<DropdownMenuSeparator />
+								{teams.map((t) => (
+									<DropdownMenuCheckboxItem
+										key={t.id}
+										checked={selectedTeamId === t.id}
+										onCheckedChange={() =>
+											setSelectedTeamId(selectedTeamId === t.id ? "all" : t.id)
+										}
+									>
+										{t.name}
+									</DropdownMenuCheckboxItem>
+								))}
+							</DropdownMenuContent>
+						</DropdownMenu>
+					) : null}
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
-							<Button variant="outline" size="icon" className="shrink-0 size-9 bg-bg border-line">
-								<Filter className="size-4 text-fg-muted" />
+							<Button variant="outline" size="icon" className="shrink-0 size-8 bg-bg border-line">
+								<Filter className="size-3.5 text-fg-muted" />
 							</Button>
 						</DropdownMenuTrigger>
 						<DropdownMenuContent className="w-64 max-h-[60vh] overflow-y-auto" align="end">
@@ -246,16 +315,35 @@ export function UsersPage(): React.JSX.Element {
 											{String(i + 1).padStart(3, "0")}
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
-											<div className="flex items-center gap-1.5">
-												<UserLink email={r.email} name={r.name} />
-												{!r.github_username && (
-													<span
-														title="No GitHub username mapped"
-														className="inline-flex items-center px-1 py-0.5 text-[8px] tracked bg-amber/10 text-amber border border-amber/20 leading-none"
-													>
-														NO GH
-													</span>
-												)}
+											<div className="flex flex-col min-w-0">
+												<div className="flex items-center gap-1.5 truncate">
+													<UserLink email={r.email} name={r.name} />
+													{!r.github_username && (
+														<span
+															title="No GitHub username mapped"
+															className="inline-flex items-center px-1 py-0.5 text-[8px] tracked bg-amber/10 text-amber border border-amber/20 leading-none shrink-0"
+														>
+															NO GH
+														</span>
+													)}
+												</div>
+												{r.teams && r.teams.length > 0 ? (
+													<div className="flex items-center gap-1 mt-0.5 flex-wrap">
+														{r.teams.map((t) => (
+															<button
+																type="button"
+																key={t.id}
+																className="text-[9px] font-mono text-fg-subtle hover:text-amber transition-colors cursor-pointer"
+																onClick={(e) => {
+																	e.stopPropagation()
+																	setSelectedTeamId(t.id)
+																}}
+															>
+																#{t.name}
+															</button>
+														))}
+													</div>
+												) : null}
 											</div>
 										</TableCell>
 										<TableCell className="px-3 py-2.5 text-right">

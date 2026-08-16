@@ -518,6 +518,22 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 					) : detail?.github_username ? (
 						<span className="text-fg-subtle">· gh: {detail.github_username}</span>
 					) : null}
+					{detail?.teams && detail.teams.length > 0 ? (
+						<>
+							<span className="text-fg-subtle">·</span>
+							<span className="flex items-center gap-1">
+								<span className="text-fg-subtle">team:</span>
+								{detail.teams.map((t) => (
+									<span
+										key={t.id}
+										className="px-1.5 py-0.5 rounded bg-elev2 text-fg text-[10px] font-mono border border-line"
+									>
+										{t.name}
+									</span>
+								))}
+							</span>
+						</>
+					) : null}
 				</Typography>
 				<Button
 					variant="outline"

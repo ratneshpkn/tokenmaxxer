@@ -169,6 +169,7 @@ export interface UserListItem {
 	gh_prs_merged: number
 	gh_additions: number
 	gh_deletions: number
+	teams?: Array<{ id: string; name: string }>
 }
 
 export interface UserDetailResponse {
@@ -177,6 +178,7 @@ export interface UserDetailResponse {
 	anthropic_user_id: string | null
 	cursor_user_id: string | null
 	github_username: string | null
+	teams?: Array<{ id: string; name: string }>
 }
 
 export interface HeatmapItem {
@@ -325,6 +327,14 @@ export interface UserRawModelCursorItem {
 	request_count: number
 }
 
+export interface ModelTeamItem {
+	teamId: string
+	teamName: string
+	tokens: number
+	cents: number | null
+	share_pct: number
+}
+
 export interface UserRawModelsResponse {
 	claude_code: UserRawModelClaudeCodeItem[]
 	cursor: UserRawModelCursorItem[]
@@ -379,4 +389,53 @@ export interface UserPRComplexityResponse {
 	}>
 	trend: UserPRComplexityTrendItem[]
 	recentPrs: UserPRComplexityItem[]
+}
+
+export interface TeamItem {
+	id: string
+	name: string
+	description: string | null
+	memberCount: number
+	totalTokens: number
+	claudeCodeTokens: number
+	cursorTokens: number
+	totalCostCents?: number
+	claudeCodeCostCents?: number
+	cursorCostCents?: number
+	createdAt?: string
+	updatedAt?: string
+}
+
+export interface TeamMemberItem {
+	email: string
+	name: string | null
+	anthropicUserId: string | null
+	cursorUserId: string | null
+	githubUsername: string | null
+	isActive: boolean
+	totalTokens: number
+	totalCostCents?: number
+}
+
+export interface TeamListResponse {
+	from: string
+	to: string
+	teams: TeamItem[]
+}
+
+export interface TeamDetailResponse {
+	team: TeamItem
+	members: TeamMemberItem[]
+}
+
+export interface CreateTeamPayload {
+	name: string
+	description?: string
+	memberEmails?: string[]
+}
+
+export interface UpdateTeamPayload {
+	name?: string
+	description?: string
+	memberEmails?: string[]
 }

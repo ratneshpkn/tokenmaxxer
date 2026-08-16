@@ -499,7 +499,51 @@ export const modelRecommendations = pgTable(
 		emailDateIdx: index("mr_email_date_idx").on(t.email, t.computedDate),
 	}),
 )
-// ── Zod schemas (insert/select) ──────────────────────────────────────────
+
+export const teams = pgTable(
+	"teams",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		name: varchar("name", { length: 100 }).notNull(),
+		description: text("description"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(t) => ({
+		nameIdx: uniqueIndex("teams_name_idx").on(t.name),
+	}),
+)
+
+export const teamMemberships = pgTable(
+	"team_memberships",
+	{
+		id: uuid("id").defaultRandom().primaryKey(),
+		teamId: uuid("team_id")
+			.notNull()
+			.references(() => teams.id, { onDelete: "cascade" }),
+		userEmail: varchar("user_email", { length: 320 })
+			.notNull()
+			.references(() => trackedUsers.email, { onDelete: "cascade", onUpdate: "cascade" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(t) => ({
+		teamUserUnique: uniqueIndex("team_memberships_unique_idx").on(t.teamId, t.userEmail),
+		teamIdIdx: index("team_memberships_team_id_idx").on(t.teamId),
+		userEmailIdx: index("team_memberships_user_email_idx").on(t.userEmail),
+	}),
+)
+export const insertTeamSchema = createInsertSchema(teams).omit({
+	id: true,
+	createdAt: true,
+	updatedAt: true,
+})
+export const selectTeamSchema = createSelectSchema(teams)
+
+export const insertTeamMembershipSchema = createInsertSchema(teamMemberships).omit({
+	id: true,
+	createdAt: true,
+})
+export const selectTeamMembershipSchema = createSelectSchema(teamMemberships)
 
 export const insertModelRecommendationSchema = createInsertSchema(modelRecommendations).omit({
 	id: true,
@@ -535,6 +579,10 @@ export const updateUserThresholdSchema = z.object({
 
 export type AppUser = typeof appUsers.$inferSelect
 export type NewAppUser = typeof appUsers.$inferInsert
+export type Team = typeof teams.$inferSelect
+export type NewTeam = typeof teams.$inferInsert
+export type TeamMembership = typeof teamMemberships.$inferSelect
+export type NewTeamMembership = typeof teamMemberships.$inferInsert
 export type TrackedUser = typeof trackedUsers.$inferSelect
 export type AlertThreshold = typeof alertThresholds.$inferSelect
 export type Alert = typeof alerts.$inferSelect

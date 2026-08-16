@@ -7,6 +7,7 @@ import type {
 	CodeOutputItem,
 	ConfigResponse,
 	CreateInvitationResponse,
+	CreateTeamPayload,
 	DashboardSummaryResponse,
 	GithubHeatmapItem,
 	HeatmapItem,
@@ -16,12 +17,16 @@ import type {
 	ModelProfileResponse,
 	ModelRawModelItem,
 	ModelRecommendationItem,
+	ModelTeamItem,
 	ModelTrendItem,
 	ModelUserItem,
 	SetupSavePayload,
 	SyncRunItem,
+	TeamDetailResponse,
+	TeamItem,
 	ThresholdsResponse,
 	TopSpenderItem,
+	UpdateTeamPayload,
 	UpdateTrackedUserRequest,
 	UpdateTrackedUserResponse,
 	UsageRow,
@@ -136,8 +141,14 @@ export const api = {
 	},
 
 	users: {
-		list: (range: { from: string; to: string }) =>
-			request<UserListItem[]>(`/api/users?from=${range.from}&to=${range.to}`),
+		list: (range?: { from?: string; to?: string; teamId?: string }) => {
+			const query = new URLSearchParams()
+			if (range?.from) query.set("from", range.from)
+			if (range?.to) query.set("to", range.to)
+			if (range?.teamId) query.set("teamId", range.teamId)
+			const qStr = query.toString()
+			return request<UserListItem[]>(`/api/users${qStr ? `?${qStr}` : ""}`)
+		},
 		detail: (email: string) =>
 			request<UserDetailResponse>(`/api/users/${encodeURIComponent(email)}`),
 		usage: (
@@ -265,5 +276,44 @@ export const api = {
 			request<ModelRawModelItem[]>(
 				`/api/models/${encodeURIComponent(model)}/raw-models?from=${from}&to=${to}&platform=${platform}`,
 			),
+		teams: (
+			model: string,
+			from: string,
+			to: string,
+			platform: "all" | "claude_code" | "cursor" = "all",
+		) =>
+			request<ModelTeamItem[]>(
+				`/api/models/${encodeURIComponent(model)}/teams?from=${from}&to=${to}&platform=${platform}`,
+			),
+	},
+
+	teams: {
+		list: (params?: { from?: string; to?: string; days?: number }) => {
+			const query = new URLSearchParams()
+			if (params?.from) query.set("from", params.from)
+			if (params?.to) query.set("to", params.to)
+			if (params?.days) query.set("days", String(params.days))
+			const qStr = query.toString()
+			return request<{ teams: TeamItem[] }>(`/api/teams${qStr ? `?${qStr}` : ""}`)
+		},
+		get: (id: string, params?: { from?: string; to?: string; days?: number }) => {
+			const query = new URLSearchParams()
+			if (params?.from) query.set("from", params.from)
+			if (params?.to) query.set("to", params.to)
+			if (params?.days) query.set("days", String(params.days))
+			const qStr = query.toString()
+			return request<TeamDetailResponse>(`/api/teams/${id}${qStr ? `?${qStr}` : ""}`)
+		},
+		create: (payload: CreateTeamPayload) =>
+			request<{ team: TeamItem }>("/api/teams", {
+				method: "POST",
+				body: JSON.stringify(payload),
+			}),
+		update: (id: string, payload: UpdateTeamPayload) =>
+			request<{ team: TeamItem }>(`/api/teams/${id}`, {
+				method: "PATCH",
+				body: JSON.stringify(payload),
+			}),
+		delete: (id: string) => request<{ success: true }>(`/api/teams/${id}`, { method: "DELETE" }),
 	},
 }
