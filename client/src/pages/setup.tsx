@@ -221,13 +221,13 @@ export function SetupPage(): React.JSX.Element {
 								</div>
 								<div>
 									<Label htmlFor="domain" className="text-[10px] tracked text-fg-muted">
-										ALLOWED EMAIL DOMAIN (OPTIONAL)
+										ALLOWED EMAIL DOMAINS (COMMA-SEPARATED, OPTIONAL)
 									</Label>
 									<Input
 										id="domain"
 										value={allowedDomain}
 										onChange={(e) => setAllowedDomain(e.target.value)}
-										placeholder="acme.com"
+										placeholder="acme.com, example.com"
 										className="mt-1"
 									/>
 								</div>
@@ -239,8 +239,7 @@ export function SetupPage(): React.JSX.Element {
 									onChange={(e) => setOpenSignup(e.target.checked)}
 								/>
 								<span>
-									Allow self-signup for {allowedDomain ? `@${allowedDomain}` : "the allowed domain"}{" "}
-									addresses
+									Allow self-signup for {allowedDomain ? "allowed domains" : "any domain"}
 								</span>
 							</label>
 						</section>

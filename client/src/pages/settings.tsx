@@ -415,8 +415,18 @@ export function SettingsPage(): React.JSX.Element {
 									<p className="mt-1 text-fg text-sm">{adminCfg?.orgName || "—"}</p>
 								</div>
 								<div>
-									<Label className="text-xs tracked text-fg-muted">ALLOWED EMAIL DOMAIN</Label>
-									<p className="mt-1 text-fg text-sm">{adminCfg?.allowedEmailDomain || "Any"}</p>
+									<Label className="text-xs tracked text-fg-muted">ALLOWED EMAIL DOMAINS</Label>
+									{adminCfg?.allowedEmailDomains && adminCfg.allowedEmailDomains.length > 0 ? (
+										<div className="mt-1 flex flex-wrap gap-1.5">
+											{adminCfg.allowedEmailDomains.map((d) => (
+												<Badge key={d} variant="secondary" className="font-mono text-xs">
+													@{d}
+												</Badge>
+											))}
+										</div>
+									) : (
+										<p className="mt-1 text-fg text-sm">{adminCfg?.allowedEmailDomain || "Any"}</p>
+									)}
 								</div>
 								<div>
 									<Label className="text-xs tracked text-fg-muted">SELF-SIGNUP</Label>
@@ -453,13 +463,13 @@ export function SettingsPage(): React.JSX.Element {
 									</div>
 									<div>
 										<Label htmlFor="domain" className="text-xs tracked text-fg-muted">
-											ALLOWED EMAIL DOMAIN (OPTIONAL)
+											ALLOWED EMAIL DOMAINS (COMMA-SEPARATED, OPTIONAL)
 										</Label>
 										<Input
 											id="domain"
 											value={allowedDomain}
 											onChange={(e) => setAllowedDomain(e.target.value)}
-											placeholder="acme.com"
+											placeholder="acme.com, example.com"
 											className="mt-1"
 										/>
 									</div>
@@ -472,8 +482,7 @@ export function SettingsPage(): React.JSX.Element {
 												onCheckedChange={(checked) => setOpenSignup(Boolean(checked))}
 											/>
 											<label htmlFor="openSignup" className="cursor-pointer">
-												Allow self-signup for{" "}
-												{allowedDomain ? `@${allowedDomain}` : "the allowed domain"} addresses
+												Allow self-signup for {allowedDomain ? "allowed domains" : "any domain"}
 											</label>
 										</div>
 									</div>

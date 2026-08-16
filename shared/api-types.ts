@@ -12,6 +12,7 @@ export interface UsageRow {
 
 export interface ConfigResponse {
 	allowedEmailDomain: string
+	allowedEmailDomains: string[]
 	orgName: string
 	googleOauthEnabled: boolean
 	openSignupEnabled: boolean
@@ -23,6 +24,7 @@ export interface ConfigResponse {
 export interface AdminConfigResponse {
 	orgName: string
 	allowedEmailDomain: string | null
+	allowedEmailDomains: string[]
 	openSignupEnabled: boolean
 	googleOauthEnabled: boolean
 	googleClientId: string | null

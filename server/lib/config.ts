@@ -31,6 +31,26 @@ export interface ResolvedConfig {
 	enrichmentBaseUrl: string | null
 }
 
+/** Parse comma, whitespace, or newline delimited domains into a clean lowercase array. */
+export function parseAllowedDomains(domainStr: string | null | undefined): string[] {
+	if (!domainStr) return []
+	return domainStr
+		.split(/[\s,]+/)
+		.map((d) => d.trim().replace(/^@/, "").toLowerCase())
+		.filter((d) => d.length > 0)
+}
+
+/** Check if an email matches the allowed domains. Fail-closed: returns false if allowedDomains is empty or email is invalid. */
+export function isEmailDomainAllowed(email: string, allowedDomains: string[]): boolean {
+	if (!allowedDomains || allowedDomains.length === 0) return false
+	const lowerEmail = email.trim().toLowerCase()
+	const parts = lowerEmail.split("@")
+	if (parts.length !== 2) return false
+	const [local, domain] = parts
+	if (!local || !domain) return false
+	return allowedDomains.includes(domain)
+}
+
 /** Mutable fields accepted by saveConfig. Secrets are plaintext on input. */
 export interface ConfigPatch {
 	orgName?: string
