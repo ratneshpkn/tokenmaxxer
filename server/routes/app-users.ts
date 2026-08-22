@@ -7,7 +7,7 @@ import { db } from "../db"
 import { currentUser } from "./index"
 
 export function registerAppUserRoutes(app: Hono<AppEnv>): void {
-	app.get("/api/app-users", isAuthenticated, async (c) => {
+	app.get("/api/app-users", isAuthenticated, requireAdmin, async (c) => {
 		const users = await db
 			.select({
 				id: appUsers.id,
