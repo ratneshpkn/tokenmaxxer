@@ -9,15 +9,16 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: tokenmaxxer
-      POSTGRES_PASSWORD: tokenmaxxer
-      POSTGRES_DB: tokenmaxxer
+      POSTGRES_USER: ${POSTGRES_USER:-tokenmaxxer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tokenmaxxer}
+      POSTGRES_DB: ${POSTGRES_DB:-tokenmaxxer}
     volumes:
       - pgdata-prod:/var/lib/postgresql/data
     ports:
-      - "5439:5432"
+      # Bound strictly to loopback interface to avoid public network exposure
+      - "127.0.0.1:5439:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tokenmaxxer -d tokenmaxxer"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tokenmaxxer} -d ${POSTGRES_DB:-tokenmaxxer}"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -30,7 +31,7 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://tokenmaxxer:tokenmaxxer@postgres:5432/tokenmaxxer
+      DATABASE_URL: postgres://${POSTGRES_USER:-tokenmaxxer}:${POSTGRES_PASSWORD:-tokenmaxxer}@postgres:5432/${POSTGRES_DB:-tokenmaxxer}
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,7 +39,6 @@ services:
     # app_config singleton and import any .env values that haven't been
     # written through the setup wizard yet.
     command: sh -c "bun run db:migrate && bun run bootstrap"
-
 
   app:
     image: tokenmaxxer:prod
@@ -48,7 +48,7 @@ services:
     env_file: .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://tokenmaxxer:tokenmaxxer@postgres:5432/tokenmaxxer
+      DATABASE_URL: postgres://${POSTGRES_USER:-tokenmaxxer}:${POSTGRES_PASSWORD:-tokenmaxxer}@postgres:5432/${POSTGRES_DB:-tokenmaxxer}
     ports:
       - "3003:3003"
     depends_on:
