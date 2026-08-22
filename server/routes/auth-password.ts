@@ -1,5 +1,5 @@
 import { type AppUser, appUsers } from "@shared/schema"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { createMiddleware } from "hono/factory"
 import { z } from "zod"
@@ -85,11 +85,9 @@ export function registerAuthPasswordRoutes(app: Hono<AppEnv>): void {
 		const { email, password, token } = parse.data
 		const cfg = await loadConfig()
 
-		// Determine eligibility
-		const noUsersYet = cfg.bootstrapAdminUserId == null
-		if (cfg.passwordAuthDisabled && !noUsersYet && !token) {
-			return c.json({ message: "Password signup is disabled. Please sign in with Google." }, 403)
-		}
+		// Determine eligibility directly from whether any accounts exist in app_users
+		const [userCountRow] = await db.select({ count: sql<number>`count(*)::int` }).from(appUsers)
+		const noUsersYet = (userCountRow?.count ?? 0) === 0
 
 		let role: "viewer" | "admin" = "viewer"
 		let inviteRow = null as Awaited<ReturnType<typeof findValidInvite>> | null
@@ -99,6 +97,8 @@ export function registerAuthPasswordRoutes(app: Hono<AppEnv>): void {
 		if (noUsersYet) {
 			// First user ever — bootstrap admin path
 			role = "admin"
+		} else if (cfg.passwordAuthDisabled && !token) {
+			return c.json({ message: "Password signup is disabled. Please sign in with Google." }, 403)
 		} else if (token) {
 			inviteRow = await findValidInvite(token)
 			if (!inviteRow || inviteRow.email.toLowerCase() !== email.toLowerCase()) {
@@ -128,7 +128,7 @@ export function registerAuthPasswordRoutes(app: Hono<AppEnv>): void {
 		const hash = await hashPassword(password)
 
 		let user: AppUser
-		if (role === "admin" && noUsersYet) {
+		if (noUsersYet) {
 			// Atomic claim path
 			user = await createUserAndMaybeClaimAdmin(email, hash)
 		} else {
