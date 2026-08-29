@@ -1,9 +1,9 @@
-import * as htmlToImage from "html-to-image"
 import { Download, Loader2 } from "lucide-react"
 import { useRef, useState } from "react"
 import { Cost } from "@/components/Cost"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/toast"
 import { Typography } from "@/components/ui/typography"
 import { useMetricMode } from "@/lib/use-metric-mode"
 import { usePrivacyMode } from "@/lib/use-privacy-mode"
@@ -42,6 +42,7 @@ export function FlexCardModal({
 		if (!cardRef.current) return
 		try {
 			setDownloading(true)
+			const htmlToImage = await import("html-to-image")
 			const dataUrl = await htmlToImage.toPng(cardRef.current, { cacheBust: true, pixelRatio: 2 })
 			const link = document.createElement("a")
 			link.download = `${userName.toLowerCase().replace(/[^a-z0-9]/g, "-")}-tokenmaxxer-stats.png`
@@ -49,6 +50,7 @@ export function FlexCardModal({
 			link.click()
 		} catch (err) {
 			console.error("Failed to generate image", err)
+			toast.error("Failed to generate stats card image. Please try again.")
 		} finally {
 			setDownloading(false)
 		}
