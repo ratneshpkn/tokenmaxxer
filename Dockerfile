@@ -1,5 +1,5 @@
 # ---- Shared deps stage ----
-FROM oven/bun:1 AS deps
+FROM oven/bun:1.4 AS deps
 WORKDIR /app
 COPY package.json bun.lock* bun.lockb* ./
 RUN bun install --frozen-lockfile || bun install
@@ -19,7 +19,7 @@ COPY . .
 RUN bun run build
 
 # ---- Prod runtime ----
-FROM oven/bun:1-slim AS prod
+FROM oven/bun:1.4-slim AS prod
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json bun.lock* bun.lockb* ./
