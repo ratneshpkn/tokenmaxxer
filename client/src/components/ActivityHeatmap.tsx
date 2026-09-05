@@ -11,19 +11,22 @@ export interface ActivityDay {
 }
 
 /**
- * Compute a 0..4 bucket index per day. Bucket 0 = no activity. Buckets 1..4
- * are quartiles computed over the *non-zero* days only, so a light user's
- * peak day and a heavy user's peak day both render as the brightest shade.
+ * Compute a 0..N bucket index per day. Bucket 0 = no activity. Buckets 1..N
+ * are quantiles (default deciles 1..10) computed over the *non-zero* days only,
+ * so a light user's peak day and a heavy user's peak day both render as the
+ * brightest shade.
  *
  * Exported for unit testing — pure function.
  */
-export function computeQuartileBuckets(values: number[]): number[] {
+export function computeBuckets(values: number[], numBuckets = 10): number[] {
+	if (numBuckets <= 0) return values.map(() => 0)
 	const nonZero = values
 		.filter((v) => v > 0)
 		.slice()
 		.sort((a, b) => a - b)
 	if (nonZero.length === 0) return values.map(() => 0)
-	// Quartile cut points using linear interpolation (Type 7 / Excel-default).
+
+	// Quantile cut points using linear interpolation (Type 7 / Excel-default).
 	const q = (p: number): number => {
 		const idx = (nonZero.length - 1) * p
 		const lo = Math.floor(idx)
@@ -31,29 +34,52 @@ export function computeQuartileBuckets(values: number[]): number[] {
 		if (lo === hi) return nonZero[lo]
 		return nonZero[lo] + (nonZero[hi] - nonZero[lo]) * (idx - lo)
 	}
-	const q1 = q(0.25)
-	const q2 = q(0.5)
-	const q3 = q(0.75)
+
+	const cuts: number[] = []
+	for (let i = 1; i < numBuckets; i++) {
+		cuts.push(q(i / numBuckets))
+	}
+
 	// Degenerate distribution: every non-zero day has the same value, so all
-	// quartile cuts collapse onto the same number. Treat every active day as
-	// peak (bucket 4) rather than crushing it to bucket 1.
-	const degenerate = q1 === q3
+	// cut points collapse onto the same number. Treat every active day as
+	// peak (numBuckets) rather than crushing it to bucket 1.
+	const degenerate = cuts.length > 0 && cuts[0] === cuts[cuts.length - 1]
+
 	return values.map((v) => {
 		if (v <= 0) return 0
-		if (degenerate) return 4
-		if (v <= q1) return 1
-		if (v <= q2) return 2
-		if (v <= q3) return 3
-		return 4
+		if (degenerate) return numBuckets
+		for (let b = 0; b < cuts.length; b++) {
+			if (v <= cuts[b]) return b + 1
+		}
+		return numBuckets
 	})
 }
 
-const BUCKET_CLASS: Record<number, string> = {
-	0: "bg-line/20 dark:bg-line/15",
-	1: "bg-amber/15 dark:bg-amber/20",
-	2: "bg-amber/35 dark:bg-amber/40",
-	3: "bg-amber/60 dark:bg-amber/65",
-	4: "bg-amber",
+/** Legacy alias for 4-tier quartile buckets. */
+export function computeQuartileBuckets(values: number[]): number[] {
+	return computeBuckets(values, 4)
+}
+
+/**
+ * Mathematically compute an OKLCH color string for an activity bucket.
+ * Bucket 0 returns the empty cell surface color.
+ * Buckets 1..numBuckets scale smoothly from 18% to 100% in OKLCH.
+ */
+export function getHeatmapColor(
+	bucket: number,
+	accentVar: "--amber" | "--mint" = "--amber",
+	numBuckets = 10,
+): string {
+	if (bucket <= 0) {
+		return "color-mix(in oklch, var(--line) 45%, transparent)"
+	}
+	if (bucket >= numBuckets && accentVar === "--amber") {
+		return "var(--amber-hot)"
+	}
+	const minPct = 18
+	const maxPct = 100
+	const pct = Math.round(minPct + ((bucket - 1) / (numBuckets - 1)) * (maxPct - minPct))
+	return `color-mix(in oklch, var(${accentVar}) ${pct}%, transparent)`
 }
 
 function formatLabel(ymd: string): string {
@@ -79,7 +105,7 @@ export function ActivityHeatmap({ days, trendMode }: ActivityHeatmapProps): Reac
 	const values = days.map((d) =>
 		trendMode === "tokens" ? d.cc_tokens + d.cu_tokens : (d.cc_cents ?? 0) + (d.cu_cents ?? 0),
 	)
-	const buckets = computeQuartileBuckets(values)
+	const buckets = computeBuckets(values, 10)
 
 	// Reshape into columns-of-weeks. Right-most column = most recent week.
 	// Each column has 7 cells (Sun..Sat).
@@ -193,7 +219,8 @@ export function ActivityHeatmap({ days, trendMode }: ActivityHeatmapProps): Reac
 											<TooltipTrigger asChild>
 												<button
 													type="button"
-													className={`w-[20px] h-[20px] border-0 p-0 block rounded-none ${BUCKET_CLASS[bucket]} hover:scale-[1.08] hover:ring-1 hover:ring-amber/50 transition-all duration-150 ease-out cursor-pointer`}
+													className="w-[20px] h-[20px] p-0 block rounded-[2px] border border-line/40 hover:scale-[1.08] hover:ring-1 hover:ring-amber/50 transition-all duration-150 ease-out cursor-pointer"
+													style={{ backgroundColor: getHeatmapColor(bucket, "--amber") }}
 													aria-label={`${formatLabel(day.date)} — ${formatCompact(totalTokens)} tokens`}
 												/>
 											</TooltipTrigger>
