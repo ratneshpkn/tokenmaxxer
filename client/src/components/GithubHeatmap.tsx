@@ -2,15 +2,7 @@ import type { GithubHeatmapItem } from "@shared/api-types"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { typographyVariants } from "@/components/ui/typography"
 import { cn, formatNumber } from "@/lib/utils"
-import { computeQuartileBuckets } from "./ActivityHeatmap"
-
-const BUCKET_CLASS: Record<number, string> = {
-	0: "bg-line/20 dark:bg-line/15",
-	1: "bg-mint/20 dark:bg-mint/25",
-	2: "bg-mint/45 dark:bg-mint/50",
-	3: "bg-mint/75 dark:bg-mint/80",
-	4: "bg-mint",
-}
+import { computeBuckets, getHeatmapColor } from "./ActivityHeatmap"
 
 function formatLabel(ymd: string): string {
 	const d = new Date(`${ymd}T00:00:00Z`)
@@ -32,7 +24,7 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 		const lines = d.additions + d.deletions
 		return prs * 100000 + lines
 	})
-	const buckets = computeQuartileBuckets(values)
+	const buckets = computeBuckets(values, 10)
 
 	const padded: Array<{ day: GithubHeatmapItem; bucket: number } | null> = days.map((d, i) => ({
 		day: d,
@@ -134,7 +126,8 @@ export function GithubHeatmap({ days }: GithubHeatmapProps): React.JSX.Element {
 											<TooltipTrigger asChild>
 												<button
 													type="button"
-													className={`w-[20px] h-[20px] border-0 p-0 block rounded-none ${BUCKET_CLASS[bucket]} hover:scale-[1.08] hover:ring-1 hover:ring-mint/50 transition-all duration-150 ease-out cursor-pointer`}
+													className="w-[20px] h-[20px] p-0 block rounded-[2px] border border-line/40 hover:scale-[1.08] hover:ring-1 hover:ring-mint/50 transition-all duration-150 ease-out cursor-pointer"
+													style={{ backgroundColor: getHeatmapColor(bucket, "--mint") }}
 													aria-label={`${formatLabel(day.date)} — ${prCount} PRs, ${linesChanged} lines`}
 												/>
 											</TooltipTrigger>
