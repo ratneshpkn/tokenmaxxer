@@ -25,6 +25,9 @@ const UserDetailPage = lazy(() =>
 	import("@/pages/user-detail").then((m) => ({ default: m.UserDetailPage })),
 )
 const UsersPage = lazy(() => import("@/pages/users").then((m) => ({ default: m.UsersPage })))
+const VelocityPage = lazy(() =>
+	import("@/pages/velocity").then((m) => ({ default: m.VelocityPage })),
+)
 
 function AuthGate({
 	adminOnly = false,
@@ -106,6 +109,13 @@ export default function App(): React.JSX.Element {
 							<RootRoute>
 								<DashboardPage />
 							</RootRoute>
+						)}
+					</Route>
+					<Route path="/velocity">
+						{() => (
+							<AuthGate>
+								<VelocityPage />
+							</AuthGate>
 						)}
 					</Route>
 					<Route path="/users">

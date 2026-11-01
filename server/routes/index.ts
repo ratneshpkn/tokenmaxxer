@@ -17,6 +17,7 @@ import { registerSyncRoutes } from "./sync"
 import { registerTeamRoutes } from "./teams"
 import { registerThresholdRoutes } from "./thresholds"
 import { registerUserRoutes } from "./users"
+import { registerVelocityRoutes } from "./velocity"
 
 export function currentUser(c: Context<AppEnv>): AppUser | null {
 	return c.get("user") ?? null
@@ -72,4 +73,5 @@ export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 	registerAdminConfigRoutes(app)
 	registerModelRoutes(app)
 	registerAppUserRoutes(app)
+	registerVelocityRoutes(app)
 }

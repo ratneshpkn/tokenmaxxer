@@ -445,3 +445,71 @@ export interface UpdateTeamPayload {
 	description?: string
 	memberEmails?: string[]
 }
+
+// ── Velocity & ROI Analytics ─────────────────────────────────────────────
+
+export interface VelocityTrendPoint {
+	date: string
+	costCents?: number | null
+	tokens: number
+	prsMerged: number
+	prsOpened: number
+	impactPoints: number
+	substantivePrs: number
+}
+
+export interface VelocitySummaryResponse {
+	from: string
+	to: string
+	totalCostCents?: number | null
+	totalTokens: number
+	totalPrsMerged: number
+	totalPrsOpened: number
+	totalImpactPoints: number
+	substantivePrCount: number
+	totalEnrichedPrs: number
+	averageComplexity: number | null
+	costPerPrCents?: number | null
+	costPerImpactPointCents?: number | null
+	tokensPerPr: number | null
+	tokensPerImpactPoint: number | null
+	activeEngineersCount: number
+	trend: VelocityTrendPoint[]
+}
+
+export interface VelocityCategoryItem {
+	category: string
+	prCount: number
+	impactPoints: number
+	avgComplexity: number
+	substantiveCount: number
+	sharePct: number
+}
+
+export interface VelocityCategoriesResponse {
+	from: string
+	to: string
+	totalPrs: number
+	totalImpactPoints: number
+	categories: VelocityCategoryItem[]
+}
+
+export interface VelocityTeamItem {
+	teamId: string
+	teamName: string
+	memberCount: number
+	totalTokens: number
+	totalCostCents?: number | null
+	prsMerged: number
+	impactPoints: number
+	substantivePrCount: number
+	avgComplexity: number | null
+	tokensPerImpactPoint: number | null
+	costPerImpactPointCents?: number | null
+}
+
+export interface VelocityTeamsResponse {
+	from: string
+	to: string
+	teams: VelocityTeamItem[]
+}
