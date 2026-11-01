@@ -983,27 +983,33 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 												variant="outline"
 												className="text-[10px] font-mono uppercase bg-elev border-line text-fg-muted"
 											>
-												{pr.category}
+												{pr.category || "uncategorized"}
 											</Badge>
 										</TableCell>
 										<TableCell>
-											<Badge
-												variant="outline"
-												className={cn(
-													"text-[10px] font-mono border",
-													pr.complexityScore <= 2
-														? "bg-mint/10 text-mint border-mint/30"
-														: pr.complexityScore <= 3
-															? "bg-amber-hot/10 text-amber-hot border-amber-hot/30"
-															: "bg-crimson/10 text-crimson border-crimson/30",
-												)}
-											>
-												{pr.complexityScore} / 5
-											</Badge>
+											{pr.complexityScore != null ? (
+												<Badge
+													variant="outline"
+													className={cn(
+														"text-[10px] font-mono border",
+														pr.complexityScore <= 2
+															? "bg-mint/10 text-mint border-mint/30"
+															: pr.complexityScore <= 3
+																? "bg-amber-hot/10 text-amber-hot border-amber-hot/30"
+																: "bg-crimson/10 text-crimson border-crimson/30",
+													)}
+												>
+													{pr.complexityScore} / 5
+												</Badge>
+											) : (
+												<span className="text-[10px] font-mono text-fg-muted">—</span>
+											)}
 										</TableCell>
 										<TableCell className="text-fg-muted text-xs py-2.5">
-											<div className="font-medium text-fg">{pr.summary}</div>
-											<div className="text-xs text-fg-muted mt-0.5">{pr.complexityReason}</div>
+											<div className="font-medium text-fg">{pr.summary || pr.title}</div>
+											{pr.complexityReason && (
+												<div className="text-xs text-fg-muted mt-0.5">{pr.complexityReason}</div>
+											)}
 										</TableCell>
 									</TableRow>
 								))}
