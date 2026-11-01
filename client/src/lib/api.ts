@@ -34,6 +34,9 @@ import type {
 	UserListItem,
 	UserPRComplexityResponse,
 	UserRawModelsResponse,
+	VelocityCategoriesResponse,
+	VelocitySummaryResponse,
+	VelocityTeamsResponse,
 } from "@shared/api-types"
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -315,5 +318,36 @@ export const api = {
 				body: JSON.stringify(payload),
 			}),
 		delete: (id: string) => request<{ success: true }>(`/api/teams/${id}`, { method: "DELETE" }),
+	},
+
+	velocity: {
+		summary: (params?: { from?: string; to?: string; days?: number; teamId?: string }) => {
+			const query = new URLSearchParams()
+			if (params?.from) query.set("from", params.from)
+			if (params?.to) query.set("to", params.to)
+			if (params?.days) query.set("days", String(params.days))
+			if (params?.teamId) query.set("teamId", params.teamId)
+			const qStr = query.toString()
+			return request<VelocitySummaryResponse>(`/api/velocity/summary${qStr ? `?${qStr}` : ""}`)
+		},
+		categories: (params?: { from?: string; to?: string; days?: number; teamId?: string }) => {
+			const query = new URLSearchParams()
+			if (params?.from) query.set("from", params.from)
+			if (params?.to) query.set("to", params.to)
+			if (params?.days) query.set("days", String(params.days))
+			if (params?.teamId) query.set("teamId", params.teamId)
+			const qStr = query.toString()
+			return request<VelocityCategoriesResponse>(
+				`/api/velocity/categories${qStr ? `?${qStr}` : ""}`,
+			)
+		},
+		teams: (params?: { from?: string; to?: string; days?: number }) => {
+			const query = new URLSearchParams()
+			if (params?.from) query.set("from", params.from)
+			if (params?.to) query.set("to", params.to)
+			if (params?.days) query.set("days", String(params.days))
+			const qStr = query.toString()
+			return request<VelocityTeamsResponse>(`/api/velocity/teams${qStr ? `?${qStr}` : ""}`)
+		},
 	},
 }

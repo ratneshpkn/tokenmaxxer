@@ -13,6 +13,7 @@ import {
 	Settings as SettingsIcon,
 	Sun,
 	Users,
+	Zap,
 } from "lucide-react"
 import type { ReactNode } from "react"
 import { Link, useLocation } from "wouter"
@@ -57,6 +58,7 @@ interface NavItem {
 
 const NAV: NavItem[] = [
 	{ to: "/", label: "Dashboard", icon: LayoutDashboard },
+	{ to: "/velocity", label: "Velocity & ROI", icon: Zap },
 	{ to: "/users", label: "Users", icon: Users },
 	{ to: "/models", label: "Models", icon: Cpu },
 	{ to: "/alerts", label: "Alerts", icon: Bell, adminOnly: true },
@@ -78,7 +80,10 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 	const { theme, setTheme } = useTheme()
 
 	const isDateAwareRoute =
-		location === "/" || location.startsWith("/users") || location.startsWith("/models")
+		location === "/" ||
+		location.startsWith("/users") ||
+		location.startsWith("/models") ||
+		location.startsWith("/velocity")
 
 	const { data: alertCountData } = useQuery({
 		queryKey: ["alerts.count"],
