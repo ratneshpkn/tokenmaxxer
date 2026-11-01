@@ -1,3 +1,4 @@
+import { PR_COMPLEXITY_WEIGHTS } from "@shared/constants"
 import {
 	githubPrEnrichments,
 	githubPullRequests,
@@ -725,6 +726,8 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 				repo: githubPullRequests.repo,
 				number: githubPullRequests.number,
 				title: githubPullRequests.title,
+				additions: githubPullRequests.additions,
+				deletions: githubPullRequests.deletions,
 				category: githubPrEnrichments.category,
 				complexityScore: githubPrEnrichments.complexityScore,
 				complexityReason: githubPrEnrichments.complexityReason,
@@ -732,7 +735,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 				mergedAt: githubPullRequests.mergedAt,
 			})
 			.from(githubPullRequests)
-			.innerJoin(
+			.leftJoin(
 				githubPrEnrichments,
 				and(
 					eq(githubPullRequests.repo, githubPrEnrichments.repo),
@@ -742,8 +745,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			.where(and(...conditions))
 			.orderBy(desc(githubPullRequests.mergedAt), desc(githubPrEnrichments.syncedAt))
 
-		const WEIGHT_MAP: Record<number, number> = { 1: 0.1, 2: 0.5, 3: 2.0, 4: 8.0, 5: 24.0 }
-		const totalEnrichedPrs = rows.length
+		let totalEnrichedPrs = 0
 		const scoreCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
 		let totalScoreSum = 0
 		let weightedNumerator = 0
@@ -752,16 +754,19 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		let substantivePrCount = 0
 
 		for (const r of rows) {
-			const score = Math.max(1, Math.min(5, r.complexityScore))
-			scoreCounts[score] = (scoreCounts[score] || 0) + 1
-			totalScoreSum += score
+			if (r.complexityScore != null) {
+				totalEnrichedPrs += 1
+				const score = Math.max(1, Math.min(5, r.complexityScore))
+				scoreCounts[score] = (scoreCounts[score] || 0) + 1
+				totalScoreSum += score
 
-			const w = WEIGHT_MAP[score] || 1.0
-			weightedNumerator += w * score
-			weightedDenominator += w
-			totalImpactPoints += w
-			if (score >= 4) {
-				substantivePrCount += 1
+				const w = PR_COMPLEXITY_WEIGHTS[score] || 1.0
+				weightedNumerator += w * score
+				weightedDenominator += w
+				totalImpactPoints += w
+				if (score >= 4) {
+					substantivePrCount += 1
+				}
 			}
 		}
 
@@ -778,7 +783,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		// Compute daily complexity trend over time (chronological)
 		const dailyMap = new Map<string, { totalScore: number; count: number }>()
 		for (const r of rows) {
-			if (!r.mergedAt) continue
+			if (!r.mergedAt || r.complexityScore == null) continue
 			const dateStr = r.mergedAt.toISOString().slice(5, 10) // "MM-DD"
 			const entry = dailyMap.get(dateStr) || { totalScore: 0, count: 0 }
 			entry.totalScore += r.complexityScore
@@ -798,14 +803,17 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			repo: r.repo,
 			number: r.number,
 			title: r.title,
-			category: r.category,
-			complexityScore: r.complexityScore,
-			complexityReason: r.complexityReason,
-			summary: r.summary,
+			additions: r.additions,
+			deletions: r.deletions,
+			category: r.category ?? null,
+			complexityScore: r.complexityScore ?? null,
+			complexityReason: r.complexityReason ?? null,
+			summary: r.summary ?? r.title,
 			mergedAt: r.mergedAt ? r.mergedAt.toISOString() : null,
 		}))
 
 		return c.json({
+			totalPrs: rows.length,
 			averageComplexity,
 			weightedAvgComplexity,
 			totalImpactPoints: Number(totalImpactPoints.toFixed(1)),

@@ -367,10 +367,12 @@ export interface UserPRComplexityItem {
 	repo: string
 	number: number
 	title: string
-	category: string
-	complexityScore: number
-	complexityReason: string
-	summary: string
+	category?: string | null
+	complexityScore?: number | null
+	complexityReason?: string | null
+	summary?: string | null
+	additions?: number
+	deletions?: number
 	mergedAt: string | null
 }
 
@@ -381,6 +383,7 @@ export interface UserPRComplexityTrendItem {
 }
 
 export interface UserPRComplexityResponse {
+	totalPrs?: number
 	averageComplexity: number | null
 	weightedAvgComplexity: number | null
 	totalImpactPoints: number
