@@ -1,36 +1,32 @@
 import { useQuery } from "@tanstack/react-query"
-import {
-	ChevronDown,
-	ChevronUp,
-	Filter,
-	PieChart as PieChartIcon,
-	TrendingUp,
-	Users,
-	Zap,
-} from "lucide-react"
 import { useMemo, useState } from "react"
 import {
 	Bar,
 	CartesianGrid,
 	ComposedChart,
 	Line,
-	Tooltip as RechartsTooltip,
 	ResponsiveContainer,
+	Tooltip,
+	type TooltipPayloadEntry,
 	XAxis,
 	YAxis,
 } from "recharts"
 import { useLocation } from "wouter"
 import { Cost } from "@/components/Cost"
 import { MetricPair } from "@/components/MetricPair"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { SectionHeader } from "@/components/SectionHeader"
+import { SortHeader } from "@/components/SortHeader"
+import { TableStateRow } from "@/components/TableStateRow"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select"
+	DropdownMenu,
+	DropdownMenuCheckboxItem,
+	DropdownMenuContent,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
 	Table,
@@ -43,28 +39,70 @@ import {
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { useDateRange } from "@/lib/use-date-range"
+import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
 import { useMetricMode } from "@/lib/use-metric-mode"
+import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { formatCompact, formatNumber } from "@/lib/utils"
 
 type TeamSortField = "impactPoints" | "spend" | "prsMerged" | "efficiency"
 
 const CATEGORY_COLORS: Record<string, string> = {
-	feature: "#10b981",
-	bugfix: "#38bdf8",
-	refactor: "#a855f7",
-	test: "#f59e0b",
-	chore: "#94a3b8",
-	docs: "#ec4899",
-	other: "#64748b",
+	feature: "var(--mint)",
+	bugfix: "var(--sky)",
+	refactor: "var(--amber)",
+	test: "var(--warn)",
+	chore: "var(--fg-subtle)",
+	docs: "oklch(54.68% 0.2503 310.33)",
+	other: "var(--line-strong)",
+}
+
+function StatTooltip({
+	active,
+	payload,
+	mode,
+}: {
+	active?: boolean
+	payload?: readonly TooltipPayloadEntry[]
+	mode: "usd" | "tokens"
+}): React.JSX.Element | null {
+	if (!active || !payload?.length) return null
+	const pt = payload[0].payload
+	return (
+		<div className="bg-bg/95 border border-line-strong px-3 py-2 text-xs tabular">
+			<div className="text-fg-muted tracked-sm text-[9px] mb-1">{pt?.date ?? ""}</div>
+			{payload.map((p) => {
+				const dataKeyStr = String(typeof p.dataKey === "function" ? "" : (p.dataKey ?? ""))
+				const isSpend = dataKeyStr.includes("Spend") || dataKeyStr.includes("Tokens")
+				return (
+					<div key={dataKeyStr} className="flex items-center justify-between gap-4">
+						<span className="flex items-center gap-1.5">
+							<span className="w-2 h-2" style={{ background: p.color || (p.fill as string) }} />
+							<span className="text-fg-muted">{dataKeyStr}</span>
+						</span>
+						<span className="text-fg">
+							{isSpend
+								? mode === "usd"
+									? `$${Number(p.value).toFixed(2)}`
+									: formatCompact(Number(p.value))
+								: `${Number(p.value)} pts`}
+						</span>
+					</div>
+				)
+			})}
+		</div>
+	)
 }
 
 export function VelocityPage(): React.JSX.Element {
 	const [, navigate] = useLocation()
-	const { from, to } = useDateRange()
+	const { from, to, winLabel } = useDateRange()
 	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
 	const isViewer = me ? me.role !== "admin" : false
+	const [privacyOn] = usePrivacyMode()
+	const animating = useFirstRenderAnimation()
 	const [metricMode] = useMetricMode()
 	const effectiveMode = isViewer ? "tokens" : metricMode
+	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
 
 	const [selectedTeamId, setSelectedTeamId] = useState<string>("all")
 	const [sortField, setSortField] = useState<TeamSortField>("impactPoints")
@@ -131,16 +169,16 @@ export function VelocityPage(): React.JSX.Element {
 		if (!summary?.trend) return []
 		return summary.trend.map((pt) => ({
 			date: pt.date.slice(5), // MM-DD
-			impactPoints: pt.impactPoints,
-			prsMerged: pt.prsMerged,
-			spend:
-				effectiveMode === "tokens"
-					? pt.tokens
-					: pt.costCents != null
+			"Impact Points": pt.impactPoints,
+			"PRs Merged": pt.prsMerged,
+			[trendMode === "usd" ? "AI Spend ($)" : "AI Tokens"]:
+				trendMode === "usd"
+					? pt.costCents != null
 						? Number((pt.costCents / 100).toFixed(2))
-						: 0,
+						: 0
+					: pt.tokens,
 		}))
-	}, [summary?.trend, effectiveMode])
+	}, [summary?.trend, trendMode])
 
 	const handleSort = (field: TeamSortField) => {
 		if (sortField === field) {
@@ -153,139 +191,164 @@ export function VelocityPage(): React.JSX.Element {
 
 	return (
 		<div className="space-y-6 fade-rise">
-			{/* ── Header & Filters ────────────────────────────────────────── */}
-			<div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-line pb-5">
-				<div>
-					<div className="flex items-center gap-2">
-						<Zap className="w-5 h-5 text-mint" />
-						<Typography variant="heading" className="tracking-tight text-fg font-display text-2xl">
-							VELOCITY & ROI
-						</Typography>
-					</div>
-					<Typography variant="muted" className="mt-1">
-						Correlating AI tooling consumption with engineering output, PR complexity, and delivery
-						trends.
-					</Typography>
-				</div>
-
-				<div className="flex items-center gap-3">
-					<div className="flex items-center gap-2">
-						<Filter className="w-4 h-4 text-muted-foreground" />
-						<Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-							<SelectTrigger className="w-[180px] bg-card border-line h-9 text-xs">
-								<SelectValue placeholder="All Teams" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All Teams</SelectItem>
+			{/* ── Subnav / Team Filter Bar ───────────────────────────────── */}
+			<div className="flex items-end justify-between gap-4">
+				<Typography variant="label" className="max-w-xl">
+					VELOCITY & ROI · {winLabel} ·{" "}
+					<span className="text-fg">
+						{selectedTeamId === "all"
+							? "ALL TEAMS"
+							: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
+					</span>
+				</Typography>
+				<div className="flex items-center gap-2">
+					{teams.length > 0 ? (
+						<DropdownMenu>
+							<DropdownMenuTrigger asChild>
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-8 text-xs font-mono bg-bg border-line shrink-0"
+								>
+									{selectedTeamId === "all"
+										? "ALL TEAMS"
+										: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
+								</Button>
+							</DropdownMenuTrigger>
+							<DropdownMenuContent align="end" className="w-48 font-mono text-xs">
+								<DropdownMenuLabel>Filter by Team</DropdownMenuLabel>
+								<DropdownMenuSeparator />
+								<DropdownMenuCheckboxItem
+									checked={selectedTeamId === "all"}
+									onCheckedChange={() => setSelectedTeamId("all")}
+								>
+									ALL TEAMS
+								</DropdownMenuCheckboxItem>
+								<DropdownMenuSeparator />
 								{teams.map((t) => (
-									<SelectItem key={t.id} value={t.id}>
-										{t.name}
-									</SelectItem>
+									<DropdownMenuCheckboxItem
+										key={t.id}
+										checked={selectedTeamId === t.id}
+										onCheckedChange={() => setSelectedTeamId(t.id)}
+									>
+										{t.name.toUpperCase()}
+									</DropdownMenuCheckboxItem>
 								))}
-							</SelectContent>
-						</Select>
-					</div>
+							</DropdownMenuContent>
+						</DropdownMenu>
+					) : null}
 				</div>
 			</div>
 
-			{/* ── KPI Hero Grid ───────────────────────────────────────────── */}
+			{/* ── Headline KPI Band ───────────────────────────────────────── */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">
 				{/* 1. Total AI Spend / Tokens */}
-				<div className="col-span-12 sm:col-span-6 lg:col-span-3 bg-bg p-5">
-					<Typography variant="label" as="div" className="mb-2">
-						{isViewer ? "TOTAL AI TOKENS" : "TOTAL AI SPEND"}
+				<div className={`col-span-12 ${isViewer ? "md:col-span-6" : "md:col-span-3"} bg-bg p-6`}>
+					<Typography variant="label" as="div" className="mb-3">
+						{isViewer ? "TOTAL AI TOKENS" : "TOTAL AI SPEND"} · {winLabel}
 					</Typography>
-					<div className="mt-1">
-						{isSummaryLoading ? (
-							<Skeleton className="h-10 w-28 my-1" />
-						) : (
+					{isSummaryLoading ? (
+						<Skeleton className="h-20 w-full" />
+					) : (
+						<div className="num-tick">
 							<MetricPair
 								cents={isViewer ? null : summary?.totalCostCents}
 								tokens={summary?.totalTokens ?? 0}
 								digits={0}
-								primaryClassName="font-display text-3xl sm:text-4xl text-fg"
-								secondaryClassName="mt-1"
+								primaryClassName="font-display text-4xl sm:text-5xl md:text-6xl leading-none tracking-tight text-fg"
+								secondaryClassName="mt-2"
 							/>
-						)}
-						<Typography variant="subtle" className="mt-2 block">
-							Across {summary?.activeEngineersCount ?? 0} active engineers
-						</Typography>
-					</div>
+							<div className="mt-2 flex items-center gap-3">
+								<span className="text-mint">●</span>
+								<Typography variant="label">
+									{summary?.activeEngineersCount ?? 0} ACTIVE USERS
+								</Typography>
+							</div>
+						</div>
+					)}
 				</div>
 
 				{/* 2. PRs Merged & Substantive */}
-				<div className="col-span-12 sm:col-span-6 lg:col-span-3 bg-bg p-5">
-					<Typography variant="label" as="div" className="mb-2">
-						PULL REQUESTS MERGED
+				<div className="col-span-6 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
+						<span className="w-1.5 h-1.5 bg-mint" /> PULL REQUESTS MERGED
 					</Typography>
-					<div className="mt-1">
+					<div>
 						{isSummaryLoading ? (
-							<Skeleton className="h-10 w-24 my-1" />
+							<Skeleton className="h-8 w-24 my-1" />
 						) : (
-							<div className="font-display text-3xl sm:text-4xl text-fg">
+							<div className="font-mono text-3xl tabular text-fg leading-none">
 								{formatNumber(summary?.totalPrsMerged ?? 0)}
 							</div>
 						)}
-						<Typography variant="subtle" className="mt-2 block text-mint">
-							{summary?.substantivePrCount ?? 0} substantive (L4+L5) ·{" "}
-							{summary?.totalPrsOpened ?? 0} opened
+						<Typography variant="label" as="div" className="mt-2">
+							{summary?.substantivePrCount ?? 0} substantive (L4+L5)
+						</Typography>
+						<Typography variant="caption" as="div" className="mt-1">
+							{summary?.totalPrsOpened ?? 0} opened in window
 						</Typography>
 					</div>
 				</div>
 
 				{/* 3. Total Impact Points */}
-				<div className="col-span-12 sm:col-span-6 lg:col-span-3 bg-bg p-5">
-					<Typography variant="label" as="div" className="mb-2">
-						GROUNDED IMPACT POINTS
+				<div className="col-span-6 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
+						<span className="w-1.5 h-1.5 bg-amber" /> GROUNDED IMPACT
 					</Typography>
-					<div className="mt-1">
+					<div>
 						{isSummaryLoading ? (
-							<Skeleton className="h-10 w-24 my-1" />
+							<Skeleton className="h-8 w-24 my-1" />
 						) : (
-							<div className="font-display text-3xl sm:text-4xl text-fg">
+							<div className="font-mono text-3xl tabular text-fg leading-none">
 								{formatNumber(summary?.totalImpactPoints ?? 0)}{" "}
-								<span className="text-sm font-normal text-muted-foreground">pts</span>
+								<span className="text-sm font-normal text-fg-muted">pts</span>
 							</div>
 						)}
-						<Typography variant="subtle" className="mt-2 block">
-							Avg complexity: {summary?.averageComplexity ?? "—"}/5 ·{" "}
-							{summary?.totalEnrichedPrs ?? 0} analyzed
+						<Typography variant="label" as="div" className="mt-2">
+							Avg complexity: {summary?.averageComplexity ?? "—"}/5
+						</Typography>
+						<Typography variant="caption" as="div" className="mt-1">
+							{summary?.totalEnrichedPrs ?? 0} enriched PRs
 						</Typography>
 					</div>
 				</div>
 
 				{/* 4. Unit Cost per Impact Point */}
-				<div className="col-span-12 sm:col-span-6 lg:col-span-3 bg-bg p-5">
-					<Typography variant="label" as="div" className="mb-2">
-						{isViewer ? "TOKENS PER IMPACT PT" : "COST PER IMPACT PT"}
+				<div className="col-span-12 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
+					<Typography variant="label" as="div" className="flex items-center gap-2">
+						<span className="w-1.5 h-1.5 bg-sky" />{" "}
+						{isViewer ? "UNIT EFFICIENCY" : "COST / IMPACT PT"}
 					</Typography>
-					<div className="mt-1">
+					<div>
 						{isSummaryLoading ? (
-							<Skeleton className="h-10 w-28 my-1" />
+							<Skeleton className="h-8 w-28 my-1" />
 						) : isViewer ? (
-							<div className="font-display text-3xl sm:text-4xl text-fg">
+							<div className="font-mono text-3xl tabular text-fg leading-none">
 								{summary?.tokensPerImpactPoint
 									? `${formatCompact(summary.tokensPerImpactPoint)} tok`
 									: "—"}
 							</div>
 						) : (
-							<div className="font-display text-3xl sm:text-4xl text-fg">
+							<div className="font-mono text-3xl tabular text-fg leading-none">
 								{summary?.costPerImpactPointCents != null ? (
 									<Cost cents={summary.costPerImpactPointCents} digits={2} />
 								) : (
 									"—"
 								)}
-								<span className="text-xs font-normal text-muted-foreground ml-1">/ pt</span>
 							</div>
 						)}
-						<Typography variant="subtle" className="mt-2 block">
+						<Typography variant="label" as="div" className="mt-2">
 							{!isViewer && summary?.tokensPerImpactPoint
-								? `${formatCompact(summary.tokensPerImpactPoint)} tokens per impact pt`
-								: summary?.costPerPrCents != null
-									? "Avg cost per PR: "
-									: "Delivery ROI efficiency metric"}
-							{!isViewer && summary?.costPerPrCents != null && (
-								<Cost cents={summary.costPerPrCents} digits={0} />
+								? `${formatCompact(summary.tokensPerImpactPoint)} tokens/pt`
+								: "Throughput unit ROI"}
+						</Typography>
+						<Typography variant="caption" as="div" className="mt-1">
+							{!isViewer && summary?.costPerPrCents != null ? (
+								<>
+									Cost per PR: <Cost cents={summary.costPerPrCents} digits={0} />
+								</>
+							) : (
+								"Output-weighted metric"
 							)}
 						</Typography>
 					</div>
@@ -293,336 +356,245 @@ export function VelocityPage(): React.JSX.Element {
 			</section>
 
 			{/* ── Correlation Trend Chart (Spend vs Output Over Time) ─────── */}
-			<Card className="bg-card border-line">
-				<CardHeader className="pb-2">
-					<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-						<div>
-							<CardTitle className="text-base font-medium text-fg flex items-center gap-2">
-								<TrendingUp className="w-4 h-4 text-mint" />
-								Velocity & Consumption Trend
-							</CardTitle>
-							<CardDescription className="text-xs">
-								Comparing engineering impact points shipped against AI token and spend volume.
-							</CardDescription>
-						</div>
-						<div className="flex items-center gap-4 text-xs text-muted-foreground">
-							<span className="flex items-center gap-1.5">
-								<span className="w-3 h-3 rounded-xs bg-mint/80" /> Impact Points
-							</span>
-							<span className="flex items-center gap-1.5">
-								<span className="w-3 h-0.5 bg-sky-400" />{" "}
-								{effectiveMode === "tokens" ? "Tokens" : "Spend ($)"}
-							</span>
-						</div>
-					</div>
-				</CardHeader>
-				<CardContent className="pt-4">
+			<Card>
+				<SectionHeader
+					title={`TREND · ${trendMode === "usd" ? "SPEND" : "TOKENS"} VS IMPACT POINTS`}
+					subtitle={winLabel}
+				/>
+				<div
+					className="p-4"
+					style={{
+						height: 300,
+						filter: privacyOn && trendMode === "usd" ? "blur(6px)" : undefined,
+					}}
+				>
 					{isSummaryLoading ? (
-						<div className="h-72 flex items-center justify-center">
-							<Skeleton className="h-64 w-full" />
+						<div className="h-full flex items-center justify-center text-xs text-fg-muted">
+							── scanning trend… ──
 						</div>
 					) : trendChartData.length === 0 ? (
-						<div className="h-72 flex items-center justify-center text-sm text-muted-foreground">
-							No activity recorded for this period.
+						<div className="h-full flex items-center justify-center text-xs text-fg-muted">
+							── awaiting data ──
 						</div>
 					) : (
-						<div className="h-72 w-full">
-							<ResponsiveContainer width="100%" height="100%">
-								<ComposedChart
-									data={trendChartData}
-									margin={{ top: 10, right: 20, left: 0, bottom: 0 }}
-								>
-									<CartesianGrid strokeDasharray="3 3" stroke="var(--line)" opacity={0.5} />
-									<XAxis dataKey="date" stroke="var(--muted-fg)" fontSize={11} tickLine={false} />
-									<YAxis
-										yAxisId="impact"
-										orientation="left"
-										stroke="var(--muted-fg)"
-										fontSize={11}
-										tickLine={false}
-										unit=" pts"
-									/>
-									<YAxis
-										yAxisId="spend"
-										orientation="right"
-										stroke="var(--muted-fg)"
-										fontSize={11}
-										tickLine={false}
-										unit={effectiveMode === "tokens" ? "" : "$"}
-										tickFormatter={(v) => (effectiveMode === "tokens" ? formatCompact(v) : `$${v}`)}
-									/>
-									<RechartsTooltip
-										content={({ active, payload, label }) => {
-											if (!active || !payload?.length) return null
-											const pt = payload[0].payload
-											return (
-												<div className="bg-popover border border-line p-3 rounded-md shadow-xl text-xs space-y-1.5 min-w-[180px]">
-													<div className="font-semibold text-fg border-b border-line pb-1">
-														Date: {label}
-													</div>
-													<div className="flex justify-between items-center text-mint">
-														<span>Impact Points:</span>
-														<span className="font-mono font-medium">{pt.impactPoints} pts</span>
-													</div>
-													<div className="flex justify-between items-center text-muted-foreground">
-														<span>PRs Merged:</span>
-														<span className="font-mono text-fg">{pt.prsMerged}</span>
-													</div>
-													<div className="flex justify-between items-center text-sky-400">
-														<span>AI Consumption:</span>
-														<span className="font-mono font-medium">
-															{effectiveMode === "tokens"
-																? `${formatCompact(pt.spend)} tok`
-																: `$${pt.spend.toFixed(2)}`}
-														</span>
-													</div>
-												</div>
-											)
-										}}
-									/>
-									<Bar
-										yAxisId="impact"
-										dataKey="impactPoints"
-										name="Impact Points"
-										fill="#10b981"
-										radius={[3, 3, 0, 0]}
-										opacity={0.85}
-										maxBarSize={32}
-									/>
-									<Line
-										yAxisId="spend"
-										type="monotone"
-										dataKey="spend"
-										name={effectiveMode === "tokens" ? "Tokens" : "Spend ($)"}
-										stroke="#38bdf8"
-										strokeWidth={2}
-										dot={false}
-									/>
-								</ComposedChart>
-							</ResponsiveContainer>
-						</div>
+						<ResponsiveContainer width="100%" height="100%">
+							<ComposedChart
+								data={trendChartData}
+								margin={{ top: 6, right: 8, bottom: 8, left: 0 }}
+							>
+								<CartesianGrid stroke="var(--line)" strokeDasharray="2 4" vertical={false} />
+								<XAxis
+									dataKey="date"
+									axisLine={false}
+									tickLine={false}
+									tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
+								/>
+								<YAxis
+									yAxisId="impact"
+									orientation="left"
+									axisLine={false}
+									tickLine={false}
+									tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
+									tickFormatter={(v: number) => `${v}`}
+									width={44}
+								/>
+								<YAxis
+									yAxisId="spend"
+									orientation="right"
+									axisLine={false}
+									tickLine={false}
+									tick={{ fill: "var(--fg-muted)", fontSize: 10 }}
+									tickFormatter={(v: number) =>
+										trendMode === "usd" ? `$${Math.round(v)}` : formatCompact(v)
+									}
+									width={56}
+								/>
+								<Tooltip
+									cursor={{ fill: "color-mix(in oklch, var(--fg) 4%, transparent)" }}
+									content={(p) => <StatTooltip {...p} mode={trendMode} />}
+								/>
+								<Bar
+									yAxisId="impact"
+									dataKey="Impact Points"
+									fill="var(--mint)"
+									isAnimationActive={animating}
+									maxBarSize={32}
+								/>
+								<Line
+									yAxisId="spend"
+									type="monotone"
+									dataKey={trendMode === "usd" ? "AI Spend ($)" : "AI Tokens"}
+									stroke="var(--sky)"
+									strokeWidth={2}
+									dot={false}
+									isAnimationActive={animating}
+								/>
+							</ComposedChart>
+						</ResponsiveContainer>
 					)}
-				</CardContent>
+				</div>
 			</Card>
 
-			{/* ── Two Columns: Team Breakdown & Delivery by Category ────────── */}
+			{/* ── Two Columns: Team Breakdown & Delivery by Work-Type ─────── */}
 			<div className="grid grid-cols-12 gap-6">
 				{/* Team Velocity Table */}
-				<Card className="col-span-12 lg:col-span-8 bg-card border-line flex flex-col">
-					<CardHeader className="pb-3 border-b border-line">
-						<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-							<div>
-								<CardTitle className="text-base font-medium text-fg flex items-center gap-2">
-									<Users className="w-4 h-4 text-mint" />
-									Team Velocity & Adoption
-								</CardTitle>
-								<CardDescription className="text-xs">
-									Team-level delivery throughput, grounded impact points, and tooling consumption.
-								</CardDescription>
-							</div>
-						</div>
-					</CardHeader>
-					<CardContent className="p-0 flex-1">
-						<div className="overflow-x-auto">
-							<Table>
-								<TableHeader>
-									<TableRow className="border-b border-line hover:bg-transparent">
-										<TableHead className="w-[200px] text-xs font-semibold">Team</TableHead>
-										<TableHead
-											className="text-xs font-semibold cursor-pointer select-none text-right"
-											onClick={() => handleSort("impactPoints")}
+				<div className="col-span-12 lg:col-span-7">
+					<Card className="overflow-hidden">
+						<SectionHeader title="TEAMS · VELOCITY & ADOPTION" subtitle={winLabel} />
+						<Table className="w-full tabular text-xs">
+							<TableHeader className="border-b border-line bg-elev2/40">
+								<TableRow>
+									<TableHead className="w-[180px]">TEAM</TableHead>
+									<SortHeader
+										label="IMPACT PTS"
+										active={sortField === "impactPoints"}
+										dir={sortAsc ? "asc" : "desc"}
+										onClick={() => handleSort("impactPoints")}
+										align="right"
+									/>
+									<SortHeader
+										label="PRS MERGED"
+										active={sortField === "prsMerged"}
+										dir={sortAsc ? "asc" : "desc"}
+										onClick={() => handleSort("prsMerged")}
+										align="right"
+									/>
+									<SortHeader
+										label={effectiveMode === "tokens" ? "TOKENS" : "SPEND"}
+										active={sortField === "spend"}
+										dir={sortAsc ? "asc" : "desc"}
+										onClick={() => handleSort("spend")}
+										align="right"
+									/>
+									<SortHeader
+										label={effectiveMode === "tokens" ? "TOKENS / PT" : "COST / PT"}
+										active={sortField === "efficiency"}
+										dir={sortAsc ? "asc" : "desc"}
+										onClick={() => handleSort("efficiency")}
+										align="right"
+									/>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{isTeamsLoading ? (
+									<TableStateRow colSpan={5} isLoading={true} />
+								) : sortedTeams.length === 0 ? (
+									<TableStateRow colSpan={5} isLoading={false} emptyText="no team data in window" />
+								) : (
+									sortedTeams.map((t) => (
+										<TableRow
+											key={t.teamId}
+											className="border-b border-line hover:bg-elev2/40 cursor-pointer transition-colors"
+											onClick={() => navigate(`/users?teamId=${encodeURIComponent(t.teamId)}`)}
 										>
-											<div className="flex items-center justify-end gap-1">
-												Impact Points
-												{sortField === "impactPoints" &&
-													(sortAsc ? (
-														<ChevronUp className="w-3 h-3" />
-													) : (
-														<ChevronDown className="w-3 h-3" />
-													))}
-											</div>
-										</TableHead>
-										<TableHead
-											className="text-xs font-semibold cursor-pointer select-none text-right"
-											onClick={() => handleSort("prsMerged")}
-										>
-											<div className="flex items-center justify-end gap-1">
-												Merged PRs
-												{sortField === "prsMerged" &&
-													(sortAsc ? (
-														<ChevronUp className="w-3 h-3" />
-													) : (
-														<ChevronDown className="w-3 h-3" />
-													))}
-											</div>
-										</TableHead>
-										<TableHead
-											className="text-xs font-semibold cursor-pointer select-none text-right"
-											onClick={() => handleSort("spend")}
-										>
-											<div className="flex items-center justify-end gap-1">
-												{effectiveMode === "tokens" ? "Tokens Burned" : "AI Spend"}
-												{sortField === "spend" &&
-													(sortAsc ? (
-														<ChevronUp className="w-3 h-3" />
-													) : (
-														<ChevronDown className="w-3 h-3" />
-													))}
-											</div>
-										</TableHead>
-										<TableHead
-											className="text-xs font-semibold cursor-pointer select-none text-right"
-											onClick={() => handleSort("efficiency")}
-										>
-											<div className="flex items-center justify-end gap-1">
-												{effectiveMode === "tokens" ? "Tokens / Point" : "Cost / Point"}
-												{sortField === "efficiency" &&
-													(sortAsc ? (
-														<ChevronUp className="w-3 h-3" />
-													) : (
-														<ChevronDown className="w-3 h-3" />
-													))}
-											</div>
-										</TableHead>
-									</TableRow>
-								</TableHeader>
-								<TableBody>
-									{isTeamsLoading ? (
-										["skel-t1", "skel-t2", "skel-t3"].map((skelId) => (
-											<TableRow key={skelId} className="border-b border-line">
-												<TableCell colSpan={5} className="py-4">
-													<Skeleton className="h-6 w-full" />
-												</TableCell>
-											</TableRow>
-										))
-									) : sortedTeams.length === 0 ? (
-										<TableRow>
-											<TableCell
-												colSpan={5}
-												className="h-32 text-center text-xs text-muted-foreground"
-											>
-												No teams found or no team activity in this window.
+											<TableCell className="font-medium text-xs text-fg py-2.5">
+												<span className="font-mono text-fg hover:text-amber transition-colors">
+													{t.teamName}
+												</span>
+												<span className="text-fg-subtle ml-2 text-[10px]">
+													({t.memberCount} {t.memberCount === 1 ? "user" : "users"})
+												</span>
+											</TableCell>
+											<TableCell className="text-right text-xs tabular font-mono text-fg py-2.5">
+												<span className="text-mint font-medium">{t.impactPoints}</span>
+												<span className="text-fg-subtle ml-1 text-[10px]">pts</span>
+											</TableCell>
+											<TableCell className="text-right text-xs tabular font-mono text-fg py-2.5">
+												{t.prsMerged}
+												{t.substantivePrCount > 0 ? (
+													<span className="text-fg-subtle ml-1 text-[10px]">
+														({t.substantivePrCount} L4+)
+													</span>
+												) : null}
+											</TableCell>
+											<TableCell className="text-right text-xs tabular font-mono text-fg py-2.5">
+												{!isViewer && t.totalCostCents != null ? (
+													<Cost cents={t.totalCostCents} digits={0} />
+												) : (
+													`${formatCompact(t.totalTokens)} tok`
+												)}
+											</TableCell>
+											<TableCell className="text-right text-xs tabular font-mono text-fg py-2.5">
+												{!isViewer && t.costPerImpactPointCents != null ? (
+													<>
+														<Cost cents={t.costPerImpactPointCents} digits={2} />
+														<span className="text-fg-subtle ml-0.5 text-[10px]">/pt</span>
+													</>
+												) : t.tokensPerImpactPoint ? (
+													`${formatCompact(t.tokensPerImpactPoint)} tok/pt`
+												) : (
+													"—"
+												)}
 											</TableCell>
 										</TableRow>
-									) : (
-										sortedTeams.map((t) => (
-											<TableRow
-												key={t.teamId}
-												className="border-b border-line hover:bg-elev1 cursor-pointer transition-colors"
-												onClick={() => navigate(`/teams/${t.teamId}`)}
-											>
-												<TableCell className="font-medium text-xs text-fg py-3">
-													<div className="flex items-center gap-2">
-														<span>{t.teamName}</span>
-														<Badge
-															variant="outline"
-															className="text-[10px] px-1.5 py-0 border-line text-muted-foreground"
-														>
-															{t.memberCount} {t.memberCount === 1 ? "member" : "members"}
-														</Badge>
-													</div>
-												</TableCell>
-												<TableCell className="font-mono text-xs text-right text-fg py-3">
-													<span className="font-semibold text-mint">{t.impactPoints}</span> pts
-												</TableCell>
-												<TableCell className="font-mono text-xs text-right text-fg py-3">
-													{t.prsMerged}
-													{t.substantivePrCount > 0 && (
-														<span className="text-[10px] text-muted-foreground ml-1">
-															({t.substantivePrCount} L4+)
-														</span>
-													)}
-												</TableCell>
-												<TableCell className="font-mono text-xs text-right text-fg py-3">
-													{!isViewer && t.totalCostCents != null ? (
-														<Cost cents={t.totalCostCents} digits={2} />
-													) : (
-														`${formatCompact(t.totalTokens)} tok`
-													)}
-												</TableCell>
-												<TableCell className="font-mono text-xs text-right text-muted-foreground py-3">
-													{!isViewer && t.costPerImpactPointCents != null ? (
-														<span>
-															<Cost cents={t.costPerImpactPointCents} digits={2} />
-															<span className="text-[10px] text-muted-foreground ml-0.5">/ pt</span>
-														</span>
-													) : t.tokensPerImpactPoint ? (
-														`${formatCompact(t.tokensPerImpactPoint)} tok/pt`
-													) : (
-														"—"
-													)}
-												</TableCell>
-											</TableRow>
-										))
-									)}
-								</TableBody>
-							</Table>
-						</div>
-					</CardContent>
-				</Card>
+									))
+								)}
+							</TableBody>
+						</Table>
+					</Card>
+				</div>
 
 				{/* PR Work-Type Categories */}
-				<Card className="col-span-12 lg:col-span-4 bg-card border-line flex flex-col">
-					<CardHeader className="pb-2">
-						<CardTitle className="text-base font-medium text-fg flex items-center gap-2">
-							<PieChartIcon className="w-4 h-4 text-mint" />
-							Delivery by Work-Type
-						</CardTitle>
-						<CardDescription className="text-xs">
-							Distribution of pull requests by category & complexity.
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="flex-1 pt-2">
+				<div className="col-span-12 lg:col-span-5">
+					<Card className="overflow-hidden">
+						<SectionHeader title="PR WORK-TYPES" subtitle={winLabel} />
 						{isCategoriesLoading ? (
-							<div className="space-y-4 pt-2">
-								<Skeleton className="h-8 w-full" />
-								<Skeleton className="h-8 w-full" />
-								<Skeleton className="h-8 w-full" />
-							</div>
+							<div className="p-5 text-xs text-fg-muted">── scanning categories… ──</div>
 						) : !categoriesData || categoriesData.categories.length === 0 ? (
-							<div className="h-64 flex items-center justify-center text-sm text-muted-foreground">
-								No categorized pull requests found.
-							</div>
+							<div className="p-5 text-xs text-fg-muted">── no categorized PRs in window ──</div>
 						) : (
-							<div className="space-y-3.5 mt-1">
-								{categoriesData.categories.map((cat) => {
-									const color = CATEGORY_COLORS[cat.category.toLowerCase()] || CATEGORY_COLORS.other
-									return (
-										<div key={cat.category} className="space-y-1">
-											<div className="flex items-center justify-between text-xs">
-												<span className="flex items-center gap-2 capitalize font-medium text-fg">
+							<div className="p-5 space-y-4">
+								{/* Stacked bar */}
+								<div className="h-[20px] border border-line flex overflow-hidden">
+									{categoriesData.categories.map((c) => (
+										<div
+											key={c.category}
+											style={{
+												backgroundColor:
+													CATEGORY_COLORS[c.category.toLowerCase()] || CATEGORY_COLORS.other,
+												width: `${Math.max(2, c.sharePct)}%`,
+											}}
+											title={`${c.category} · ${c.sharePct}% (${c.impactPoints} pts)`}
+										/>
+									))}
+								</div>
+
+								{/* Ranked category rows */}
+								<ol className="divide-y divide-line/60">
+									{categoriesData.categories.map((c, i) => {
+										const color = CATEGORY_COLORS[c.category.toLowerCase()] || CATEGORY_COLORS.other
+										return (
+											<li
+												key={c.category}
+												className="grid grid-cols-12 items-center gap-2 py-2.5 text-xs hover:bg-elev2/40 transition-colors"
+											>
+												<span className="col-span-1 font-mono text-xs tabular text-fg-subtle">
+													{String(i + 1).padStart(2, "0")}
+												</span>
+												<span className="col-span-4 capitalize font-medium text-fg truncate flex items-center gap-2">
 													<span
-														className="w-2 h-2 rounded-full"
+														className="w-2 h-2 shrink-0 inline-block"
 														style={{ backgroundColor: color }}
 													/>
-													{cat.category}
+													<span className="truncate">{c.category}</span>
 												</span>
-												<span className="font-mono text-muted-foreground">
-													{cat.impactPoints} pts ({cat.sharePct}%)
+												<span className="col-span-3 text-right font-mono tabular text-fg">
+													{c.impactPoints} <span className="text-fg-subtle text-[10px]">pts</span>
 												</span>
-											</div>
-											<div className="w-full h-1.5 bg-line/60 rounded-full overflow-hidden">
-												<div
-													className="h-full rounded-full transition-all"
-													style={{
-														width: `${Math.max(4, cat.sharePct)}%`,
-														backgroundColor: color,
-													}}
-												/>
-											</div>
-											<div className="flex justify-between text-[10px] text-muted-foreground">
-												<span>
-													{cat.prCount} PRs · {cat.substantiveCount} substantive
+												<span className="col-span-2 text-right font-mono tabular text-fg-muted">
+													{c.sharePct}%
 												</span>
-												<span>Avg score: {cat.avgComplexity}/5</span>
-											</div>
-										</div>
-									)
-								})}
+												<span className="col-span-2 text-right font-mono tabular text-fg-subtle text-[10px]">
+													{c.prCount} PRs
+												</span>
+											</li>
+										)
+									})}
+								</ol>
 							</div>
 						)}
-					</CardContent>
-				</Card>
+					</Card>
+				</div>
 			</div>
 		</div>
 	)
