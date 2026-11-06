@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
 	Bar,
 	CartesianGrid,
@@ -11,7 +11,7 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts"
-import { useLocation } from "wouter"
+import { useLocation, useSearch } from "wouter"
 import { Cost } from "@/components/Cost"
 import { MetricPair } from "@/components/MetricPair"
 import { SectionHeader } from "@/components/SectionHeader"
@@ -52,7 +52,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 	refactor: "var(--amber)",
 	test: "var(--warn)",
 	chore: "var(--fg-subtle)",
-	docs: "oklch(54.68% 0.2503 310.33)",
+	docs: "var(--chart-5)",
 	other: "var(--line-strong)",
 }
 
@@ -71,13 +71,13 @@ function StatTooltip({
 		<div className="bg-bg/95 border border-line-strong px-3 py-2 text-xs tabular">
 			<div className="text-fg-muted tracked-sm text-[9px] mb-1">{pt?.date ?? ""}</div>
 			{payload.map((p) => {
-				const dataKeyStr = String(typeof p.dataKey === "function" ? "" : (p.dataKey ?? ""))
-				const isSpend = dataKeyStr.includes("Spend") || dataKeyStr.includes("Tokens")
+				const key = String(p.dataKey ?? "")
+				const isSpend = key.includes("Spend") || key.includes("Tokens")
 				return (
-					<div key={dataKeyStr} className="flex items-center justify-between gap-4">
+					<div key={key} className="flex items-center justify-between gap-4">
 						<span className="flex items-center gap-1.5">
 							<span className="w-2 h-2" style={{ background: p.color || (p.fill as string) }} />
-							<span className="text-fg-muted">{dataKeyStr}</span>
+							<span className="text-fg-muted">{key}</span>
 						</span>
 						<span className="text-fg">
 							{isSpend
@@ -95,6 +95,10 @@ function StatTooltip({
 
 export function VelocityPage(): React.JSX.Element {
 	const [, navigate] = useLocation()
+	const searchString = useSearch()
+	const searchParams = useMemo(() => new URLSearchParams(searchString), [searchString])
+	const paramTeamId = searchParams.get("teamId")
+
 	const { from, to, winLabel } = useDateRange()
 	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
 	const isViewer = me ? me.role !== "admin" : false
@@ -104,71 +108,67 @@ export function VelocityPage(): React.JSX.Element {
 	const effectiveMode = isViewer ? "tokens" : metricMode
 	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
 
-	const [selectedTeamId, setSelectedTeamId] = useState<string>("all")
+	const [selectedTeamId, setSelectedTeamId] = useState<string>(paramTeamId || "all")
+	useEffect(() => {
+		if (paramTeamId) setSelectedTeamId(paramTeamId)
+	}, [paramTeamId])
+
 	const [sortField, setSortField] = useState<TeamSortField>("impactPoints")
 	const [sortAsc, setSortAsc] = useState(false)
 
-	// Fetch Teams list for filter dropdown
-	const { data: teamsData } = useQuery({
-		queryKey: ["teams"],
-		queryFn: () => api.teams.list(),
-	})
+	const { data: teamsData } = useQuery({ queryKey: ["teams"], queryFn: () => api.teams.list() })
 	const teams = teamsData?.teams ?? []
-
 	const teamQueryParam = selectedTeamId !== "all" ? selectedTeamId : undefined
 
-	// 1. Summary query
 	const { data: summary, isLoading: isSummaryLoading } = useQuery({
 		queryKey: ["velocity.summary", from, to, selectedTeamId],
 		queryFn: () => api.velocity.summary({ from, to, teamId: teamQueryParam }),
 	})
 
-	// 2. Categories query
 	const { data: categoriesData, isLoading: isCategoriesLoading } = useQuery({
 		queryKey: ["velocity.categories", from, to, selectedTeamId],
 		queryFn: () => api.velocity.categories({ from, to, teamId: teamQueryParam }),
 	})
 
-	// 3. Teams breakdown query
 	const { data: velocityTeamsData, isLoading: isTeamsLoading } = useQuery({
 		queryKey: ["velocity.teams", from, to],
 		queryFn: () => api.velocity.teams({ from, to }),
 	})
-
 	const velocityTeams = velocityTeamsData?.teams ?? []
 
-	// Sorted teams
 	const sortedTeams = useMemo(() => {
-		const list = [...velocityTeams]
-		return list.sort((a, b) => {
-			let diff = 0
-			if (sortField === "impactPoints") diff = a.impactPoints - b.impactPoints
-			else if (sortField === "spend") {
-				diff =
-					effectiveMode === "tokens"
-						? a.totalTokens - b.totalTokens
-						: (a.totalCostCents ?? 0) - (b.totalCostCents ?? 0)
-			} else if (sortField === "prsMerged") diff = a.prsMerged - b.prsMerged
-			else if (sortField === "efficiency") {
-				const effA =
-					effectiveMode === "tokens"
-						? (a.tokensPerImpactPoint ?? 0)
-						: (a.costPerImpactPointCents ?? 0)
-				const effB =
-					effectiveMode === "tokens"
-						? (b.tokensPerImpactPoint ?? 0)
-						: (b.costPerImpactPointCents ?? 0)
-				diff = effA - effB
-			}
-			return sortAsc ? diff : -diff
+		return [...velocityTeams].sort((a, b) => {
+			const valA =
+				sortField === "impactPoints"
+					? a.impactPoints
+					: sortField === "prsMerged"
+						? a.prsMerged
+						: sortField === "spend"
+							? effectiveMode === "tokens"
+								? a.totalTokens
+								: (a.totalCostCents ?? 0)
+							: effectiveMode === "tokens"
+								? (a.tokensPerImpactPoint ?? 0)
+								: (a.costPerImpactPointCents ?? 0)
+			const valB =
+				sortField === "impactPoints"
+					? b.impactPoints
+					: sortField === "prsMerged"
+						? b.prsMerged
+						: sortField === "spend"
+							? effectiveMode === "tokens"
+								? b.totalTokens
+								: (b.totalCostCents ?? 0)
+							: effectiveMode === "tokens"
+								? (b.tokensPerImpactPoint ?? 0)
+								: (b.costPerImpactPointCents ?? 0)
+			return sortAsc ? valA - valB : valB - valA
 		})
 	}, [velocityTeams, sortField, sortAsc, effectiveMode])
 
-	// Trend chart data
 	const trendChartData = useMemo(() => {
-		if (!summary?.trend) return []
-		return summary.trend.map((pt) => ({
-			date: pt.date.slice(5), // MM-DD
+		return (summary?.trend ?? []).map((pt) => ({
+			date: pt.date.slice(5),
 			"Impact Points": pt.impactPoints,
 			"PRs Merged": pt.prsMerged,
 			[trendMode === "usd" ? "AI Spend ($)" : "AI Tokens"]:
@@ -181,9 +181,8 @@ export function VelocityPage(): React.JSX.Element {
 	}, [summary?.trend, trendMode])
 
 	const handleSort = (field: TeamSortField) => {
-		if (sortField === field) {
-			setSortAsc(!sortAsc)
-		} else {
+		if (sortField === field) setSortAsc(!sortAsc)
+		else {
 			setSortField(field)
 			setSortAsc(false)
 		}
@@ -201,51 +200,48 @@ export function VelocityPage(): React.JSX.Element {
 							: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
 					</span>
 				</Typography>
-				<div className="flex items-center gap-2">
-					{teams.length > 0 ? (
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									variant="outline"
-									size="sm"
-									className="h-8 text-xs font-mono bg-bg border-line shrink-0"
-								>
-									{selectedTeamId === "all"
-										? "ALL TEAMS"
-										: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-48 font-mono text-xs">
-								<DropdownMenuLabel>Filter by Team</DropdownMenuLabel>
-								<DropdownMenuSeparator />
+				{teams.length > 0 && (
+					<DropdownMenu>
+						<DropdownMenuTrigger asChild>
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-8 text-xs font-mono bg-bg border-line shrink-0"
+							>
+								{selectedTeamId === "all"
+									? "ALL TEAMS"
+									: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
+							</Button>
+						</DropdownMenuTrigger>
+						<DropdownMenuContent align="end" className="w-48 font-mono text-xs">
+							<DropdownMenuLabel>Filter by Team</DropdownMenuLabel>
+							<DropdownMenuSeparator />
+							<DropdownMenuCheckboxItem
+								checked={selectedTeamId === "all"}
+								onCheckedChange={() => setSelectedTeamId("all")}
+							>
+								ALL TEAMS
+							</DropdownMenuCheckboxItem>
+							<DropdownMenuSeparator />
+							{teams.map((t) => (
 								<DropdownMenuCheckboxItem
-									checked={selectedTeamId === "all"}
-									onCheckedChange={() => setSelectedTeamId("all")}
+									key={t.id}
+									checked={selectedTeamId === t.id}
+									onCheckedChange={() => setSelectedTeamId(t.id)}
 								>
-									ALL TEAMS
+									{t.name.toUpperCase()}
 								</DropdownMenuCheckboxItem>
-								<DropdownMenuSeparator />
-								{teams.map((t) => (
-									<DropdownMenuCheckboxItem
-										key={t.id}
-										checked={selectedTeamId === t.id}
-										onCheckedChange={() => setSelectedTeamId(t.id)}
-									>
-										{t.name.toUpperCase()}
-									</DropdownMenuCheckboxItem>
-								))}
-							</DropdownMenuContent>
-						</DropdownMenu>
-					) : null}
-				</div>
+							))}
+						</DropdownMenuContent>
+					</DropdownMenu>
+				)}
 			</div>
 
 			{/* ── Headline KPI Band ───────────────────────────────────────── */}
 			<section className="grid grid-cols-12 gap-px bg-line/60 border border-line">
-				{/* 1. Total AI Spend / Tokens */}
-				<div className={`col-span-12 ${isViewer ? "md:col-span-6" : "md:col-span-3"} bg-bg p-6`}>
+				<div className="col-span-12 md:col-span-3 bg-bg p-6">
 					<Typography variant="label" as="div" className="mb-3">
-						{isViewer ? "TOTAL AI TOKENS" : "TOTAL AI SPEND"} · {winLabel}
+						{effectiveMode === "tokens" ? "TOTAL AI TOKENS" : "TOTAL AI SPEND"} · {winLabel}
 					</Typography>
 					{isSummaryLoading ? (
 						<Skeleton className="h-20 w-full" />
@@ -268,7 +264,6 @@ export function VelocityPage(): React.JSX.Element {
 					)}
 				</div>
 
-				{/* 2. PRs Merged & Substantive */}
 				<div className="col-span-6 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
 					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-mint" /> PULL REQUESTS MERGED
@@ -290,7 +285,6 @@ export function VelocityPage(): React.JSX.Element {
 					</div>
 				</div>
 
-				{/* 3. Total Impact Points */}
 				<div className="col-span-6 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
 					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-amber" /> GROUNDED IMPACT
@@ -313,16 +307,15 @@ export function VelocityPage(): React.JSX.Element {
 					</div>
 				</div>
 
-				{/* 4. Unit Cost per Impact Point */}
 				<div className="col-span-12 md:col-span-3 bg-bg p-6 flex flex-col justify-between">
 					<Typography variant="label" as="div" className="flex items-center gap-2">
 						<span className="w-1.5 h-1.5 bg-sky" />{" "}
-						{isViewer ? "UNIT EFFICIENCY" : "COST / IMPACT PT"}
+						{effectiveMode === "tokens" ? "TOKENS / IMPACT PT" : "COST / IMPACT PT"}
 					</Typography>
 					<div>
 						{isSummaryLoading ? (
 							<Skeleton className="h-8 w-28 my-1" />
-						) : isViewer ? (
+						) : effectiveMode === "tokens" ? (
 							<div className="font-mono text-3xl tabular text-fg leading-none">
 								{summary?.tokensPerImpactPoint
 									? `${formatCompact(summary.tokensPerImpactPoint)} tok`
@@ -338,12 +331,12 @@ export function VelocityPage(): React.JSX.Element {
 							</div>
 						)}
 						<Typography variant="label" as="div" className="mt-2">
-							{!isViewer && summary?.tokensPerImpactPoint
+							{effectiveMode !== "tokens" && summary?.tokensPerImpactPoint
 								? `${formatCompact(summary.tokensPerImpactPoint)} tokens/pt`
 								: "Throughput unit ROI"}
 						</Typography>
 						<Typography variant="caption" as="div" className="mt-1">
-							{!isViewer && summary?.costPerPrCents != null ? (
+							{effectiveMode !== "tokens" && summary?.costPerPrCents != null ? (
 								<>
 									Cost per PR: <Cost cents={summary.costPerPrCents} digits={0} />
 								</>
@@ -484,7 +477,7 @@ export function VelocityPage(): React.JSX.Element {
 									sortedTeams.map((t) => (
 										<TableRow
 											key={t.teamId}
-											className="border-b border-line hover:bg-elev2/40 cursor-pointer transition-colors"
+											className={`border-b border-line hover:bg-elev2/40 cursor-pointer transition-colors ${selectedTeamId === t.teamId ? "bg-elev2/60" : ""}`}
 											onClick={() => navigate(`/users?teamId=${encodeURIComponent(t.teamId)}`)}
 										>
 											<TableCell className="font-medium text-xs text-fg py-2.5">
@@ -501,21 +494,21 @@ export function VelocityPage(): React.JSX.Element {
 											</TableCell>
 											<TableCell className="text-right text-xs tabular font-mono text-fg py-2.5">
 												{t.prsMerged}
-												{t.substantivePrCount > 0 ? (
+												{t.substantivePrCount > 0 && (
 													<span className="text-fg-subtle ml-1 text-[10px]">
 														({t.substantivePrCount} L4+)
 													</span>
-												) : null}
+												)}
 											</TableCell>
 											<TableCell className="text-right text-xs tabular font-mono text-fg py-2.5">
-												{!isViewer && t.totalCostCents != null ? (
+												{effectiveMode !== "tokens" && t.totalCostCents != null ? (
 													<Cost cents={t.totalCostCents} digits={0} />
 												) : (
 													`${formatCompact(t.totalTokens)} tok`
 												)}
 											</TableCell>
 											<TableCell className="text-right text-xs tabular font-mono text-fg py-2.5">
-												{!isViewer && t.costPerImpactPointCents != null ? (
+												{effectiveMode !== "tokens" && t.costPerImpactPointCents != null ? (
 													<>
 														<Cost cents={t.costPerImpactPointCents} digits={2} />
 														<span className="text-fg-subtle ml-0.5 text-[10px]">/pt</span>
@@ -544,7 +537,6 @@ export function VelocityPage(): React.JSX.Element {
 							<div className="p-5 text-xs text-fg-muted">── no categorized PRs in window ──</div>
 						) : (
 							<div className="p-5 space-y-4">
-								{/* Stacked bar */}
 								<div className="h-[20px] border border-line flex overflow-hidden">
 									{categoriesData.categories.map((c) => (
 										<div
@@ -552,14 +544,13 @@ export function VelocityPage(): React.JSX.Element {
 											style={{
 												backgroundColor:
 													CATEGORY_COLORS[c.category.toLowerCase()] || CATEGORY_COLORS.other,
-												width: `${Math.max(2, c.sharePct)}%`,
+												width: `${c.sharePct > 0 ? Math.max(2, c.sharePct) : 0}%`,
 											}}
 											title={`${c.category} · ${c.sharePct}% (${c.impactPoints} pts)`}
 										/>
 									))}
 								</div>
 
-								{/* Ranked category rows */}
 								<ol className="divide-y divide-line/60">
 									{categoriesData.categories.map((c, i) => {
 										const color = CATEGORY_COLORS[c.category.toLowerCase()] || CATEGORY_COLORS.other
@@ -576,7 +567,7 @@ export function VelocityPage(): React.JSX.Element {
 														className="w-2 h-2 shrink-0 inline-block"
 														style={{ backgroundColor: color }}
 													/>
-													<span className="truncate">{c.category}</span>
+													<span className="truncate">{c.category.replace(/_/g, " ")}</span>
 												</span>
 												<span className="col-span-3 text-right font-mono tabular text-fg">
 													{c.impactPoints} <span className="text-fg-subtle text-[10px]">pts</span>
