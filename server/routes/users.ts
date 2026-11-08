@@ -748,8 +748,6 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		let totalEnrichedPrs = 0
 		const scoreCounts: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }
 		let totalScoreSum = 0
-		let weightedNumerator = 0
-		let weightedDenominator = 0
 		let totalImpactPoints = 0
 		let substantivePrCount = 0
 
@@ -761,8 +759,6 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 				totalScoreSum += score
 
 				const w = PR_COMPLEXITY_WEIGHTS[score] || 1.0
-				weightedNumerator += w * score
-				weightedDenominator += w
 				totalImpactPoints += w
 				if (score >= 4) {
 					substantivePrCount += 1
@@ -772,8 +768,12 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 
 		const averageComplexity =
 			totalEnrichedPrs > 0 ? Number((totalScoreSum / totalEnrichedPrs).toFixed(1)) : null
+		// Use the unbiased arithmetic mean of PR complexity scores (1..5) rather than
+		// weighting each PR's score by its own exponential complexity weight (which
+		// artificially inflated 90%+ of engineers above 3.2 "HIGH DEPTH").
 		const weightedAvgComplexity =
-			weightedDenominator > 0 ? Number((weightedNumerator / weightedDenominator).toFixed(2)) : null
+			totalEnrichedPrs > 0 ? Number((totalScoreSum / totalEnrichedPrs).toFixed(2)) : null
+		totalImpactPoints = Number(totalImpactPoints.toFixed(2))
 
 		const distribution = [1, 2, 3, 4, 5].map((score) => ({
 			score,
