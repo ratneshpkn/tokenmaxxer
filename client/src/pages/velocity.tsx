@@ -48,8 +48,10 @@ type TeamSortField = "impactPoints" | "spend" | "prsMerged" | "efficiency"
 
 const CATEGORY_COLORS: Record<string, string> = {
 	feature: "var(--mint)",
+	bug_fix: "var(--sky)",
 	bugfix: "var(--sky)",
 	refactor: "var(--amber)",
+	infrastructure: "var(--fg-subtle)",
 	test: "var(--warn)",
 	chore: "var(--fg-subtle)",
 	docs: "var(--chart-5)",
