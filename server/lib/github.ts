@@ -4,6 +4,7 @@
 
 import type { PRFileCache } from "@shared/schema"
 import { toLocalDateStr } from "../scripts/lib/shared"
+import { isBlacklistedPatchFile } from "./pr-diff-signals"
 
 export class GitHubApiError extends Error {
 	constructor(
@@ -328,8 +329,9 @@ export class GitHubClient {
 		return this.fetchJson<{ additions: number; deletions: number; body: string | null }>(url)
 	}
 
-	/** Get the changed-file list (filename, additions, deletions, status) for a single PR.
-	 *  Patch/diff content in the raw response is intentionally not surfaced here.
+	/** Get the changed-file list (filename, additions, deletions, status, and patch) for a single PR.
+	 *  Full patch content is preserved for all files except blacklisted lockfiles, generated code,
+	 *  and vendored files.
 	 *  Note: GitHub caps this endpoint at 3000 files, so the list is truncated (not
 	 *  an error) for mega-PRs — signals derived from it are approximate in that case. */
 	async getPullRequestFiles(
@@ -340,12 +342,18 @@ export class GitHubClient {
 		const raw = await this.fetchAllPages<Record<string, unknown>>(
 			`${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pullNumber}/files`,
 		)
-		return raw.map((f) => ({
-			filename: f.filename as string,
-			additions: (f.additions as number) ?? 0,
-			deletions: (f.deletions as number) ?? 0,
-			status: (f.status as string) ?? "modified",
-		}))
+		return raw.map((f) => {
+			const filename = f.filename as string
+			const patch =
+				typeof f.patch === "string" && !isBlacklistedPatchFile(filename) ? f.patch : null
+			return {
+				filename,
+				additions: (f.additions as number) ?? 0,
+				deletions: (f.deletions as number) ?? 0,
+				status: (f.status as string) ?? "modified",
+				patch,
+			}
+		})
 	}
 }
 

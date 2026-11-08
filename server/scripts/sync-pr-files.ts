@@ -1,10 +1,9 @@
-/** Caches each PR's changed-file list (no patch content) into
- *  `github_pull_requests.files`, so PR enrichment can compute complexity signals
- *  without hitting GitHub. A merged PR's file list is immutable, so rows are
- *  fetched once and never refreshed. */
+/** Caches each PR's changed-file list (including full patch content for non-blacklisted
+ *  files) into `github_pull_requests.files`, so PR enrichment can compute complexity
+ *  signals and inspect actual diffs without hitting GitHub repeatedly. */
 
 import { githubPullRequests } from "@shared/schema"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, desc, eq, gte, isNull, or, sql } from "drizzle-orm"
 import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
 import { GitHubClient, sleep } from "../lib/github"
@@ -16,6 +15,12 @@ const CHUNK_PAUSE_MS = 500
 export async function runPrFilesSync(opts?: {
 	existingRunId?: string
 	triggeredBy?: string
+	/** Re-fetch PRs whose cached `files` entries were stored before `patch` caching was enabled. */
+	backfillPatches?: boolean
+	/** Optional cutoff (in days) when backfilling patches. */
+	days?: number
+	/** Optional row cap per run. */
+	limit?: number
 }): Promise<{ rowsUpserted: number; runId: string }> {
 	return withSyncRun(
 		"pr_files",
@@ -30,10 +35,42 @@ export async function runPrFilesSync(opts?: {
 				throw new Error("GitHub org not configured — visit /settings to set your organization.")
 			}
 
-			const pending = await db
+			const missingCondition = opts?.backfillPatches
+				? or(
+						isNull(githubPullRequests.files),
+						// Re-fetch rows that have at least one file with changed lines and no `patch` key anywhere
+						sql`(
+							jsonb_typeof(${githubPullRequests.files}) = 'array'
+							and jsonb_array_length(${githubPullRequests.files}) > 0
+							and not exists (
+								select 1
+								from jsonb_array_elements(${githubPullRequests.files}) as elem
+								where elem ? 'patch'
+							)
+						)`,
+					)
+				: isNull(githubPullRequests.files)
+
+			const conditions = [missingCondition]
+			if (opts?.days && opts.days > 0) {
+				const cutoff = new Date(Date.now() - opts.days * 24 * 60 * 60 * 1000)
+				conditions.push(
+					or(gte(githubPullRequests.mergedAt, cutoff), gte(githubPullRequests.openedAt, cutoff)),
+				)
+			}
+
+			let query = db
 				.select({ repo: githubPullRequests.repo, number: githubPullRequests.number })
 				.from(githubPullRequests)
-				.where(isNull(githubPullRequests.files))
+				.where(and(...conditions))
+				.orderBy(desc(githubPullRequests.mergedAt))
+				.$dynamic()
+
+			if (opts?.limit && opts.limit > 0) {
+				query = query.limit(opts.limit).$dynamic()
+			}
+
+			const pending = await query
 
 			if (pending.length === 0) {
 				console.log("[sync-pr-files] No PRs missing cached file data.")
@@ -92,7 +129,21 @@ export async function runPrFilesSync(opts?: {
 }
 
 if (import.meta.main) {
-	runPrFilesSync()
+	const backfillPatches = process.argv.includes("--backfill-patches")
+	let days: number | undefined
+	const daysIdx = process.argv.indexOf("--days")
+	if (daysIdx !== -1 && process.argv[daysIdx + 1]) {
+		const parsed = parseInt(process.argv[daysIdx + 1], 10)
+		if (Number.isFinite(parsed) && parsed > 0) days = parsed
+	}
+	let limit: number | undefined
+	const limitIdx = process.argv.indexOf("--limit")
+	if (limitIdx !== -1 && process.argv[limitIdx + 1]) {
+		const parsed = parseInt(process.argv[limitIdx + 1], 10)
+		if (Number.isFinite(parsed) && parsed > 0) limit = parsed
+	}
+
+	runPrFilesSync({ backfillPatches, days, limit })
 		.then(() => pool.end())
 		.catch((err) => {
 			console.error("[sync-pr-files] FAILED", err)

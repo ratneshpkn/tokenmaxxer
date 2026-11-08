@@ -9,6 +9,8 @@ import type { PRFileCache } from "@shared/schema"
 
 /** Share of changed lines that must be generated/vendored to call a diff mechanical. */
 const MECHANICAL_LINE_FRACTION = 0.7
+/** Maximum effective source lines changed for a generated/rename-heavy PR to still be flagged mechanical. */
+const MECHANICAL_MAX_EFF_LINES = 150
 /** Share of files that must be pure renames to call a diff mechanical. */
 const MECHANICAL_RENAME_FRACTION = 0.7
 /** A renamed file changing at most this many lines is a pure move, not real editing. */
@@ -35,10 +37,16 @@ export interface DiffSignals {
 }
 
 const GENERATED_RE =
-	/(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lock|Podfile\.lock|poetry\.lock|Cargo\.lock|Gemfile\.lock|go\.sum|\/migrations\/|\.pb\.|_pb2|\/generated\/|openapi.*client|\.min\.|\/Pods\/|\.snap$|node_modules\/|\.zip$)/i
+	/(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Podfile\.lock|poetry\.lock|uv\.lock|pixi\.lock|Cargo\.lock|Gemfile\.lock|composer\.lock|go\.sum|\/migrations\/|\/drizzle\/meta\/|\.pb\.|_pb2|\/generated\/|\/__generated__\/|(?:^|\/|\.)generated\.(?:ts|tsx|js|jsx|py|go|rs|graphql|json)$|openapi.*client|\.min\.|\/Pods\/|\.snap$|\/__snapshots__\/|\/artifact-objects\/|\/node_modules\/|\/dist\/|\/build\/|\/coverage\/|\.jsonl$|\.map$|\.svg$|\.zip$)/i
 const VENDOR_RE = /(\/vendor\/|\/third_party\/|\.patch$)/i
 const TEST_RE = /(\/test_|_test\.|\/tests?\/|\.spec\.|\.test\.|conftest)/i
 const DOC_RE = /\.(md|rst|txt)$/i
+
+/** Returns true when a file is a lockfile, generated artifact, or vendored dump whose raw diff patch should not be stored. */
+export function isBlacklistedPatchFile(filename: string): boolean {
+	const path = filename.startsWith("/") ? filename : `/${filename}`
+	return GENERATED_RE.test(path) || VENDOR_RE.test(path)
+}
 
 const LAYER_PATTERNS: Array<[string, RegExp]> = [
 	["api", /\/(api|routers?|views?|endpoints?|handlers?)\//i],
@@ -126,8 +134,8 @@ export function computeDiffSignals(files: PRFileCache[]): DiffSignals {
 	const genFrac = generatedLines / Math.max(1, totalLinesChanged)
 	const renFrac = pureRenames / Math.max(1, files.length)
 	const mechanical =
-		genFrac > MECHANICAL_LINE_FRACTION ||
-		renFrac > MECHANICAL_RENAME_FRACTION ||
+		(genFrac > MECHANICAL_LINE_FRACTION && effLinesChanged < MECHANICAL_MAX_EFF_LINES) ||
+		(renFrac > MECHANICAL_RENAME_FRACTION && effLinesChanged < MECHANICAL_MAX_EFF_LINES) ||
 		(effFiles === 0 && generatedLines > 0)
 
 	let contentKind: DiffSignals["contentKind"] = "code"
