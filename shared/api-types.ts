@@ -1,3 +1,5 @@
+import type { SyncJob } from "./constants"
+
 export interface UsageRow {
 	date: string
 	model?: string
@@ -221,7 +223,7 @@ export interface ThresholdsResponse {
 
 export interface SyncRunItem {
 	id: string
-	job: "anthropic" | "cursor" | "alerts" | "slack_digest" | "github"
+	job: SyncJob
 	status: "success" | "failed" | "running"
 	startedAt: string
 	completedAt: string | null

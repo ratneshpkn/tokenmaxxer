@@ -1,6 +1,7 @@
 import { DEFAULTS } from "@shared/defaults"
 import { runComputeAlerts } from "./scripts/compute-alerts"
 import { computeRecommendations } from "./scripts/compute-recommendations"
+import { runPREnrichment } from "./scripts/enrich-prs"
 import { daysAgo, today, yesterday } from "./scripts/lib/shared"
 import { runSlackDigest } from "./scripts/slack-digest"
 import { runAnthropicSync } from "./scripts/sync-anthropic"
@@ -83,6 +84,8 @@ export function startCron(): void {
 			await runJob("hourly anthropic", () => runAnthropicSync(range, o))
 			await runJob("hourly cursor", () => runCursorSync(range, o))
 			await runJob("hourly github", () => runGithubSync(range, o))
+			await runJob("hourly pr files", () => runPrFilesSync(o))
+			await runJob("hourly pr enrich", () => runPREnrichment({ ...o, days: 2 }))
 			await runJob("hourly alerts", () => runComputeAlerts({ ...o, dates: [yesterday(), today()] }))
 		} finally {
 			hourlyRunning = false
@@ -97,11 +100,12 @@ export function startCron(): void {
 		await runJob("daily cursor", () => runCursorSync(range, o))
 		await runJob("daily github", () => runGithubSync(range, o))
 		await runJob("daily alerts", () => runComputeAlerts(o))
-		await runJob("daily recommendations", () => computeRecommendations(o))
 		await runJob("daily slack", () => runSlackDigest(o))
-		// Last: this backfills the whole PR history on first run and will sleep on
-		// GitHub's rate limit, so it must not delay the alerts or the digest.
+		// Backfill/sync PR files and enrich PRs before computing recommendations
+		// (which depend on github_pr_enrichments), while keeping them after alerts/digest.
 		await runJob("daily pr files", () => runPrFilesSync(o))
+		await runJob("daily pr enrich", () => runPREnrichment(o))
+		await runJob("daily recommendations", () => computeRecommendations(o))
 	})
 
 	console.log(

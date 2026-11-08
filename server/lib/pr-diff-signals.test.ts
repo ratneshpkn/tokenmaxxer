@@ -87,6 +87,31 @@ describe("computeDiffSignals", () => {
 			expect(signals.effFiles).toBe(1)
 			expect(signals.mechanical).toBe(false)
 		})
+
+		it("excludes agent prompt/config directories and test fixtures from effective code", () => {
+			const signals = computeDiffSignals([
+				file({ filename: ".claude/agents/deploy.md", additions: 120 }),
+				file({ filename: "tests/fixtures/payload.json", additions: 300 }),
+				file({ filename: "pixi.lock", additions: 4000 }),
+				file({ filename: "drizzle/meta/0001_snapshot.json", additions: 800 }),
+				file({ filename: "src/api/schema.generated.ts", additions: 600 }),
+				file({ filename: "logs/events.jsonl", additions: 2500 }),
+				file({ filename: "artifact-objects/trace.json", additions: 1200 }),
+			])
+			expect(signals.effFiles).toBe(0)
+			expect(signals.effLinesChanged).toBe(0)
+			expect(signals.contentKind).toBe("tests-or-docs-only")
+		})
+
+		it("does not flag large source-code PRs as mechanical just because a lockfile or Pod diff is larger", () => {
+			const signals = computeDiffSignals([
+				file({ filename: "Cargo.lock", additions: 21500, deletions: 0 }),
+				file({ filename: "crates/engine/src/sync.rs", additions: 2800, deletions: 400 }),
+				file({ filename: "client/src/pages/sync.tsx", additions: 700, deletions: 175 }),
+			])
+			expect(signals.effLinesChanged).toBe(4075)
+			expect(signals.mechanical).toBe(false)
+		})
 	})
 
 	describe("renames", () => {

@@ -5,6 +5,7 @@ import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
 import { classifyPRBatch, type PREnrichmentInput } from "../lib/enrichment-llm"
 import { computeDiffSignals, type DiffSignals } from "../lib/pr-diff-signals"
+import { bumpSyncRunRows, withSyncRun } from "./lib/shared"
 
 const MAX_FILE_PATHS = 40
 
@@ -57,7 +58,28 @@ export async function runPREnrichment(opts?: {
 	forceAll?: boolean
 	limit?: number
 	days?: number
+	existingRunId?: string
+	triggeredBy?: string
 }): Promise<number> {
+	const res = await withSyncRun(
+		"prs_enrich",
+		async (runId) => {
+			const rowsUpserted = await doRunPREnrichment(runId, opts)
+			return { rowsUpserted }
+		},
+		opts,
+	)
+	return res.rowsUpserted
+}
+
+async function doRunPREnrichment(
+	runId: string,
+	opts?: {
+		forceAll?: boolean
+		limit?: number
+		days?: number
+	},
+): Promise<number> {
 	const cfg = await loadConfig()
 
 	if (!cfg.enrichmentApiKey || !cfg.enrichmentModelName) {
@@ -226,6 +248,7 @@ export async function runPREnrichment(opts?: {
 						},
 					})
 				totalEnriched += results.length
+				await bumpSyncRunRows(runId, results.length)
 
 				console.log("\n── CLASSIFICATION RESULTS ──")
 				for (const r of results) {
