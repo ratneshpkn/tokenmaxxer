@@ -155,7 +155,15 @@ export function SettingsPage(): React.JSX.Element {
 			job,
 			full,
 		}: {
-			job: "anthropic" | "cursor" | "alerts" | "slack_digest" | "github"
+			job:
+				| "anthropic"
+				| "cursor"
+				| "alerts"
+				| "slack_digest"
+				| "github"
+				| "pr_files"
+				| "prs_enrich"
+				| "recommendations"
 			full: boolean
 		}) => api.sync.run(job, full),
 		onSuccess: () => {
@@ -1578,12 +1586,15 @@ export function SettingsPage(): React.JSX.Element {
 					title="MANUAL SYNC"
 					action={<Typography variant="label">RUNS IN THE BACKGROUND</Typography>}
 				/>
-				<div className="p-5 grid grid-cols-2 md:grid-cols-5 gap-3">
+				<div className="p-5 grid grid-cols-2 md:grid-cols-4 gap-3">
 					{(
 						[
 							["anthropic", "ANTHROPIC", "Pulls last 30 days. 365 if no data yet.", true],
 							["cursor", "CURSOR", "Pulls last 30 days. 365 if no data yet.", true],
 							["github", "GITHUB", "Pulls PR stats & activity.", true],
+							["pr_files", "PR FILES", "Caches changed file lists & diffs.", false],
+							["prs_enrich", "PR ENRICH", "Classifies & scores PR complexity.", false],
+							["recommendations", "ADVISOR", "Recompute model recommendations.", false],
 							["alerts", "ALERTS", "Recompute threshold breaches", false],
 							["slack_digest", "SLACK", "Post daily digest now", false],
 						] as const

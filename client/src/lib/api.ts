@@ -228,7 +228,7 @@ export const api = {
 
 	sync: {
 		runs: (limit = 50) => request<SyncRunItem[]>(`/api/sync/runs?limit=${limit}`),
-		run: (job: "anthropic" | "cursor" | "alerts" | "slack_digest" | "github", full = false) =>
+		run: (job: SyncRunItem["job"], full = false) =>
 			request<{ ok: true; runId: string }>(
 				`/api/admin/sync/${job}/run${full ? "?full=true" : ""}`,
 				{ method: "POST" },
