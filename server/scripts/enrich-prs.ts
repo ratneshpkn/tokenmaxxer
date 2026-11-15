@@ -7,10 +7,56 @@ import { classifyPRBatch, type PREnrichmentInput } from "../lib/enrichment-llm"
 import { computeDiffSignals, type DiffSignals } from "../lib/pr-diff-signals"
 
 const MAX_FILE_PATHS = 40
+const MAX_DIFF_SAMPLE_CHARS = 3500
+const MAX_SINGLE_PATCH_CHARS = 1200
 
 interface PreparedPr {
 	input: PREnrichmentInput
 	signals: DiffSignals
+}
+
+/** Build a compact unified diff sample from cached file patches when available. */
+function buildDiffSample(files: PRFileCache[]): string | undefined {
+	const withPatch = files.filter(
+		(f): f is PRFileCache & { patch: string } =>
+			typeof f.patch === "string" && f.patch.trim().length > 0,
+	)
+	if (withPatch.length === 0) return undefined
+
+	// Prioritize non-test/non-doc files first, then largest by lines changed
+	const isTestOrDoc = (name: string) =>
+		/(\/test_|_test\.|\/tests?\/|\/fixtures?\/|\/mocks?\/|\/__mocks__\/|\.spec\.|\.test\.|conftest|\/(\.claude|\.cursor|\.codex|\.agent)\/|\.(md|rst|txt)$|\/\.cursorrules$)/i.test(
+			`/${name}`,
+		)
+
+	const sorted = [...withPatch].sort((a, b) => {
+		const aTest = isTestOrDoc(a.filename) ? 1 : 0
+		const bTest = isTestOrDoc(b.filename) ? 1 : 0
+		if (aTest !== bTest) return aTest - bTest
+		return b.additions + b.deletions - (a.additions + a.deletions)
+	})
+
+	const chunks: string[] = []
+	let usedChars = 0
+
+	for (const f of sorted) {
+		if (usedChars >= MAX_DIFF_SAMPLE_CHARS) break
+		const rawPatch = f.patch.trim()
+		const header = `--- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})\n`
+		const remaining = MAX_DIFF_SAMPLE_CHARS - usedChars - header.length
+		const budget = Math.min(MAX_SINGLE_PATCH_CHARS, remaining)
+		if (budget < 120) break
+
+		const snippet =
+			rawPatch.length > budget
+				? `${rawPatch.slice(0, Math.max(0, budget - 16))}\n... [truncated]`
+				: rawPatch
+		const block = `${header}${snippet}`
+		chunks.push(block)
+		usedChars += block.length + 2
+	}
+
+	return chunks.length > 0 ? chunks.join("\n\n") : undefined
 }
 
 /** Build the LLM input from a PR row plus the signals computed from its cached
@@ -30,7 +76,8 @@ function preparePr(pr: {
 	const filePaths = [...files]
 		.sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions))
 		.slice(0, MAX_FILE_PATHS)
-		.map((f) => f.filename)
+		.map((f) => `${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`)
+	const diffSample = buildDiffSample(files)
 
 	return {
 		signals,
@@ -42,6 +89,7 @@ function preparePr(pr: {
 			additions: pr.additions,
 			deletions: pr.deletions,
 			filePaths,
+			diffSample,
 			effLinesChanged: signals.effLinesChanged,
 			effFiles: signals.effFiles,
 			breadth: signals.layers.length,
