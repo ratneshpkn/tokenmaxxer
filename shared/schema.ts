@@ -414,12 +414,14 @@ export const dailyGithubActivity = pgTable(
 	}),
 )
 
-/** One changed file in a PR. Cached in `github_pull_requests.files`; no patch content. */
+/** One changed file in a PR. Cached in `github_pull_requests.files` with full patch content for non-blacklisted files. */
 export interface PRFileCache {
 	filename: string
 	additions: number
 	deletions: number
 	status: string
+	/** Full unified diff patch from GitHub; null when blacklisted (lockfile/generated/vendor) or binary/omitted by GitHub; undefined on legacy rows fetched before patch caching. */
+	patch?: string | null
 }
 
 export const githubPullRequests = pgTable(
@@ -432,8 +434,8 @@ export const githubPullRequests = pgTable(
 		body: text("body"),
 		additions: integer("additions").notNull().default(0),
 		deletions: integer("deletions").notNull().default(0),
-		// Cached changed-file list (no patch content). A merged PR's file list is
-		// immutable, so this never needs invalidating — null means "not fetched yet".
+		// Cached changed-file list (with patch content for non-blacklisted files).
+		// A merged PR's file list is immutable, so null means "not fetched yet".
 		files: jsonb("files").$type<PRFileCache[]>(),
 		mergedAt: timestamp("merged_at", { withTimezone: true }),
 		openedAt: timestamp("opened_at", { withTimezone: true }),

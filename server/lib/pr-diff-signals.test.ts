@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import type { PRFileCache } from "@shared/schema"
-import { computeDiffSignals } from "./pr-diff-signals"
+import { computeDiffSignals, isBlacklistedPatchFile } from "./pr-diff-signals"
 
 function file(overrides: Partial<PRFileCache>): PRFileCache {
 	return { filename: "src/app.ts", additions: 10, deletions: 0, status: "modified", ...overrides }
@@ -137,5 +137,50 @@ describe("computeDiffSignals", () => {
 			file({ filename: ".github/workflows/ci.yml", additions: 1 }),
 		])
 		expect(signals.layers).toEqual(["infra"])
+	})
+
+	describe("isBlacklistedPatchFile", () => {
+		it("blacklists lockfiles, generated code, and vendor directories", () => {
+			expect(isBlacklistedPatchFile("yarn.lock")).toBe(true)
+			expect(isBlacklistedPatchFile("package-lock.json")).toBe(true)
+			expect(isBlacklistedPatchFile("bun.lockb")).toBe(true)
+			expect(isBlacklistedPatchFile("uv.lock")).toBe(true)
+			expect(isBlacklistedPatchFile("pixi.lock")).toBe(true)
+			expect(isBlacklistedPatchFile("composer.lock")).toBe(true)
+			expect(isBlacklistedPatchFile("migrations/0001_init.sql")).toBe(true)
+			expect(isBlacklistedPatchFile("drizzle/meta/0001_snapshot.json")).toBe(true)
+			expect(isBlacklistedPatchFile("vendor/bundle/foo.rb")).toBe(true)
+			expect(isBlacklistedPatchFile("src/generated/graphql.ts")).toBe(true)
+			expect(isBlacklistedPatchFile("src/__generated__/types.ts")).toBe(true)
+			expect(isBlacklistedPatchFile("src/api/schema.generated.ts")).toBe(true)
+			expect(isBlacklistedPatchFile("src/api/generated.ts")).toBe(true)
+			expect(isBlacklistedPatchFile("client/src/__snapshots__/App.test.tsx.snap")).toBe(true)
+			expect(isBlacklistedPatchFile("artifact-objects/blob-123.json")).toBe(true)
+			expect(isBlacklistedPatchFile("logs/events.jsonl")).toBe(true)
+			expect(isBlacklistedPatchFile("dist/bundle.js")).toBe(true)
+			expect(isBlacklistedPatchFile("build/output.js")).toBe(true)
+			expect(isBlacklistedPatchFile("coverage/lcov.info")).toBe(true)
+			expect(isBlacklistedPatchFile("assets/app.js.map")).toBe(true)
+			expect(isBlacklistedPatchFile("public/icon.svg")).toBe(true)
+		})
+
+		it("retains full patches for source code, tests, and config files", () => {
+			expect(isBlacklistedPatchFile("server/lib/github.ts")).toBe(false)
+			expect(isBlacklistedPatchFile("server/lib/pr-diff-signals.test.ts")).toBe(false)
+			expect(isBlacklistedPatchFile(".github/workflows/ci.yml")).toBe(false)
+			expect(isBlacklistedPatchFile("README.md")).toBe(false)
+			expect(isBlacklistedPatchFile("src/distribute/worker.ts")).toBe(false)
+			expect(isBlacklistedPatchFile("src/builder/index.ts")).toBe(false)
+		})
+
+		it("does not flag large source-code PRs as mechanical just because a lockfile or Pod diff is larger", () => {
+			const signals = computeDiffSignals([
+				file({ filename: "Cargo.lock", additions: 21500, deletions: 0 }),
+				file({ filename: "crates/engine/src/sync.rs", additions: 2800, deletions: 400 }),
+				file({ filename: "client/src/pages/sync.tsx", additions: 700, deletions: 175 }),
+			])
+			expect(signals.effLinesChanged).toBe(4075)
+			expect(signals.mechanical).toBe(false)
+		})
 	})
 })
