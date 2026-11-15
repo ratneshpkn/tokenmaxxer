@@ -39,8 +39,9 @@ export interface DiffSignals {
 const GENERATED_RE =
 	/(package-lock\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Podfile\.lock|poetry\.lock|uv\.lock|pixi\.lock|Cargo\.lock|Gemfile\.lock|composer\.lock|go\.sum|\/migrations\/|\/drizzle\/meta\/|\.pb\.|_pb2|\/generated\/|\/__generated__\/|(?:^|\/|\.)generated\.(?:ts|tsx|js|jsx|py|go|rs|graphql|json)$|openapi.*client|\.min\.|\/Pods\/|\.snap$|\/__snapshots__\/|\/artifact-objects\/|\/node_modules\/|\/dist\/|\/build\/|\/coverage\/|\.jsonl$|\.map$|\.svg$|\.zip$)/i
 const VENDOR_RE = /(\/vendor\/|\/third_party\/|\.patch$)/i
-const TEST_RE = /(\/test_|_test\.|\/tests?\/|\.spec\.|\.test\.|conftest)/i
-const DOC_RE = /\.(md|rst|txt)$/i
+const TEST_RE =
+	/(\/test_|_test\.|\/tests?\/|\.spec\.|\.test\.|conftest|\/fixtures?\/|\/mocks?\/|\/__mocks__\/)/i
+const DOC_RE = /(\.(md|rst|txt)$|\/(\.claude|\.cursor|\.codex|\.agent)\/|\/\.cursorrules$)/i
 
 /** Returns true when a file is a lockfile, generated artifact, or vendored dump whose raw diff patch should not be stored. */
 export function isBlacklistedPatchFile(filename: string): boolean {

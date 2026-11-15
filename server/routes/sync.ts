@@ -88,7 +88,7 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 		} else if (job === "slack_digest") {
 			promise = runSlackDigest(opts)
 		} else if (job === "prs_enrich") {
-			promise = runPREnrichment()
+			promise = runPREnrichment(opts)
 		} else if (job === "pr_files") {
 			promise = runPrFilesSync(opts)
 		} else if (job === "recommendations") {
