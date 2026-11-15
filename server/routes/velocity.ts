@@ -1,3 +1,4 @@
+import { PR_COMPLEXITY_WEIGHTS } from "@shared/constants"
 import { sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
@@ -5,6 +6,12 @@ import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
 import { db } from "../db"
 import { resolveWindow, stripCostForViewer } from "../lib/route-helpers"
+
+const W1 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[1]))
+const W2 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[2]))
+const W3 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[3]))
+const W4 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[4]))
+const W5 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[5]))
 
 const querySchema = z
 	.object({
@@ -111,11 +118,11 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			select
 				coalesce(sum(
 					case gpe.complexity_score
-						when 1 then 0.1
-						when 2 then 0.5
-						when 3 then 2.0
-						when 4 then 8.0
-						when 5 then 24.0
+						when 1 then ${W1}
+						when 2 then ${W2}
+						when 3 then ${W3}
+						when 4 then ${W4}
+						when 5 then ${W5}
 						else 0.0
 					end
 				), 0)::float as total_impact_points,
@@ -211,11 +218,11 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 				} as bucket,
 				coalesce(sum(
 					case gpe.complexity_score
-						when 1 then 0.1
-						when 2 then 0.5
-						when 3 then 2.0
-						when 4 then 8.0
-						when 5 then 24.0
+						when 1 then ${W1}
+						when 2 then ${W2}
+						when 3 then ${W3}
+						when 4 then ${W4}
+						when 5 then ${W5}
 						else 0.0
 					end
 				), 0)::float as impact_points,
@@ -328,11 +335,11 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 				count(*)::int as pr_count,
 				coalesce(sum(
 					case gpe.complexity_score
-						when 1 then 0.1
-						when 2 then 0.5
-						when 3 then 2.0
-						when 4 then 8.0
-						when 5 then 24.0
+						when 1 then ${W1}
+						when 2 then ${W2}
+						when 3 then ${W3}
+						when 4 then ${W4}
+						when 5 then ${W5}
 						else 0.0
 					end
 				), 0)::float as impact_points,
@@ -423,14 +430,14 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			team_pr_impact as (
 				select tm.team_id,
 					   coalesce(sum(
-						   case gpe.complexity_score
-							   when 1 then 0.1
-							   when 2 then 0.5
-							   when 3 then 2.0
-							   when 4 then 8.0
-							   when 5 then 24.0
-							   else 0.0
-						   end
+					   case gpe.complexity_score
+						   when 1 then ${W1}
+						   when 2 then ${W2}
+						   when 3 then ${W3}
+						   when 4 then ${W4}
+						   when 5 then ${W5}
+						   else 0.0
+					   end
 					   ), 0)::float as impact_points,
 					   count(*) filter (where gpe.complexity_score >= 4)::int as substantive_prs,
 					   case when count(*) > 0 then round(avg(gpe.complexity_score)::numeric, 1)::float else null end as avg_complexity

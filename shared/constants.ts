@@ -33,11 +33,11 @@ export const CHART_COLORS = [
 	"var(--chart-5)",
 ] as const
 
-/** Grounded PR complexity weights: L1=0.1, L2=0.5, L3=2.0, L4=8.0, L5=24.0 */
+/** Grounded PR complexity weights: L1=0.25, L2=1.0, L3=3.0, L4=8.0, L5=20.0 */
 export const PR_COMPLEXITY_WEIGHTS: Record<number, number> = {
-	1: 0.1,
-	2: 0.5,
-	3: 2.0,
+	1: 0.25,
+	2: 1.0,
+	3: 3.0,
 	4: 8.0,
-	5: 24.0,
+	5: 20.0,
 }
