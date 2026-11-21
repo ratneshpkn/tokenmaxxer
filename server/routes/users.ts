@@ -660,14 +660,26 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		const rows = await db
 			.select()
 			.from(modelRecommendations)
-			.where(eq(modelRecommendations.email, email))
+			.where(
+				and(
+					eq(modelRecommendations.email, email),
+					sql`${modelRecommendations.computedDate} = (select max(${modelRecommendations.computedDate}) from ${modelRecommendations})`,
+				),
+			)
 			.orderBy(
 				sql`${modelRecommendations.computedDate} desc`,
 				sql`${modelRecommendations.createdAt} desc`,
 			)
 			.limit(10)
 
-		const items = rows.map((r) => {
+		const seenTypes = new Set<string>()
+		const latestRows = rows.filter((r) => {
+			if (seenTypes.has(r.type)) return false
+			seenTypes.add(r.type)
+			return true
+		})
+
+		const items = latestRows.map((r) => {
 			let message = r.message
 			let potentialSavingsCents = r.potentialSavingsCents
 			const metadata = r.metadata ? { ...r.metadata } : null
