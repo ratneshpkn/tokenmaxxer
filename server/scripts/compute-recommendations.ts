@@ -1,3 +1,4 @@
+import { normalizeModelName } from "@shared/model-name"
 import {
 	dailyClaudeCodeAttribution,
 	dailyCursorUsage,
@@ -10,7 +11,123 @@ import { and, eq, gte, lte } from "drizzle-orm"
 import { db, pool } from "../db"
 import { parseDateRangeArgs, today, withSyncRun } from "./lib/shared"
 
-const TOP_TIER_MODELS = ["claude-3-opus", "opus", "claude-3-7-sonnet", "gpt-4o", "cursor-gpt-4o"]
+export const MIN_MODEL_TOKENS_FOR_PRICING = 100_000
+export const TOP_TIER_MEDIAN_MULTIPLIER = 1.25
+
+/**
+ * Normalizes token usage into uncached-input-equivalent base units
+ * (1x uncached input, 0.1x cache read, 1.25x cache write, 5x output)
+ * so high cache-hit ratios don't distort a model's effective tier price.
+ */
+export function computeCacheWeightedBaseUnits(params: {
+	uncachedInput: number
+	cacheRead: number
+	cacheWrite?: number
+	output: number
+}): number {
+	return (
+		params.uncachedInput +
+		params.cacheRead * 0.1 +
+		(params.cacheWrite ?? 0) * 1.25 +
+		params.output * 5.0
+	)
+}
+
+export interface ModelCostSummary {
+	tokens: number
+	cents: number
+	baseUnits?: number
+}
+
+interface QualifiedModelRate {
+	model: string
+	tokens: number
+	cents: number
+	baseUnits: number
+	rate: number
+}
+
+function getQualifiedModelRates(modelStats: ReadonlyMap<string, ModelCostSummary>): {
+	qualified: QualifiedModelRate[]
+	medianRate: number
+} {
+	let all = Array.from(modelStats.entries())
+		.filter(([, s]) => s.tokens > 0 && s.cents > 0)
+		.map(([model, s]) => {
+			const baseUnits = s.baseUnits && s.baseUnits > 0 ? s.baseUnits : s.tokens
+			return {
+				model,
+				tokens: s.tokens,
+				cents: s.cents,
+				baseUnits,
+				rate: (s.cents / baseUnits) * 1_000_000,
+			}
+		})
+
+	if (all.length === 0) return { qualified: [], medianRate: 0 }
+
+	const volumeFiltered = all.filter((m) => m.tokens >= MIN_MODEL_TOKENS_FOR_PRICING)
+	if (volumeFiltered.length > 0) {
+		all = volumeFiltered
+	}
+
+	const sortedByRate = [...all].sort((a, b) => a.rate - b.rate)
+	const mid = Math.floor(sortedByRate.length / 2)
+	const medianRate =
+		sortedByRate.length % 2 === 1
+			? sortedByRate[mid].rate
+			: (sortedByRate[mid - 1].rate + sortedByRate[mid].rate) / 2
+
+	return { qualified: all, medianRate }
+}
+
+export function deriveTopTierModels(
+	modelStats: ReadonlyMap<string, ModelCostSummary>,
+): Set<string> {
+	const { qualified, medianRate } = getQualifiedModelRates(modelStats)
+	if (qualified.length === 0) return new Set()
+	if (qualified.length === 1) {
+		return new Set([qualified[0].model])
+	}
+
+	const cutoff = medianRate * TOP_TIER_MEDIAN_MULTIPLIER
+	const topTier = new Set<string>()
+	for (const m of qualified) {
+		if (m.rate >= cutoff) {
+			topTier.add(m.model)
+		}
+	}
+	return topTier
+}
+
+export function deriveSuggestedWorkhorseModel(
+	modelStats: ReadonlyMap<string, ModelCostSummary>,
+	topTierModels: ReadonlySet<string>,
+): string {
+	const { qualified, medianRate } = getQualifiedModelRates(modelStats)
+	let bestModel: string | null = null
+	let bestTokens = 0
+
+	for (const m of qualified) {
+		if (topTierModels.has(m.model)) continue
+		if (m.rate < medianRate && m.tokens > bestTokens) {
+			bestTokens = m.tokens
+			bestModel = m.model
+		}
+	}
+
+	if (!bestModel) {
+		for (const m of qualified) {
+			if (topTierModels.has(m.model)) continue
+			if (m.rate <= medianRate && m.tokens > bestTokens) {
+				bestTokens = m.tokens
+				bestModel = m.model
+			}
+		}
+	}
+
+	return bestModel ? normalizeModelName(bestModel) : "Standard / Fast tier model"
+}
 
 export interface ComputeRecommendationOpts {
 	computedDate?: string
@@ -71,6 +188,16 @@ async function doComputeRecommendations(opts?: ComputeRecommendationOpts): Promi
 		})
 	}
 
+	// Track org-wide token, cost, and cache-weighted base units per model
+	const orgModelStats = new Map<string, ModelCostSummary>()
+	const recordModelUsage = (model: string, tokens: number, cents: number, baseUnits: number) => {
+		const prev = orgModelStats.get(model) ?? { tokens: 0, cents: 0, baseUnits: 0 }
+		prev.tokens += tokens
+		prev.cents += cents
+		prev.baseUnits = (prev.baseUnits ?? 0) + baseUnits
+		orgModelStats.set(model, prev)
+	}
+
 	// Aggregate Claude Code usage
 	const ccRows = await db
 		.select({
@@ -78,6 +205,8 @@ async function doComputeRecommendations(opts?: ComputeRecommendationOpts): Promi
 			model: dailyClaudeCodeAttribution.model,
 			uncachedInput: dailyClaudeCodeAttribution.uncachedInputTokens,
 			cacheRead: dailyClaudeCodeAttribution.cacheReadInputTokens,
+			cacheCreation5m: dailyClaudeCodeAttribution.cacheCreation5mTokens,
+			cacheCreation1h: dailyClaudeCodeAttribution.cacheCreation1hTokens,
 			outputTokens: dailyClaudeCodeAttribution.outputTokens,
 			cents: dailyClaudeCodeAttribution.attributedCents,
 		})
@@ -92,11 +221,17 @@ async function doComputeRecommendations(opts?: ComputeRecommendationOpts): Promi
 	for (const r of ccRows) {
 		const m = userMetrics.get(r.email)
 		if (!m) continue
-		const tokens = r.uncachedInput + r.cacheRead + r.outputTokens
+		const cacheWrite = (r.cacheCreation5m ?? 0) + (r.cacheCreation1h ?? 0)
+		const tokens = r.uncachedInput + r.cacheRead + cacheWrite + r.outputTokens
+		const baseUnits = computeCacheWeightedBaseUnits({
+			uncachedInput: r.uncachedInput,
+			cacheRead: r.cacheRead,
+			cacheWrite,
+			output: r.outputTokens,
+		})
 		m.totalTokens += tokens
 		m.totalCents += r.cents
-		const isTopTier = TOP_TIER_MODELS.some((tm) => r.model.toLowerCase().includes(tm))
-		if (isTopTier) m.topTierTokens += tokens
+		recordModelUsage(r.model, tokens, r.cents, baseUnits)
 
 		const currentModelTokens = m.modelTokens.get(r.model) ?? 0
 		m.modelTokens.set(r.model, currentModelTokens + tokens)
@@ -110,6 +245,7 @@ async function doComputeRecommendations(opts?: ComputeRecommendationOpts): Promi
 			inputTokens: dailyCursorUsage.inputTokens,
 			outputTokens: dailyCursorUsage.outputTokens,
 			cacheReadTokens: dailyCursorUsage.cacheReadTokens,
+			cacheWriteTokens: dailyCursorUsage.cacheWriteTokens,
 			cents: dailyCursorUsage.chargedCents,
 		})
 		.from(dailyCursorUsage)
@@ -118,14 +254,32 @@ async function doComputeRecommendations(opts?: ComputeRecommendationOpts): Promi
 	for (const r of cuRows) {
 		const m = userMetrics.get(r.email)
 		if (!m) continue
-		const tokens = r.inputTokens + r.outputTokens + r.cacheReadTokens
+		const cacheWrite = r.cacheWriteTokens ?? 0
+		const tokens = r.inputTokens + r.outputTokens + r.cacheReadTokens + cacheWrite
+		const baseUnits = computeCacheWeightedBaseUnits({
+			uncachedInput: r.inputTokens,
+			cacheRead: r.cacheReadTokens,
+			cacheWrite,
+			output: r.outputTokens,
+		})
 		m.totalTokens += tokens
 		m.totalCents += r.cents
-		const isTopTier = TOP_TIER_MODELS.some((tm) => r.model.toLowerCase().includes(tm))
-		if (isTopTier) m.topTierTokens += tokens
+		recordModelUsage(r.model, tokens, r.cents, baseUnits)
 
 		const currentModelTokens = m.modelTokens.get(r.model) ?? 0
 		m.modelTokens.set(r.model, currentModelTokens + tokens)
+	}
+
+	// Derive top-tier models from realized per-model token cost and sum each user's topTierTokens
+	const topTierModels = deriveTopTierModels(orgModelStats)
+	const suggestedWorkhorse = deriveSuggestedWorkhorseModel(orgModelStats, topTierModels)
+
+	for (const m of userMetrics.values()) {
+		for (const [model, tokens] of m.modelTokens.entries()) {
+			if (topTierModels.has(model)) {
+				m.topTierTokens += tokens
+			}
+		}
 	}
 
 	// Calculate Org Median Cost per M-Tokens
@@ -242,8 +396,8 @@ async function doComputeRecommendations(opts?: ComputeRecommendationOpts): Promi
 				type: "work_type_mismatch",
 				severity: "warning",
 				title: "High-tier model burn rate on low-complexity PRs",
-				message: `Your average PR complexity is ${prStats.averageComplexity.toFixed(1)}/5, but your high-tier model usage per line changed (${Math.round(userTokensPerLine).toLocaleString()} tokens/line) is ${ratio}x the org median (${Math.round(orgMedianTokensPerLine).toLocaleString()} tokens/line). Consider using Claude 3.5 Haiku or Sonnet standard for routine tasks to save ~$${(potentialSavings / 100).toFixed(2)}.`,
-				suggestedModel: "Claude 3.5 Haiku",
+				message: `Your average PR complexity is ${prStats.averageComplexity.toFixed(1)}/5, but your high-tier model usage per line changed (${Math.round(userTokensPerLine).toLocaleString()} tokens/line) is ${ratio}x the org median (${Math.round(orgMedianTokensPerLine).toLocaleString()} tokens/line). Consider using ${suggestedWorkhorse} for routine tasks to save ~$${(potentialSavings / 100).toFixed(2)}.`,
+				suggestedModel: suggestedWorkhorse,
 				potentialSavingsCents: potentialSavings,
 				metadata: {
 					userCentsPerToken: userCentsPerMToken,
@@ -265,7 +419,7 @@ async function doComputeRecommendations(opts?: ComputeRecommendationOpts): Promi
 				severity: "info",
 				title: "Cost-per-token above organization median",
 				message: `Your effective cost per million tokens ($${(userCentsPerMToken / 100).toFixed(2)}/M) is ${diffRatio}x the org median ($${(orgMedianCentsPerMToken / 100).toFixed(2)}/M).`,
-				suggestedModel: "Claude 3.5 Sonnet / Haiku",
+				suggestedModel: suggestedWorkhorse,
 				potentialSavingsCents: Math.round(metrics.totalCents * 0.3),
 				metadata: {
 					orgAvgCentsPerToken: orgMedianCentsPerMToken,

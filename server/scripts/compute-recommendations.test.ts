@@ -8,22 +8,120 @@ import {
 } from "@shared/schema"
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { computeRecommendations } from "./compute-recommendations"
+import {
+	computeCacheWeightedBaseUnits,
+	computeRecommendations,
+	deriveSuggestedWorkhorseModel,
+	deriveTopTierModels,
+} from "./compute-recommendations"
 
 const TEST_DATE = "2026-07-26"
 
-beforeAll(async () => {
-	await db
-		.insert(trackedUsers)
-		.values([
-			{ email: "user1@test.com", name: "User One", isActive: true },
-			{ email: "user2@test.com", name: "User Two", isActive: true },
-			{ email: "user3@test.com", name: "User Three", isActive: true },
+describe("deriveTopTierModels & deriveSuggestedWorkhorseModel", () => {
+	it("prices models on cache-weighted base units, filters tiny uncached rows, and constrains workhorse below median rate", () => {
+		// Simulate a prod-like mix where Opus has a 95% cache hit rate (making raw $/M tokens look artificially low)
+		// while Sonnet 5.5 has an 80% cache hit rate, plus a tiny 2,000-token uncached row that shouldn't skew.
+		const opusBaseUnits = computeCacheWeightedBaseUnits({
+			uncachedInput: 2_000_000,
+			cacheRead: 95_000_000,
+			cacheWrite: 2_000_000,
+			output: 1_000_000,
+		}) // 2M + 9.5M + 2.5M + 5M = 19M base units
+		const sonnetBaseUnits = computeCacheWeightedBaseUnits({
+			uncachedInput: 5_000_000,
+			cacheRead: 40_000_000,
+			cacheWrite: 3_000_000,
+			output: 2_000_000,
+		}) // 5M + 4M + 3.75M + 10M = 22.75M base units
+
+		const stats = new Map([
+			// Flagship 1: $15/M base units -> 28,500 cents for 19M base units (100M raw tokens)
+			["claude-opus-5-5", { tokens: 100_000_000, cents: 28_500, baseUnits: opusBaseUnits }],
+			// Flagship 2: $10/M base units (1,000 cents/M base units)
+			["claude-fable-5", { tokens: 10_000_000, cents: 2_000, baseUnits: 2_000_000 }],
+			// Mid-tier model at median ($5/M base units = 500 cents/M base units)
+			["gpt-5.5-medium", { tokens: 5_000_000, cents: 500, baseUnits: 1_000_000 }],
+			// Workhorse below median ($3/M base units = 300 cents/M base units, high volume) -> resolves to Claude Sonnet 5.5
+			[
+				"claude-sonnet-5-5",
+				{
+					tokens: 50_000_000,
+					cents: Math.round(sonnetBaseUnits * 0.0003),
+					baseUnits: sonnetBaseUnits,
+				},
+			],
+			// Lighter model ($1/M base units = 100 cents/M base units, lower volume than Sonnet 5.5)
+			["claude-haiku-4-5", { tokens: 8_000_000, cents: 200, baseUnits: 2_000_000 }],
+			// Tiny uncached outlier (2,000 tokens, below MIN_MODEL_TOKENS_FOR_PRICING) -> ignored
+			["tiny-uncached-outlier", { tokens: 2_000, cents: 500, baseUnits: 2_000 }],
 		])
-		.onConflictDoNothing()
+
+		const topTier = deriveTopTierModels(stats)
+		expect(topTier.has("claude-opus-5-5")).toBe(true)
+		expect(topTier.has("claude-fable-5")).toBe(true)
+		expect(topTier.has("claude-sonnet-5-5")).toBe(false)
+		expect(topTier.has("claude-haiku-4-5")).toBe(false)
+		expect(topTier.has("tiny-uncached-outlier")).toBe(false)
+
+		const workhorse = deriveSuggestedWorkhorseModel(stats, topTier)
+		expect(workhorse).toBe("Claude Sonnet 5.5")
+	})
+
+	it("handles 2-model orgs (even-length median) without returning an empty top-tier set", () => {
+		const stats = new Map([
+			["claude-opus-5-5", { tokens: 10_000_000, cents: 15_000, baseUnits: 10_000_000 }], // 1500 c/M
+			["claude-sonnet-5-5", { tokens: 10_000_000, cents: 3_000, baseUnits: 10_000_000 }], // 300 c/M
+		])
+		// Median = (300 + 1500) / 2 = 900, cutoff = 1125 -> Opus is top-tier, Sonnet is workhorse
+		const topTier = deriveTopTierModels(stats)
+		expect(topTier.has("claude-opus-5-5")).toBe(true)
+		expect(topTier.has("claude-sonnet-5-5")).toBe(false)
+		expect(deriveSuggestedWorkhorseModel(stats, topTier)).toBe("Claude Sonnet 5.5")
+	})
+
+	it("handles 4-model orgs with tied flagships at the top", () => {
+		const stats = new Map([
+			["claude-haiku-4-5", { tokens: 2_000_000, cents: 200, baseUnits: 2_000_000 }], // 100 c/M
+			["claude-sonnet-5-5", { tokens: 20_000_000, cents: 6_000, baseUnits: 20_000_000 }], // 300 c/M
+			["claude-opus-4-5", { tokens: 10_000_000, cents: 15_000, baseUnits: 10_000_000 }], // 1500 c/M
+			["claude-opus-4-6", { tokens: 10_000_000, cents: 15_000, baseUnits: 10_000_000 }], // 1500 c/M
+		])
+		// Sorted rates: [100, 300, 1500, 1500], median = (300 + 1500) / 2 = 900, cutoff = 1125
+		const topTier = deriveTopTierModels(stats)
+		expect(topTier.has("claude-opus-4-5")).toBe(true)
+		expect(topTier.has("claude-opus-4-6")).toBe(true)
+		expect(topTier.has("claude-sonnet-5-5")).toBe(false)
+		expect(deriveSuggestedWorkhorseModel(stats, topTier)).toBe("Claude Sonnet 5.5")
+	})
+
+	it("handles 0-model, 1-model, zero-cost, below-threshold, and omitted baseUnits edge cases", () => {
+		expect(deriveTopTierModels(new Map()).size).toBe(0)
+		expect(deriveSuggestedWorkhorseModel(new Map(), new Set())).toBe("Standard / Fast tier model")
+
+		// Zero-cost / zero-token rows filtered out, single remaining model treated as top-tier
+		const singleStats = new Map([
+			["free-model", { tokens: 500_000, cents: 0 }],
+			["zero-tokens", { tokens: 0, cents: 500 }],
+			["solo-model", { tokens: 50_000, cents: 150 }], // below 100k threshold, omitted baseUnits
+		])
+		const singleTop = deriveTopTierModels(singleStats)
+		expect(singleTop.size).toBe(1)
+		expect(singleTop.has("solo-model")).toBe(true)
+		expect(deriveSuggestedWorkhorseModel(singleStats, singleTop)).toBe("Standard / Fast tier model")
+	})
 })
 
 describe("compute-recommendations", () => {
+	beforeAll(async () => {
+		await db
+			.insert(trackedUsers)
+			.values([
+				{ email: "user1@test.com", name: "User One", isActive: true },
+				{ email: "user2@test.com", name: "User Two", isActive: true },
+				{ email: "user3@test.com", name: "User Three", isActive: true },
+			])
+			.onConflictDoNothing()
+	})
 	it("runs cleanly without throwing errors when user data is empty or sparse", async () => {
 		const count = await computeRecommendations({
 			computedDate: TEST_DATE,
@@ -225,7 +323,7 @@ describe("compute-recommendations", () => {
 		const mismatchRec = recs.find((r) => r.type === "work_type_mismatch")
 		expect(mismatchRec).toBeDefined()
 		expect(mismatchRec?.severity).toBe("warning")
-		expect(mismatchRec?.suggestedModel).toBe("Claude 3.5 Haiku")
+		expect(mismatchRec?.suggestedModel).toBe("Standard / Fast tier model")
 	})
 
 	it("is idempotent on re-runs and cleans up stale recommendations when 0 recs are generated", async () => {
