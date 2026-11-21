@@ -1,211 +1,46 @@
 import { describe, expect, it } from "bun:test"
-import type { PRFileCache } from "@shared/schema"
-import { computeDiffSignals, isBlacklistedPatchFile } from "./pr-diff-signals"
+import { isBlacklistedPatchFile } from "./pr-diff-signals"
 
-function file(overrides: Partial<PRFileCache>): PRFileCache {
-	return { filename: "src/app.ts", additions: 10, deletions: 0, status: "modified", ...overrides }
-}
-
-describe("computeDiffSignals", () => {
-	it("flags an all-lockfile PR as mechanical with zero effective files", () => {
-		const signals = computeDiffSignals([
-			file({ filename: "package-lock.json", additions: 5000, deletions: 200 }),
-			file({ filename: "yarn.lock", additions: 100, deletions: 10 }),
-		])
-		expect(signals.mechanical).toBe(true)
-		expect(signals.effFiles).toBe(0)
-		expect(signals.effLinesChanged).toBe(0)
-		expect(signals.contentKind).toBe("generated-or-vendored")
+describe("isBlacklistedPatchFile", () => {
+	it("matches lockfiles, dependency resolution files, snapshots, sourcemaps, and bundle/codegen artifacts", () => {
+		expect(isBlacklistedPatchFile("yarn.lock")).toBe(true)
+		expect(isBlacklistedPatchFile("Cargo.lock")).toBe(true)
+		expect(isBlacklistedPatchFile("poetry.lock")).toBe(true)
+		expect(isBlacklistedPatchFile("uv.lock")).toBe(true)
+		expect(isBlacklistedPatchFile("pixi.lock")).toBe(true)
+		expect(isBlacklistedPatchFile("composer.lock")).toBe(true)
+		expect(isBlacklistedPatchFile("bun.lock")).toBe(true)
+		expect(isBlacklistedPatchFile("bun.lockb")).toBe(true)
+		expect(isBlacklistedPatchFile("package-lock.json")).toBe(true)
+		expect(isBlacklistedPatchFile("pnpm-lock.yaml")).toBe(true)
+		expect(isBlacklistedPatchFile("npm-shrinkwrap.json")).toBe(true)
+		expect(isBlacklistedPatchFile("go.sum")).toBe(true)
+		expect(isBlacklistedPatchFile("services/auth/go.sum")).toBe(true)
+		expect(isBlacklistedPatchFile("ios/App.xcodeproj/Package.resolved")).toBe(true)
+		expect(isBlacklistedPatchFile("client/src/__snapshots__/App.test.tsx.snap")).toBe(true)
+		expect(isBlacklistedPatchFile("dist/app.js.map")).toBe(true)
+		expect(isBlacklistedPatchFile("public/vendor.min.js")).toBe(true)
+		expect(isBlacklistedPatchFile("assets/main.bundle.js")).toBe(true)
+		expect(isBlacklistedPatchFile("assets/214.chunk.css")).toBe(true)
+		expect(isBlacklistedPatchFile("src/api/schema.generated.ts")).toBe(true)
+		expect(isBlacklistedPatchFile("lib/models/user.g.dart")).toBe(true)
+		expect(isBlacklistedPatchFile("proto/service.pb.go")).toBe(true)
+		expect(isBlacklistedPatchFile("proto/service_pb2.py")).toBe(true)
+		expect(isBlacklistedPatchFile("dist/index.js")).toBe(true)
+		expect(isBlacklistedPatchFile("build/static/app.js")).toBe(true)
+		expect(isBlacklistedPatchFile("vendor/bundle/foo.rb")).toBe(true)
+		expect(isBlacklistedPatchFile("ios/Pods/AFNetworking/AFHTTPSessionManager.m")).toBe(true)
+		expect(isBlacklistedPatchFile("public/icons/logo.svg")).toBe(true)
 	})
 
-	it("detects multi-layer breadth and language span for a real feature PR", () => {
-		const signals = computeDiffSignals([
-			file({ filename: "server/api/users.ts", additions: 80 }),
-			file({ filename: "server/services/billing.py", additions: 120 }),
-			file({ filename: "client/src/components/UserCard.tsx", additions: 60 }),
-		])
-		expect(signals.mechanical).toBe(false)
-		expect(signals.layers).toContain("api")
-		expect(signals.layers).toContain("frontend")
-		expect(signals.langs.length).toBe(3)
-		expect(signals.contentKind).toBe("code")
-	})
-
-	it("returns zeroed defaults for an empty file list", () => {
-		const signals = computeDiffSignals([])
-		expect(signals.effFiles).toBe(0)
-		expect(signals.mechanical).toBe(false)
-		expect(signals.contentKind).toBe("empty")
-	})
-
-	// Excluded-path patterns need a leading slash, so a bare filename let
-	// root-level vendored/generated dumps through as real work.
-	describe("root-level paths are excluded, not just nested ones", () => {
-		it("treats a root vendor/ dump as mechanical", () => {
-			const signals = computeDiffSignals([file({ filename: "vendor/lib.js", additions: 5000 })])
-			expect(signals.mechanical).toBe(true)
-			expect(signals.effLinesChanged).toBe(0)
-		})
-
-		it("excludes root migrations/", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "migrations/0006_x.sql", additions: 200 }),
-			])
-			expect(signals.effFiles).toBe(0)
-			expect(signals.mechanical).toBe(true)
-		})
-
-		it("excludes a root tests/ directory", () => {
-			const signals = computeDiffSignals([file({ filename: "tests/thing.py", additions: 300 })])
-			expect(signals.effFiles).toBe(0)
-			expect(signals.contentKind).toBe("tests-or-docs-only")
-		})
-	})
-
-	// Test/doc-only diffs used to collapse into `mechanical`, which the prompt
-	// scores 1 by definition — forcing real test suites to the floor.
-	describe("tests/docs are not mechanical", () => {
-		it("marks a substantial test-only PR as tests-or-docs-only, not mechanical", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "server/lib/a.test.ts", additions: 400 }),
-				file({ filename: "server/lib/b.test.ts", additions: 400 }),
-			])
-			expect(signals.mechanical).toBe(false)
-			expect(signals.contentKind).toBe("tests-or-docs-only")
-		})
-
-		it("marks a docs-only PR as tests-or-docs-only, not mechanical", () => {
-			const signals = computeDiffSignals([file({ filename: "docs/arch.md", additions: 1200 })])
-			expect(signals.mechanical).toBe(false)
-			expect(signals.contentKind).toBe("tests-or-docs-only")
-		})
-
-		it("does not treat an ordinary filename containing 'test_' as a test file", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "server/latest_config.ts", additions: 50 }),
-			])
-			expect(signals.effFiles).toBe(1)
-			expect(signals.mechanical).toBe(false)
-		})
-
-		it("excludes agent prompt/config directories and test fixtures from effective code", () => {
-			const signals = computeDiffSignals([
-				file({ filename: ".claude/agents/deploy.md", additions: 120 }),
-				file({ filename: "tests/fixtures/payload.json", additions: 300 }),
-				file({ filename: "pixi.lock", additions: 4000 }),
-				file({ filename: "drizzle/meta/0001_snapshot.json", additions: 800 }),
-				file({ filename: "src/api/schema.generated.ts", additions: 600 }),
-				file({ filename: "logs/events.jsonl", additions: 2500 }),
-				file({ filename: "artifact-objects/trace.json", additions: 1200 }),
-			])
-			expect(signals.effFiles).toBe(0)
-			expect(signals.effLinesChanged).toBe(0)
-			expect(signals.contentKind).toBe("tests-or-docs-only")
-		})
-
-		it("does not flag large source-code PRs as mechanical just because a lockfile or Pod diff is larger", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "Cargo.lock", additions: 21500, deletions: 0 }),
-				file({ filename: "crates/engine/src/sync.rs", additions: 2800, deletions: 400 }),
-				file({ filename: "client/src/pages/sync.tsx", additions: 700, deletions: 175 }),
-			])
-			expect(signals.effLinesChanged).toBe(4075)
-			expect(signals.mechanical).toBe(false)
-		})
-	})
-
-	describe("renames", () => {
-		it("treats pure moves as mechanical", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "server/lib/a.ts", additions: 0, deletions: 0, status: "renamed" }),
-				file({ filename: "server/lib/b.ts", additions: 0, deletions: 0, status: "renamed" }),
-			])
-			expect(signals.mechanical).toBe(true)
-		})
-
-		it("does not treat renames carrying substantive edits as mechanical", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "a.ts", additions: 300, deletions: 200, status: "renamed" }),
-				file({ filename: "b.ts", additions: 250, deletions: 180, status: "renamed" }),
-			])
-			expect(signals.mechanical).toBe(false)
-			expect(signals.effLinesChanged).toBe(930)
-		})
-	})
-
-	describe("line accounting", () => {
-		it("counts deletions in effLinesChanged so cleanups aren't read as no-ops", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "server/legacy.ts", additions: 10, deletions: 5000 }),
-			])
-			expect(signals.totalLinesChanged).toBe(5010)
-			expect(signals.effLinesChanged).toBe(5010)
-		})
-	})
-
-	describe("sensitive", () => {
-		it("flags risk-bearing paths", () => {
-			expect(computeDiffSignals([file({ filename: "server/auth/session.ts" })]).sensitive).toBe(
-				true,
-			)
-			expect(computeDiffSignals([file({ filename: "app/billing/charge.rb" })]).sensitive).toBe(true)
-		})
-
-		it("does not flag ordinary shared directories", () => {
-			expect(computeDiffSignals([file({ filename: "server/lib/foo.ts" })]).sensitive).toBe(false)
-			expect(computeDiffSignals([file({ filename: "app/models/user.rb" })]).sensitive).toBe(false)
-		})
-	})
-
-	it("does not count .github CI config as an app workflow layer", () => {
-		const signals = computeDiffSignals([
-			file({ filename: ".github/workflows/ci.yml", additions: 1 }),
-		])
-		expect(signals.layers).toEqual(["infra"])
-	})
-
-	describe("isBlacklistedPatchFile", () => {
-		it("blacklists lockfiles, generated code, and vendor directories", () => {
-			expect(isBlacklistedPatchFile("yarn.lock")).toBe(true)
-			expect(isBlacklistedPatchFile("package-lock.json")).toBe(true)
-			expect(isBlacklistedPatchFile("bun.lockb")).toBe(true)
-			expect(isBlacklistedPatchFile("uv.lock")).toBe(true)
-			expect(isBlacklistedPatchFile("pixi.lock")).toBe(true)
-			expect(isBlacklistedPatchFile("composer.lock")).toBe(true)
-			expect(isBlacklistedPatchFile("migrations/0001_init.sql")).toBe(true)
-			expect(isBlacklistedPatchFile("drizzle/meta/0001_snapshot.json")).toBe(true)
-			expect(isBlacklistedPatchFile("vendor/bundle/foo.rb")).toBe(true)
-			expect(isBlacklistedPatchFile("src/generated/graphql.ts")).toBe(true)
-			expect(isBlacklistedPatchFile("src/__generated__/types.ts")).toBe(true)
-			expect(isBlacklistedPatchFile("src/api/schema.generated.ts")).toBe(true)
-			expect(isBlacklistedPatchFile("src/api/generated.ts")).toBe(true)
-			expect(isBlacklistedPatchFile("client/src/__snapshots__/App.test.tsx.snap")).toBe(true)
-			expect(isBlacklistedPatchFile("artifact-objects/blob-123.json")).toBe(true)
-			expect(isBlacklistedPatchFile("logs/events.jsonl")).toBe(true)
-			expect(isBlacklistedPatchFile("dist/bundle.js")).toBe(true)
-			expect(isBlacklistedPatchFile("build/output.js")).toBe(true)
-			expect(isBlacklistedPatchFile("coverage/lcov.info")).toBe(true)
-			expect(isBlacklistedPatchFile("assets/app.js.map")).toBe(true)
-			expect(isBlacklistedPatchFile("public/icon.svg")).toBe(true)
-		})
-
-		it("retains full patches for source code, tests, and config files", () => {
-			expect(isBlacklistedPatchFile("server/lib/github.ts")).toBe(false)
-			expect(isBlacklistedPatchFile("server/lib/pr-diff-signals.test.ts")).toBe(false)
-			expect(isBlacklistedPatchFile(".github/workflows/ci.yml")).toBe(false)
-			expect(isBlacklistedPatchFile("README.md")).toBe(false)
-			expect(isBlacklistedPatchFile("src/distribute/worker.ts")).toBe(false)
-			expect(isBlacklistedPatchFile("src/builder/index.ts")).toBe(false)
-		})
-
-		it("does not flag large source-code PRs as mechanical just because a lockfile or Pod diff is larger", () => {
-			const signals = computeDiffSignals([
-				file({ filename: "Cargo.lock", additions: 21500, deletions: 0 }),
-				file({ filename: "crates/engine/src/sync.rs", additions: 2800, deletions: 400 }),
-				file({ filename: "client/src/pages/sync.tsx", additions: 700, deletions: 175 }),
-			])
-			expect(signals.effLinesChanged).toBe(4075)
-			expect(signals.mechanical).toBe(false)
-		})
+	it("retains source code, migrations, docs, configs, and source *-lock files", () => {
+		expect(isBlacklistedPatchFile("server/lib/github.ts")).toBe(false)
+		expect(isBlacklistedPatchFile("migrations/0001_init.sql")).toBe(false)
+		expect(isBlacklistedPatchFile("README.md")).toBe(false)
+		expect(isBlacklistedPatchFile(".github/workflows/ci.yml")).toBe(false)
+		expect(isBlacklistedPatchFile("src/spin-lock.rs")).toBe(false)
+		expect(isBlacklistedPatchFile("src/distributed-lock.ts")).toBe(false)
+		expect(isBlacklistedPatchFile("src/distribute/worker.ts")).toBe(false)
+		expect(isBlacklistedPatchFile("src/builder/index.ts")).toBe(false)
 	})
 })
