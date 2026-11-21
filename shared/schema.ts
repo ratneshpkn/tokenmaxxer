@@ -417,6 +417,7 @@ export const dailyGithubActivity = pgTable(
 /** One changed file in a PR. Cached in `github_pull_requests.files` with full patch content for non-blacklisted files. */
 export interface PRFileCache {
 	filename: string
+	previousFilename?: string
 	additions: number
 	deletions: number
 	status: string

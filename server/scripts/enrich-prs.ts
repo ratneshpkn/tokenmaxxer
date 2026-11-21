@@ -1,106 +1,11 @@
-import type { PRFileCache } from "@shared/schema"
 import { githubPrEnrichments, githubPullRequests } from "@shared/schema"
-import { and, gte, isNotNull, isNull, or, sql } from "drizzle-orm"
+import { and, desc, gte, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
-import { classifyPRBatch, type PREnrichmentInput } from "../lib/enrichment-llm"
-import { computeDiffSignals, type DiffSignals } from "../lib/pr-diff-signals"
+import { classifyPRBatch } from "../lib/enrichment-llm"
 import { bumpSyncRunRows, withSyncRun } from "./lib/shared"
 
-const MAX_FILE_PATHS = 40
-const MAX_DIFF_SAMPLE_CHARS = 3500
-const MAX_SINGLE_PATCH_CHARS = 1200
-
-interface PreparedPr {
-	input: PREnrichmentInput
-	signals: DiffSignals
-}
-
-/** Build a compact unified diff sample from cached file patches when available. */
-function buildDiffSample(files: PRFileCache[]): string | undefined {
-	const withPatch = files.filter(
-		(f): f is PRFileCache & { patch: string } =>
-			typeof f.patch === "string" && f.patch.trim().length > 0,
-	)
-	if (withPatch.length === 0) return undefined
-
-	// Prioritize non-test/non-doc files first, then largest by lines changed
-	const isTestOrDoc = (name: string) =>
-		/(\/test_|_test\.|\/tests?\/|\/fixtures?\/|\/mocks?\/|\/__mocks__\/|\.spec\.|\.test\.|conftest|\/(\.claude|\.cursor|\.codex|\.agent)\/|\.(md|rst|txt)$|\/\.cursorrules$)/i.test(
-			`/${name}`,
-		)
-
-	const sorted = [...withPatch].sort((a, b) => {
-		const aTest = isTestOrDoc(a.filename) ? 1 : 0
-		const bTest = isTestOrDoc(b.filename) ? 1 : 0
-		if (aTest !== bTest) return aTest - bTest
-		return b.additions + b.deletions - (a.additions + a.deletions)
-	})
-
-	const chunks: string[] = []
-	let usedChars = 0
-
-	for (const f of sorted) {
-		if (usedChars >= MAX_DIFF_SAMPLE_CHARS) break
-		const rawPatch = f.patch.trim()
-		const header = `--- ${f.filename} (${f.status}, +${f.additions}/-${f.deletions})\n`
-		const remaining = MAX_DIFF_SAMPLE_CHARS - usedChars - header.length
-		const budget = Math.min(MAX_SINGLE_PATCH_CHARS, remaining)
-		if (budget < 120) break
-
-		const snippet =
-			rawPatch.length > budget
-				? `${rawPatch.slice(0, Math.max(0, budget - 16))}\n... [truncated]`
-				: rawPatch
-		const block = `${header}${snippet}`
-		chunks.push(block)
-		usedChars += block.length + 2
-	}
-
-	return chunks.length > 0 ? chunks.join("\n\n") : undefined
-}
-
-/** Build the LLM input from a PR row plus the signals computed from its cached
- *  file list. Signals are returned separately so they can be persisted verbatim
- *  next to the score they informed. */
-function preparePr(pr: {
-	repo: string
-	number: number
-	title: string
-	body: string | null
-	additions: number
-	deletions: number
-	files: PRFileCache[] | null
-}): PreparedPr {
-	const files = pr.files ?? []
-	const signals = computeDiffSignals(files)
-	const filePaths = [...files]
-		.sort((a, b) => b.additions + b.deletions - (a.additions + a.deletions))
-		.slice(0, MAX_FILE_PATHS)
-		.map((f) => `${f.filename} (${f.status}, +${f.additions}/-${f.deletions})`)
-	const diffSample = buildDiffSample(files)
-
-	return {
-		signals,
-		input: {
-			repo: pr.repo,
-			number: pr.number,
-			title: pr.title,
-			body: pr.body,
-			additions: pr.additions,
-			deletions: pr.deletions,
-			filePaths,
-			diffSample,
-			effLinesChanged: signals.effLinesChanged,
-			effFiles: signals.effFiles,
-			breadth: signals.layers.length,
-			langSpan: signals.langs.length,
-			mechanical: signals.mechanical,
-			sensitive: signals.sensitive,
-			contentKind: signals.contentKind,
-		},
-	}
-}
+const CONCURRENCY = 4
 
 export async function runPREnrichment(opts?: {
 	forceAll?: boolean
@@ -140,10 +45,6 @@ async function doRunPREnrichment(
 		`[enrich-prs] Using LLM provider "${cfg.enrichmentProvider || "anthropic"}" with model "${cfg.enrichmentModelName}"...`,
 	)
 
-	// Filter in SQL rather than loading every row: `files` holds a per-PR file list,
-	// so an unprojected full-table select would drag the whole cache into memory.
-	// `isNotNull(files)` also enforces the file-grounded-only rule — PRs without
-	// cached file data are left for the next run after `sync-pr-files` fills them.
 	const conditions = [isNotNull(githubPullRequests.files)]
 
 	if (opts?.days && opts.days > 0) {
@@ -170,7 +71,6 @@ async function doRunPREnrichment(
 		.$dynamic()
 
 	if (!opts?.forceAll) {
-		// Anti-join beats loading the whole enrichments table to build a key Set.
 		query = query
 			.leftJoin(
 				githubPrEnrichments,
@@ -183,7 +83,10 @@ async function doRunPREnrichment(
 		conditions.push(isNull(githubPrEnrichments.repo))
 	}
 
-	query = query.where(and(...conditions)).$dynamic()
+	query = query
+		.where(and(...conditions))
+		.orderBy(desc(githubPullRequests.mergedAt), desc(githubPullRequests.openedAt))
+		.$dynamic()
 	if (opts?.limit && opts.limit > 0) query = query.limit(opts.limit).$dynamic()
 
 	const targetPrs = await query
@@ -203,7 +106,7 @@ async function doRunPREnrichment(
 		return 0
 	}
 
-	console.log(`[enrich-prs] Processing ${targetPrs.length} PR(s) for classification...`)
+	console.log(`[enrich-prs] Processing ${targetPrs.length} PR(s) for agentic classification...`)
 
 	const llmConfig = {
 		provider:
@@ -214,29 +117,20 @@ async function doRunPREnrichment(
 	}
 
 	let totalEnriched = 0
-	const BATCH_SIZE = 4
+	let lastError: unknown = null
 
-	for (let i = 0; i < targetPrs.length; i += BATCH_SIZE) {
-		const batch = targetPrs.slice(i, i + BATCH_SIZE)
+	for (let i = 0; i < targetPrs.length; i += CONCURRENCY) {
+		const wave = targetPrs.slice(i, i + CONCURRENCY)
 		try {
-			const prepared = batch.map(preparePr)
-			// Keyed so each score can be stored next to the signals it was shown.
-			const signalsByPr = new Map(
-				prepared.map((p) => [`${p.input.repo}#${p.input.number}`, p.signals]),
-			)
-			const rawResults = await classifyPRBatch(
-				prepared.map((p) => p.input),
-				llmConfig,
-			)
+			const validKeys = new Set(wave.map((pr) => `${pr.repo}#${pr.number}`))
+			const rawResults = await classifyPRBatch(wave, llmConfig, CONCURRENCY, (_pr, err) => {
+				lastError = err
+			})
 
-			// The model echoes repo/number back, so an off-by-one or omitted number
-			// would upsert onto a DIFFERENT PR's row and clobber its stored score.
-			// Only keep results that match a PR we actually sent, and drop duplicate
-			// keys — a repeated key makes the multi-row upsert fail for the whole batch.
 			const seen = new Set<string>()
 			const results = rawResults.filter((r) => {
 				const key = `${r.repo}#${r.number}`
-				if (!signalsByPr.has(key)) {
+				if (!validKeys.has(key)) {
 					console.warn(`[enrich-prs] Discarding result for un-requested PR "${key}".`)
 					return false
 				}
@@ -247,9 +141,10 @@ async function doRunPREnrichment(
 				seen.add(key)
 				return true
 			})
-			if (results.length !== prepared.length) {
+
+			if (results.length !== wave.length) {
 				console.warn(
-					`[enrich-prs] Batch returned ${results.length} usable result(s) for ${prepared.length} PR(s); the rest will be retried next run.`,
+					`[enrich-prs] Wave returned ${results.length} usable result(s) for ${wave.length} PR(s); the rest will be retried next run.`,
 				)
 			}
 
@@ -257,26 +152,15 @@ async function doRunPREnrichment(
 				await db
 					.insert(githubPrEnrichments)
 					.values(
-						results.map((r) => {
-							// Non-null: the filter above dropped anything not in the map.
-							const s = signalsByPr.get(`${r.repo}#${r.number}`) as DiffSignals
-							return {
-								repo: r.repo,
-								number: r.number,
-								category: r.category,
-								complexityScore: r.complexityScore,
-								complexityReason: r.complexityReason,
-								summary: r.summary,
-								effLinesChanged: s.effLinesChanged,
-								effFiles: s.effFiles,
-								breadth: s.layers.length,
-								langSpan: s.langs.length,
-								mechanical: s.mechanical,
-								sensitive: s.sensitive,
-								contentKind: s.contentKind,
-								syncedAt: new Date(),
-							}
-						}),
+						results.map((r) => ({
+							repo: r.repo,
+							number: r.number,
+							category: r.category,
+							complexityScore: r.complexityScore,
+							complexityReason: r.complexityReason,
+							summary: r.summary,
+							syncedAt: new Date(),
+						})),
 					)
 					.onConflictDoUpdate({
 						target: [githubPrEnrichments.repo, githubPrEnrichments.number],
@@ -285,13 +169,13 @@ async function doRunPREnrichment(
 							complexityScore: sql`excluded.complexity_score`,
 							complexityReason: sql`excluded.complexity_reason`,
 							summary: sql`excluded.summary`,
-							effLinesChanged: sql`excluded.eff_lines_changed`,
-							effFiles: sql`excluded.eff_files`,
-							breadth: sql`excluded.breadth`,
-							langSpan: sql`excluded.lang_span`,
-							mechanical: sql`excluded.mechanical`,
-							sensitive: sql`excluded.sensitive`,
-							contentKind: sql`excluded.content_kind`,
+							effLinesChanged: null,
+							effFiles: null,
+							breadth: null,
+							langSpan: null,
+							mechanical: null,
+							sensitive: null,
+							contentKind: null,
 							syncedAt: new Date(),
 						},
 					})
@@ -307,12 +191,21 @@ async function doRunPREnrichment(
 				}
 				console.log("─────────────────────────────\n")
 			}
-		} catch (batchErr) {
+		} catch (waveErr) {
+			lastError = waveErr
 			console.error(
-				`[enrich-prs] Batch ${i / BATCH_SIZE + 1} failed:`,
-				batchErr instanceof Error ? batchErr.message : batchErr,
+				`[enrich-prs] Wave ${i / CONCURRENCY + 1} failed:`,
+				waveErr instanceof Error ? waveErr.message : waveErr,
 			)
 		}
+	}
+
+	if (targetPrs.length > 0 && totalEnriched === 0) {
+		throw lastError instanceof Error
+			? lastError
+			: new Error(
+					`[enrich-prs] All ${targetPrs.length} PR evaluation(s) failed${lastError ? `: ${String(lastError)}` : ""}`,
+				)
 	}
 
 	console.log(`[enrich-prs] Complete! Enriched ${totalEnriched} PR(s) into github_pr_enrichments.`)

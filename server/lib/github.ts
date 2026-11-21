@@ -330,8 +330,7 @@ export class GitHubClient {
 	}
 
 	/** Get the changed-file list (filename, additions, deletions, status, and patch) for a single PR.
-	 *  Full patch content is preserved for all files except blacklisted lockfiles, generated code,
-	 *  and vendored files.
+	 *  Full patch content is preserved for all files except those matched by `isBlacklistedPatchFile`.
 	 *  Note: GitHub caps this endpoint at 3000 files, so the list is truncated (not
 	 *  an error) for mega-PRs — signals derived from it are approximate in that case. */
 	async getPullRequestFiles(
@@ -344,10 +343,13 @@ export class GitHubClient {
 		)
 		return raw.map((f) => {
 			const filename = f.filename as string
+			const previousFilename =
+				typeof f.previous_filename === "string" ? f.previous_filename : undefined
 			const patch =
 				typeof f.patch === "string" && !isBlacklistedPatchFile(filename) ? f.patch : null
 			return {
 				filename,
+				...(previousFilename ? { previousFilename } : {}),
 				additions: (f.additions as number) ?? 0,
 				deletions: (f.deletions as number) ?? 0,
 				status: (f.status as string) ?? "modified",
