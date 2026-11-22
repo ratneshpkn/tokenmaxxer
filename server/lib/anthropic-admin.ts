@@ -7,44 +7,10 @@
  * Auth: x-api-key (sk-ant-admin...) + anthropic-version: 2023-06-01
  */
 
+import { fetchWithRetry, type TransportDeps } from "./http-transport"
+
 const BASE_URL = "https://api.anthropic.com"
 const API_VERSION = "2023-06-01"
-
-const BACKOFF_BASE_MS = 1000
-const BACKOFF_CAP_MS = 60_000
-
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-/** Exponential backoff: attempt 1 -> 1s, 2 -> 2s, 3 -> 4s, 4 -> 8s, 5 -> 16s; capped at 60s. */
-function backoffMs(attempt: number): number {
-	const ms = BACKOFF_BASE_MS * 2 ** (attempt - 1)
-	return Math.min(ms, BACKOFF_CAP_MS)
-}
-
-/**
- * Parse an HTTP `Retry-After` header value defensively.
- * Per RFC 7231 it can be a non-negative integer (delta-seconds) or an HTTP-date.
- * Returns milliseconds to wait, or null if missing/malformed/non-positive.
- */
-function parseRetryAfter(value: string | null): number | null {
-	if (!value) return null
-	const trimmed = value.trim()
-	if (!trimmed) return null
-	// delta-seconds (integer)
-	if (/^\d+$/.test(trimmed)) {
-		const secs = parseInt(trimmed, 10)
-		if (!Number.isFinite(secs) || secs < 0) return null
-		return Math.min(secs * 1000, BACKOFF_CAP_MS)
-	}
-	// HTTP-date
-	const dateMs = Date.parse(trimmed)
-	if (!Number.isFinite(dateMs)) return null
-	const delta = dateMs - Date.now()
-	if (delta <= 0) return null
-	return Math.min(delta, BACKOFF_CAP_MS)
-}
 
 export interface AnthropicUser {
 	id: string
@@ -122,7 +88,10 @@ interface PageResponse<T> {
 }
 
 export class AnthropicAdminClient {
-	constructor(private apiKey: string) {
+	constructor(
+		private apiKey: string,
+		private deps?: TransportDeps,
+	) {
 		if (!apiKey) throw new Error("Anthropic admin API key required")
 	}
 
@@ -136,92 +105,34 @@ export class AnthropicAdminClient {
 			}
 		}
 
-		/**
-		 * Retry policy (distinct counters per failure class):
-		 *   - 429 rate-limit: up to 5 retries. Honors Retry-After header if present
-		 *     (delta-seconds int or HTTP-date), else exponential backoff 1s -> 60s cap.
-		 *   - 5xx (500/502/503/504): up to 3 retries. Same backoff schedule.
-		 *   - Network errors (fetch rejects): up to 3 retries. Same backoff schedule.
-		 *   - Other 4xx: throw immediately (caller bug, not transient).
-		 * Backoff schedule used when Retry-After is absent: 1s, 2s, 4s, 8s, 16s, capped at 60s.
-		 */
-		const MAX_RETRIES_429 = 5
-		const MAX_RETRIES_5XX = 3
-		const MAX_RETRIES_NETWORK = 3
-		let attempt429 = 0
-		let attempt5xx = 0
-		let attemptNetwork = 0
+		const res = await fetchWithRetry(
+			url.toString(),
+			{
+				method: "GET",
+				headers: {
+					"x-api-key": this.apiKey,
+					"anthropic-version": API_VERSION,
+					accept: "application/json",
+				},
+			},
+			{
+				label: "anthropic-admin",
+				maxRetries429: 5,
+				maxRetries5xx: 3,
+				maxRetriesNetwork: 3,
+				...this.deps,
+			},
+		)
 
-		// eslint-disable-next-line no-constant-condition
-		while (true) {
-			let res: Response
-			try {
-				res = await fetch(url.toString(), {
-					method: "GET",
-					headers: {
-						"x-api-key": this.apiKey,
-						"anthropic-version": API_VERSION,
-						accept: "application/json",
-					},
-				})
-			} catch (err) {
-				if (attemptNetwork >= MAX_RETRIES_NETWORK) throw err
-				attemptNetwork++
-				const waitMs = backoffMs(attemptNetwork)
-				const msg = err instanceof Error ? err.message : String(err)
-				console.warn(
-					`[anthropic-admin] network error (${msg}) — backing off ${Math.round(
-						waitMs / 1000,
-					)}s (attempt ${attemptNetwork}/${MAX_RETRIES_NETWORK})`,
-				)
-				await sleep(waitMs)
-				continue
-			}
-
-			if (res.ok) {
-				return (await res.json()) as T
-			}
-
-			if (res.status === 429) {
-				if (attempt429 >= MAX_RETRIES_429) {
-					const body = await res.text()
-					throw new Error(`Anthropic admin ${res.status} ${path}: ${body.slice(0, 500)}`)
-				}
-				attempt429++
-				const retryAfter = parseRetryAfter(res.headers.get("retry-after"))
-				const waitMs = retryAfter != null ? retryAfter : backoffMs(attempt429)
-				// Drain body so the connection can be reused.
-				await res.text().catch(() => {})
-				console.warn(
-					`[anthropic-admin] 429 — backing off ${Math.round(
-						waitMs / 1000,
-					)}s (attempt ${attempt429}/${MAX_RETRIES_429})`,
-				)
-				await sleep(waitMs)
-				continue
-			}
-
-			if (res.status >= 500 && res.status <= 599) {
-				if (attempt5xx >= MAX_RETRIES_5XX) {
-					const body = await res.text()
-					throw new Error(`Anthropic admin ${res.status} ${path}: ${body.slice(0, 500)}`)
-				}
-				attempt5xx++
-				const waitMs = backoffMs(attempt5xx)
-				await res.text().catch(() => {})
-				console.warn(
-					`[anthropic-admin] ${res.status} — backing off ${Math.round(
-						waitMs / 1000,
-					)}s (attempt ${attempt5xx}/${MAX_RETRIES_5XX})`,
-				)
-				await sleep(waitMs)
-				continue
-			}
-
-			// Other 4xx (and any other non-2xx): throw immediately, not transient.
+		if (!res.ok) {
 			const body = await res.text()
 			throw new Error(`Anthropic admin ${res.status} ${path}: ${body.slice(0, 500)}`)
 		}
+		return (await res.json()) as T
+	}
+
+	async validateCredentials(): Promise<void> {
+		await this.request<PageResponse<AnthropicUser>>("/v1/organizations/users", { limit: "1" })
 	}
 
 	private async *paged<T>(

@@ -48,14 +48,11 @@ export function registerSetupRoutes(app: Hono<AppEnv>): void {
 
 		try {
 			if (provider === "anthropic") {
-				const client = new AnthropicAdminClient(key)
-				// Pull just one batch to validate auth
-				for await (const _batch of client.listUsers()) break
+				await new AnthropicAdminClient(key).validateCredentials()
 				return c.json({ ok: true })
 			}
 			if (provider === "cursor") {
-				const client = new CursorAdminClient(key)
-				await client.listMembers()
+				await new CursorAdminClient(key).validateCredentials()
 				return c.json({ ok: true })
 			}
 			if (provider === "slack") {
@@ -70,8 +67,7 @@ export function registerSetupRoutes(app: Hono<AppEnv>): void {
 						400,
 					)
 				}
-				const client = new GitHubClient(key)
-				await client.listOrgRepos(org)
+				await new GitHubClient(key).validateCredentials(org)
 				return c.json({ ok: true })
 			}
 			return c.json({ ok: false, error: "unknown provider" }, 400)

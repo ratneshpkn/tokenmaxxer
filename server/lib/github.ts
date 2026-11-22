@@ -4,7 +4,10 @@
 
 import type { PRFileCache } from "@shared/schema"
 import { toLocalDateStr } from "../scripts/lib/shared"
-import { isBlacklistedPatchFile } from "./pr-diff-signals"
+import { isBlacklistedPatchFile } from "./enrichment-llm"
+import { fetchWithRetry, sleep, type TransportDeps } from "./http-transport"
+
+export { sleep }
 
 export class GitHubApiError extends Error {
 	constructor(
@@ -33,14 +36,15 @@ export interface OrgMember {
 	id: number
 }
 
-export interface SearchPRResult {
-	totalCount: number
-}
+const GITHUB_RETRYABLE = new Set([403, 429, 500, 502, 503, 504])
 
 export class GitHubClient {
 	private headers: Record<string, string>
 
-	constructor(token: string) {
+	constructor(
+		token: string,
+		private deps?: TransportDeps,
+	) {
 		this.headers = {
 			Authorization: `Bearer ${token}`,
 			Accept: "application/vnd.github+json",
@@ -49,67 +53,40 @@ export class GitHubClient {
 		}
 	}
 
-	// ── Retry wrapper ──────────────────────────────────────────────────
-	private async fetchWithRetry(url: string): Promise<Response> {
-		let retries = 5
-		let baseDelay = 5000 // Start with 5s delay
-
-		while (retries > 0) {
-			let res: Response
-			try {
-				res = await fetch(url, { headers: this.headers })
-			} catch (err) {
-				console.log(
-					`[GitHubClient] fetch failed for ${url} (${err instanceof Error ? err.message : err}). Retrying in ${baseDelay / 1000}s...`,
-				)
-				await sleep(baseDelay)
-				baseDelay *= 2
-				retries--
-				if (retries === 0) throw err
-				continue
-			}
-
-			if (res.status === 403 || res.status === 429) {
-				const remaining = res.headers.get("x-ratelimit-remaining")
-				const reset = res.headers.get("x-ratelimit-reset")
-				if (remaining === "0" && reset) {
-					const resetMs = parseInt(reset, 10) * 1000
-					const sleepMs = resetMs - Date.now() + 1000 // Add 1s buffer
-					if (sleepMs > 0) {
-						console.log(
-							`[GitHubClient] Rate limit hit. Sleeping for ${Math.ceil(sleepMs / 1000)}s until reset...`,
-						)
-						await sleep(sleepMs)
-						continue
+	private fetchWithRetry(url: string): Promise<Response> {
+		return fetchWithRetry(
+			url,
+			{ headers: this.headers },
+			{
+				label: "GitHubClient",
+				baseDelayMs: 5000,
+				maxDelayMs: 60_000,
+				maxRetries429: 5,
+				maxRetries5xx: 5,
+				maxRetriesNetwork: 5,
+				retryableStatuses: GITHUB_RETRYABLE,
+				shouldRetry: (res) =>
+					res.status !== 403 ||
+					res.headers.get("x-ratelimit-remaining") === "0" ||
+					res.headers.has("retry-after"),
+				computeRetryDelay: (res) => {
+					if (res.status !== 403 && res.status !== 429) return null
+					if (res.headers.get("x-ratelimit-remaining") === "0") {
+						const reset = Number.parseInt(res.headers.get("x-ratelimit-reset") ?? "", 10)
+						if (Number.isFinite(reset)) {
+							const delta = reset * 1000 - Date.now() + 1000
+							if (delta > 0) return delta
+						}
 					}
-				}
-				const retryAfter = res.headers.get("retry-after")
-				if (retryAfter) {
-					const sleepMs = parseInt(retryAfter, 10) * 1000 + 1000
-					console.log(
-						`[GitHubClient] Secondary limit hit. Sleeping for ${Math.ceil(sleepMs / 1000)}s...`,
-					)
-					await sleep(sleepMs)
-					continue
-				}
+					return null
+				},
+				...this.deps,
+			},
+		)
+	}
 
-				console.log(`[GitHubClient] 403/429 hit (no reset header). Sleeping for 60s fallback...`)
-				await sleep(60000)
-				retries--
-				continue
-			}
-
-			if (res.status >= 500 && res.status < 600) {
-				console.log(`[GitHubClient] ${res.status} error. Retrying in ${baseDelay / 1000}s...`)
-				await sleep(baseDelay)
-				baseDelay *= 2
-				retries--
-				continue
-			}
-
-			return res
-		}
-		throw new Error(`[GitHubClient] Max retries exceeded for ${url}`)
+	async validateCredentials(org: string): Promise<void> {
+		await this.fetchJson<Record<string, unknown>>(`${GITHUB_API}/orgs/${encodeURIComponent(org)}`)
 	}
 
 	// ── Paginated fetch ────────────────────────────────────────────────
@@ -175,16 +152,6 @@ export class GitHubClient {
 
 	// ── PR search ──────────────────────────────────────────────────────
 
-	/** Count PRs matching a search query. Uses the Search API (30 req/min rate limit).
-	 *  Returns just the total_count to minimize data transfer. */
-	async searchPRCount(query: string): Promise<number> {
-		// Search API returns { total_count, items: [...] }
-		// We only need the count, so request minimal data with per_page=1
-		const url = `${GITHUB_API}/search/issues?q=${encodeURIComponent(query)}&per_page=1`
-		const data = await this.fetchJson<{ total_count: number }>(url)
-		return data.total_count
-	}
-
 	/** Search PRs matching a query and return their dates. Handles pagination. */
 	async searchPRDates(query: string, type: "created" | "merged"): Promise<string[]> {
 		const results: string[] = []
@@ -222,22 +189,10 @@ export class GitHubClient {
 			const linkHeader = res.headers.get("Link")
 			nextUrl = linkHeader ? parseLinkNext(linkHeader) : null
 			if (nextUrl) {
-				await sleep(2000)
+				await (this.deps?.sleepFn ?? sleep)(2000)
 			}
 		}
 		return results
-	}
-
-	/** Get PRs opened by a user in an org on a given date. */
-	async countPRsOpened(org: string, username: string, date: string): Promise<number> {
-		const query = `type:pr author:${username} org:${org} created:${date}..${date}`
-		return this.searchPRCount(query)
-	}
-
-	/** Get PRs merged by a user in an org on a given date. */
-	async countPRsMerged(org: string, username: string, date: string): Promise<number> {
-		const query = `type:pr author:${username} org:${org} is:merged merged:${date}..${date}`
-		return this.searchPRCount(query)
 	}
 
 	/** Get exact dates of PRs opened by a user in an org in a date range. */
@@ -313,7 +268,7 @@ export class GitHubClient {
 			const linkHeader = res.headers.get("Link")
 			nextUrl = linkHeader ? parseLinkNext(linkHeader) : null
 			if (nextUrl) {
-				await sleep(2000)
+				await (this.deps?.sleepFn ?? sleep)(2000)
 			}
 		}
 		return results
@@ -365,9 +320,4 @@ export class GitHubClient {
 function parseLinkNext(header: string): string | null {
 	const match = header.match(/<([^>]+)>;\s*rel="next"/)
 	return match?.[1] ?? null
-}
-
-/** Sleep for `ms` milliseconds. Used for search API throttling. */
-export function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms))
 }
