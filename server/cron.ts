@@ -1,4 +1,4 @@
-import { DEFAULTS } from "@shared/defaults"
+import { DEFAULTS } from "@shared/constants"
 import { runComputeAlerts } from "./scripts/compute-alerts"
 import { computeRecommendations } from "./scripts/compute-recommendations"
 import { runPREnrichment } from "./scripts/enrich-prs"

@@ -20,7 +20,9 @@ beforeAll(async () => {
 			google_client_secret_enc = null,
 			anthropic_admin_api_key_enc = null,
 			cursor_admin_api_key_enc = null,
-			slack_bot_token_enc = null
+			slack_bot_token_enc = null,
+			github_access_token_enc = null,
+			enrichment_api_key_enc = null
 		where id = 1
 	`)
 })
@@ -31,7 +33,9 @@ afterAll(async () => {
 			google_client_secret_enc = null,
 			anthropic_admin_api_key_enc = null,
 			cursor_admin_api_key_enc = null,
-			slack_bot_token_enc = null
+			slack_bot_token_enc = null,
+			github_access_token_enc = null,
+			enrichment_api_key_enc = null
 		where id = 1
 	`)
 	process.env.CONFIG_ENCRYPTION_KEY = "00".repeat(32)
@@ -90,6 +94,6 @@ describe("config", () => {
 		process.env.CONFIG_ENCRYPTION_KEY = "22".repeat(32)
 		resetCachedKey()
 		const { loadConfig: loadCfgB } = await import(`./config?keyB=${Date.now()}`)
-		expect(loadCfgB()).rejects.toThrow(/CRITICAL: Decryption failed/)
+		await expect(loadCfgB()).rejects.toThrow(/CRITICAL: Decryption failed/)
 	})
 })

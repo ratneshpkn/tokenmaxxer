@@ -1,5 +1,4 @@
-import { PLATFORM_LABELS } from "@shared/constants"
-import { DEFAULTS } from "@shared/defaults"
+import { DEFAULTS, PLATFORM_LABELS } from "@shared/constants"
 import { alerts } from "@shared/schema"
 import { and, eq, inArray, sql } from "drizzle-orm"
 import { db, pool } from "../db"
