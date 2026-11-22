@@ -11,6 +11,8 @@ export interface SyncRange {
 	to: string
 }
 
+export const PR_LINE_CAP = 10_000
+
 interface CommitAgg {
 	prsOpened: number
 	prsMerged: number
@@ -20,6 +22,177 @@ interface CommitAgg {
 
 function aggKey(date: string, email: string): string {
 	return `${date}|${email}`
+}
+
+/** Shared GitHub PR sync core used by both org-wide `runGithubSync` and single-user `backfillUserGithub`. */
+export async function syncGithubUsersActivity(
+	client: GitHubClient,
+	org: string,
+	users: Array<[username: string, email: string]>,
+	fromDay: string,
+	toDay: string,
+	logPrefix = "[sync-github]",
+): Promise<number> {
+	const dailyAgg = new Map<string, CommitAgg>()
+	const rawPrsToInsert: (typeof githubPullRequests.$inferInsert)[] = []
+	const successfulEmails: string[] = []
+	let lastError: unknown = null
+
+	for (const [username, rawEmail] of users) {
+		const email = rawEmail.toLowerCase()
+		try {
+			// Throttle: 2 calls per user, 2s between batches to stay under 30/min
+			const openedDates = await client.getPRsOpenedDates(org, username, fromDay, toDay)
+			await sleep(2000)
+			const mergedPRs = await client.getMergedPRsDetails(org, username, fromDay, toDay)
+			if (users.length > 1) await sleep(2000)
+
+			for (const date of openedDates) {
+				if (date >= fromDay && date <= toDay) {
+					const key = aggKey(date, email)
+					const accum = dailyAgg.get(key) ?? {
+						prsOpened: 0,
+						prsMerged: 0,
+						additions: 0,
+						deletions: 0,
+					}
+					accum.prsOpened += 1
+					dailyAgg.set(key, accum)
+				}
+			}
+
+			const CHUNK = 5
+			for (let i = 0; i < mergedPRs.length; i += CHUNK) {
+				const chunk = mergedPRs.slice(i, i + CHUNK)
+				const statsResults = await Promise.all(
+					chunk.map(async (pr) => {
+						try {
+							const stats = await client.getPullRequestDetails(org, pr.repo, pr.number)
+							return { pr, stats }
+						} catch (err) {
+							console.error(`${logPrefix} Failed to get PR stats for ${pr.repo}#${pr.number}`, err)
+							return { pr, stats: { additions: 0, deletions: 0, body: null } }
+						}
+					}),
+				)
+
+				for (const { pr, stats } of statsResults) {
+					const date = pr.mergedAtDateStr
+					if (date >= fromDay && date <= toDay) {
+						const key = aggKey(date, email)
+						const accum = dailyAgg.get(key) ?? {
+							prsOpened: 0,
+							prsMerged: 0,
+							additions: 0,
+							deletions: 0,
+						}
+						accum.prsMerged += 1
+						// Winsorize per-PR to prevent massive refactors from blowing up charts.
+						accum.additions += Math.min(stats.additions ?? 0, PR_LINE_CAP)
+						accum.deletions += Math.min(stats.deletions ?? 0, PR_LINE_CAP)
+
+						rawPrsToInsert.push({
+							repo: pr.repo,
+							number: pr.number,
+							email,
+							title: pr.title ?? "",
+							body: stats.body ?? null,
+							additions: stats.additions ?? 0,
+							deletions: stats.deletions ?? 0,
+							mergedAt: new Date(pr.mergedAtIso),
+						})
+						dailyAgg.set(key, accum)
+					}
+				}
+				await sleep(500)
+			}
+
+			successfulEmails.push(email)
+		} catch (err) {
+			lastError = err
+			console.warn(
+				`${logPrefix} PR search failed for ${username}: ${err instanceof Error ? err.message : err}`,
+			)
+		}
+	}
+
+	if (users.length > 0 && successfulEmails.length === 0) {
+		const reason =
+			lastError instanceof Error ? lastError.message : String(lastError ?? "unknown error")
+		throw new Error(`${logPrefix} GitHub sync failed for all ${users.length} user(s): ${reason}`)
+	}
+
+	let rowsUpserted = 0
+	await db.transaction(async (tx) => {
+		if (successfulEmails.length > 0) {
+			await tx
+				.delete(dailyGithubActivity)
+				.where(
+					and(
+						gte(dailyGithubActivity.date, fromDay),
+						lte(dailyGithubActivity.date, toDay),
+						inArray(dailyGithubActivity.email, successfulEmails),
+					),
+				)
+		}
+
+		if (dailyAgg.size > 0) {
+			const rows = Array.from(dailyAgg.entries()).map(([key, v]) => {
+				const [date, email] = key.split("|")
+				return {
+					date,
+					email,
+					prsOpened: v.prsOpened,
+					prsMerged: v.prsMerged,
+					additions: v.additions,
+					deletions: v.deletions,
+				}
+			})
+
+			const CHUNK = 500
+			for (let i = 0; i < rows.length; i += CHUNK) {
+				const chunk = rows.slice(i, i + CHUNK)
+				await tx
+					.insert(dailyGithubActivity)
+					.values(chunk)
+					.onConflictDoUpdate({
+						target: [dailyGithubActivity.date, dailyGithubActivity.email],
+						set: {
+							prsOpened: sql`excluded.prs_opened`,
+							prsMerged: sql`excluded.prs_merged`,
+							additions: sql`excluded.additions`,
+							deletions: sql`excluded.deletions`,
+							syncedAt: new Date(),
+						},
+					})
+				rowsUpserted += chunk.length
+			}
+		}
+
+		if (rawPrsToInsert.length > 0) {
+			const CHUNK = 500
+			for (let i = 0; i < rawPrsToInsert.length; i += CHUNK) {
+				const chunk = rawPrsToInsert.slice(i, i + CHUNK)
+				await tx
+					.insert(githubPullRequests)
+					.values(chunk)
+					.onConflictDoUpdate({
+						target: [githubPullRequests.repo, githubPullRequests.number],
+						set: {
+							email: sql`excluded.email`,
+							title: sql`excluded.title`,
+							body: sql`coalesce(excluded.body, ${githubPullRequests.body})`,
+							additions: sql`excluded.additions`,
+							deletions: sql`excluded.deletions`,
+							mergedAt: sql`excluded.merged_at`,
+							syncedAt: new Date(),
+						},
+					})
+			}
+		}
+	})
+
+	return rowsUpserted
 }
 
 export async function runGithubSync(
@@ -42,30 +215,24 @@ export async function runGithubSync(
 			}
 
 			const client = new GitHubClient(token)
-			let rowsUpserted = 0
 			const fromDay = range?.from ?? yesterday()
 			const toDay = range?.to ?? today()
 
-			// ── 1. Build username → email mapping from tracked_users ────────
 			const trackedRows = await db
 				.select({
 					email: trackedUsers.email,
-					name: trackedUsers.name,
 					githubUsername: trackedUsers.githubUsername,
 				})
 				.from(trackedUsers)
 				.where(eq(trackedUsers.isActive, true))
 
 			const usernameToEmail = new Map<string, string>()
-
 			for (const row of trackedRows) {
-				const emailLower = row.email.toLowerCase()
 				if (row.githubUsername) {
-					usernameToEmail.set(row.githubUsername.toLowerCase(), emailLower)
+					usernameToEmail.set(row.githubUsername.toLowerCase(), row.email.toLowerCase())
 				}
 			}
 
-			// ── 1b. Auto-discover GitHub usernames for users who don't have one ──
 			try {
 				const newlyMapped = await discoverGithubUsernames(client, org, token)
 				for (const [login, email] of newlyMapped) {
@@ -77,176 +244,15 @@ export async function runGithubSync(
 				)
 			}
 
-			// ── 2. PR data via search API (throttled) ────────────────────────
-			// For each tracked user with a GitHub username, query PRs opened/merged
-			// in the date range. We query the full range at once and map them exactly.
-			const dailyAgg = new Map<string, CommitAgg>()
-			const rawPrsToInsert: (typeof githubPullRequests.$inferInsert)[] = []
+			const rowsUpserted = await syncGithubUsersActivity(
+				client,
+				org,
+				Array.from(usernameToEmail.entries()),
+				fromDay,
+				toDay,
+				"[sync-github]",
+			)
 
-			const usersWithGithub = Array.from(usernameToEmail.entries())
-			const successfulEmails: string[] = []
-			for (const [username, email] of usersWithGithub) {
-				try {
-					// Throttle: 2 calls per user, 2s between batches to stay under 30/min
-					const openedDates = await client.getPRsOpenedDates(org, username, fromDay, toDay)
-					await sleep(2000)
-					const mergedPRs = await client.getMergedPRsDetails(org, username, fromDay, toDay)
-					await sleep(2000)
-
-					for (const date of openedDates) {
-						if (date >= fromDay && date <= toDay) {
-							const key = aggKey(date, email)
-							const accum = dailyAgg.get(key) ?? {
-								prsOpened: 0,
-								prsMerged: 0,
-								additions: 0,
-								deletions: 0,
-							}
-							accum.prsOpened = (accum.prsOpened || 0) + 1
-							dailyAgg.set(key, accum)
-						}
-					}
-
-					const CHUNK = 5
-					for (let i = 0; i < mergedPRs.length; i += CHUNK) {
-						const chunk = mergedPRs.slice(i, i + CHUNK)
-						const statsResults = await Promise.all(
-							chunk.map(async (pr) => {
-								try {
-									const stats = await client.getPullRequestDetails(org, pr.repo, pr.number)
-									return { pr, stats }
-								} catch (err) {
-									console.error(
-										`[sync-github] Failed to get PR stats for ${pr.repo}#${pr.number}`,
-										err,
-									)
-									return { pr, stats: { additions: 0, deletions: 0, body: null } }
-								}
-							}),
-						)
-
-						for (const { pr, stats } of statsResults) {
-							const date = pr.mergedAtDateStr
-							if (date >= fromDay && date <= toDay) {
-								const key = aggKey(date, email)
-								const accum = dailyAgg.get(key) ?? {
-									prsOpened: 0,
-									prsMerged: 0,
-									additions: 0,
-									deletions: 0,
-								}
-								accum.prsMerged = (accum.prsMerged || 0) + 1
-
-								// Winsorize per-PR to prevent massive refactors from
-								// blowing up the charts. Raw values are preserved in
-								// github_pull_requests so we can re-aggregate later
-								// with different cutoffs if needed.
-								const PR_LINE_CAP = 10_000
-								accum.additions += Math.min(stats.additions ?? 0, PR_LINE_CAP)
-								accum.deletions += Math.min(stats.deletions ?? 0, PR_LINE_CAP)
-
-								rawPrsToInsert.push({
-									repo: pr.repo,
-									number: pr.number,
-									email,
-									title: pr.title ?? "",
-									body: stats.body ?? null,
-									additions: stats.additions ?? 0,
-									deletions: stats.deletions ?? 0,
-									mergedAt: new Date(pr.mergedAtIso),
-								})
-
-								dailyAgg.set(key, accum)
-							}
-						}
-						await sleep(500)
-					}
-
-					successfulEmails.push(email)
-				} catch (err) {
-					console.warn(
-						`[sync-github] PR search failed for ${username}: ${err instanceof Error ? err.message : err}`,
-					)
-				}
-			}
-
-			console.log(`[sync-github] collected PR stats and dates for users`)
-
-			// Clear existing activity in the date range for successfully synced users before inserting new sync records
-			await db.transaction(async (tx) => {
-				if (successfulEmails.length > 0) {
-					await tx
-						.delete(dailyGithubActivity)
-						.where(
-							and(
-								gte(dailyGithubActivity.date, fromDay),
-								lte(dailyGithubActivity.date, toDay),
-								inArray(dailyGithubActivity.email, successfulEmails),
-							),
-						)
-				}
-
-				// ── 3. Merge commits + PRs → upsert daily_github_activity ────────
-				if (dailyAgg.size > 0) {
-					const rows = Array.from(dailyAgg.entries()).map(([key, v]) => {
-						const [date, email] = key.split("|")
-						return {
-							date,
-							email,
-							prsOpened: v.prsOpened ?? 0,
-							prsMerged: v.prsMerged ?? 0,
-							additions: v.additions,
-							deletions: v.deletions,
-						}
-					})
-
-					// Batch upsert in chunks of 500
-					const CHUNK = 500
-					for (let i = 0; i < rows.length; i += CHUNK) {
-						const chunk = rows.slice(i, i + CHUNK)
-						await tx
-							.insert(dailyGithubActivity)
-							.values(chunk)
-							.onConflictDoUpdate({
-								target: [dailyGithubActivity.date, dailyGithubActivity.email],
-								set: {
-									prsOpened: sql`excluded.prs_opened`,
-									prsMerged: sql`excluded.prs_merged`,
-									additions: sql`excluded.additions`,
-									deletions: sql`excluded.deletions`,
-									syncedAt: new Date(),
-								},
-							})
-						rowsUpserted += chunk.length
-					}
-				}
-
-				// ── 4. Insert raw PR logs ────────
-				if (rawPrsToInsert.length > 0) {
-					const CHUNK = 500
-					for (let i = 0; i < rawPrsToInsert.length; i += CHUNK) {
-						const chunk = rawPrsToInsert.slice(i, i + CHUNK)
-						await tx
-							.insert(githubPullRequests)
-							.values(chunk)
-							.onConflictDoUpdate({
-								target: [githubPullRequests.repo, githubPullRequests.number],
-								set: {
-									email: sql`excluded.email`,
-									title: sql`excluded.title`,
-									// Keep a previously-stored body if this fetch failed and sent null.
-									body: sql`coalesce(excluded.body, ${githubPullRequests.body})`,
-									additions: sql`excluded.additions`,
-									deletions: sql`excluded.deletions`,
-									mergedAt: sql`excluded.merged_at`,
-									syncedAt: new Date(),
-								},
-							})
-					}
-				}
-			})
-
-			// Update the sync run row counter after the transaction succeeds
 			if (rowsUpserted > 0) {
 				await bumpSyncRunRows(runId, rowsUpserted)
 			}

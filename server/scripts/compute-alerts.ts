@@ -4,13 +4,13 @@ import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
 import { withSyncRun, yesterday } from "./lib/shared"
 
-interface DailySpendRow extends Record<string, unknown> {
+export interface DailySpendRow extends Record<string, unknown> {
 	email: string
 	platform: "claude_code" | "cursor"
 	amount_cents: number
 }
 
-interface ThresholdLookup {
+export interface ThresholdLookup {
 	global: Map<string, number> // platform → cents
 	perUser: Map<string, number> // `${email}|${platform}` → cents
 	perUserEnabled: Map<string, boolean>
@@ -39,7 +39,7 @@ async function loadThresholds(): Promise<ThresholdLookup> {
 	return out
 }
 
-function applicableThreshold(
+export function applicableThreshold(
 	email: string,
 	platform: "claude_code" | "cursor",
 	th: ThresholdLookup,
@@ -54,6 +54,35 @@ function applicableThreshold(
 		return { cents: globalCents, enabled: true }
 	}
 	return null
+}
+
+/** Pure domain evaluation: filter daily spend rows to those breaching an enabled threshold. */
+export function evaluateDailyAlerts(
+	rows: DailySpendRow[],
+	thresholds: ThresholdLookup,
+): Array<{
+	email: string
+	platform: "claude_code" | "cursor"
+	amountCents: number
+	thresholdCents: number
+}> {
+	const breaches: Array<{
+		email: string
+		platform: "claude_code" | "cursor"
+		amountCents: number
+		thresholdCents: number
+	}> = []
+	for (const r of rows) {
+		const t = applicableThreshold(r.email, r.platform, thresholds)
+		if (!t?.enabled || r.amount_cents <= t.cents) continue
+		breaches.push({
+			email: r.email,
+			platform: r.platform,
+			amountCents: r.amount_cents,
+			thresholdCents: t.cents,
+		})
+	}
+	return breaches
 }
 
 export async function runComputeAlerts(opts?: {
@@ -93,19 +122,15 @@ export async function runComputeAlerts(opts?: {
 				const rows: DailySpendRow[] = [...(cc.rows ?? []), ...(cu.rows ?? [])]
 
 				let dayFired = 0
-				for (const r of rows) {
-					const t = applicableThreshold(r.email, r.platform, thresholds)
-					if (!t?.enabled) continue
-					if (r.amount_cents <= t.cents) continue
-
+				for (const b of evaluateDailyAlerts(rows, thresholds)) {
 					const inserted = await db
 						.insert(alerts)
 						.values({
 							date: day,
-							email: r.email,
-							platform: r.platform,
-							amountCents: r.amount_cents,
-							thresholdCents: t.cents,
+							email: b.email,
+							platform: b.platform,
+							amountCents: b.amountCents,
+							thresholdCents: b.thresholdCents,
 							status: "open",
 							channelsSent: [],
 						})

@@ -24,7 +24,7 @@ import {
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
-import { startSyncRun } from "../scripts/lib/shared"
+import { dispatchUserGithubBackfill } from "../sync/runner"
 
 const usageQuery = withRequiredDateRange({
 	platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
@@ -477,15 +477,12 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			githubUsername !== existing.githubUsername
 		if (ghChanged && githubUsername) {
 			try {
-				const { backfillUserGithub } = await import("../scripts/backfill-user-github")
 				const hasData = await db.execute<{ c: number }>(sql`
 					select count(*)::int as c from daily_github_activity where email = ${email} limit 1
 				`)
 				const lookback = (hasData.rows?.[0]?.c ?? 0) > 0 ? 30 : 365
-				backfillRunId = await startSyncRun("github", `user-mapping:${email}`)
-				backfillUserGithub(email, githubUsername, lookback, {
-					existingRunId: backfillRunId,
-				}).catch((err) => console.error(`[users] backfill for ${email} failed`, err))
+				const res = await dispatchUserGithubBackfill(email, githubUsername, lookback)
+				if (!res.skipped) backfillRunId = res.runId
 			} catch (err) {
 				console.warn(`[users] failed to trigger backfill for ${email}:`, err)
 			}

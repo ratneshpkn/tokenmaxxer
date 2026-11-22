@@ -13,15 +13,8 @@ import type { AppEnv } from "../auth/session"
 import { currentUser, isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
 import { loadConfig } from "../lib/config"
-import { runComputeAlerts } from "../scripts/compute-alerts"
-import { computeRecommendations } from "../scripts/compute-recommendations"
-import { runPREnrichment } from "../scripts/enrich-prs"
-import { daysAgo, startSyncRun, today } from "../scripts/lib/shared"
-import { runSlackDigest } from "../scripts/slack-digest"
-import { runAnthropicSync } from "../scripts/sync-anthropic"
-import { runCursorSync } from "../scripts/sync-cursor"
-import { runGithubSync } from "../scripts/sync-github"
-import { runPrFilesSync } from "../scripts/sync-pr-files"
+import { daysAgo, today } from "../scripts/lib/shared"
+import { dispatchSyncJob } from "../sync/runner"
 
 /** Manual sync button lookbacks. When the platform already has data, we re-pull just
  *  the recent window (cheap, fast, covers the "fix a bad day" case). When the table is
@@ -73,32 +66,12 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 
 		const me = currentUser(c) as AppUser | null
 		const triggeredBy = me?.email ? `user:${me.email}` : "user"
-		const runId = await startSyncRun(job as SyncJob, triggeredBy)
-
-		const opts = { existingRunId: runId }
-		let promise: Promise<unknown>
-
-		if (job === "anthropic") {
-			promise = runAnthropicSync(range, opts)
-		} else if (job === "cursor") {
-			promise = runCursorSync(range, opts)
-		} else if (job === "alerts") {
-			promise = runComputeAlerts(opts)
-		} else if (job === "slack_digest") {
-			promise = runSlackDigest(opts)
-		} else if (job === "prs_enrich") {
-			promise = runPREnrichment(opts)
-		} else if (job === "pr_files") {
-			promise = runPrFilesSync(opts)
-		} else if (job === "recommendations") {
-			promise = computeRecommendations(opts)
-		} else {
-			promise = runGithubSync(range, opts)
+		const result = await dispatchSyncJob(job as SyncJob, { range, triggeredBy })
+		if (result.skipped) {
+			return c.json({ message: `${job} sync is already running` }, 409)
 		}
 
-		promise.catch((err) => console.error(`[sync route] ${job} failed`, err))
-
-		return c.json({ ok: true, runId }, 202)
+		return c.json({ ok: true, runId: result.runId }, 202)
 	})
 
 	// Admin-only: backfill both syncs for the last N days (PT-aware).
@@ -108,31 +81,28 @@ export function registerSyncRoutes(app: Hono<AppEnv>): void {
 			return c.json({ message: "days must be between 1 and 365" }, 400)
 		}
 		// PT-aware date math: today is the most recent day; from = today - (days-1)
-		const to = today()
-		const from = daysAgo(days)
+		const range = { from: daysAgo(days), to: today() }
 
 		const cfg = await loadConfig()
 		const me = currentUser(c) as AppUser | null
 		const triggeredBy = me?.email ? `user:${me.email}` : "user"
-		const aRunId = await startSyncRun("anthropic", triggeredBy)
-		const cRunId = await startSyncRun("cursor", triggeredBy)
 
-		runAnthropicSync({ from, to }, { existingRunId: aRunId }).catch((err) =>
-			console.error("[sync route] anthropic backfill failed", err),
+		const jobs: SyncJob[] = cfg.githubAccessToken
+			? ["anthropic", "cursor", "github"]
+			: ["anthropic", "cursor"]
+		const dispatched = await Promise.all(
+			jobs.map(async (job) => ({ job, res: await dispatchSyncJob(job, { range, triggeredBy }) })),
 		)
-		runCursorSync({ from, to }, { existingRunId: cRunId }).catch((err) =>
-			console.error("[sync route] cursor backfill failed", err),
-		)
+		const runIds = dispatched.flatMap((d) => (d.res.skipped ? [] : [d.res.runId]))
+		const skippedJobs = dispatched.flatMap((d) => (d.res.skipped ? [d.job] : []))
 
-		const runIds = [aRunId, cRunId]
-		if (cfg.githubAccessToken) {
-			const gRunId = await startSyncRun("github", triggeredBy)
-			runIds.push(gRunId)
-			runGithubSync({ from, to }, { existingRunId: gRunId }).catch((err) =>
-				console.error("[sync route] github backfill failed", err),
+		if (runIds.length === 0) {
+			return c.json(
+				{ message: "All requested backfill jobs are already running", skippedJobs },
+				409,
 			)
 		}
 
-		return c.json({ ok: true, runIds }, 202)
+		return c.json({ ok: true, runIds, ...(skippedJobs.length > 0 ? { skippedJobs } : {}) }, 202)
 	})
 }
