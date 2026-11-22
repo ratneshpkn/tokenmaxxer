@@ -31,6 +31,7 @@ describe("models routes", () => {
 			insert into app_config (id) values (1)
 			on conflict (id) do nothing
 		`)
+		await db.execute(sql`update app_config set spend_visibility = 'admin_only' where id = 1`)
 
 		// Clean up any test records
 		await db.execute(sql`delete from daily_claude_code_attribution where model like 'test-%'`)
@@ -223,7 +224,8 @@ describe("models routes", () => {
 			)
 			expect(res.status).toBe(200)
 			const body = (await res.json()) as Record<string, unknown>[]
-			expect(body.every((u) => u.cents === undefined)).toBe(true)
+			expect(body.every((u) => u.cents === null)).toBe(true)
+			expect(body.every((u) => u.trend_cents === null)).toBe(true)
 			expect(body.every((u) => u.tokens > 0)).toBe(true)
 		})
 	})

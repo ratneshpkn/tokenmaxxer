@@ -12,6 +12,14 @@ export interface AppEnv extends Env {
 	}
 }
 
+export function currentUser(c: Context<AppEnv>): AppUser | null {
+	return c.get("user") ?? null
+}
+
+export function currentRole(c: Context<AppEnv>): "admin" | "viewer" | null {
+	return currentUser(c)?.role ?? null
+}
+
 let sessionSecret: string | null = null
 
 export async function getSessionSecret(): Promise<string> {

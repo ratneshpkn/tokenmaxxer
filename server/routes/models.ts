@@ -1,53 +1,33 @@
 import { sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
+import {
+	ccTokensExpr,
+	coerceTrendArrays,
+	cuTokensExpr,
+	getRawModelsForBase,
+	modelAliasJoin,
+	modelMatchesExpr,
+	resolveBaseModel,
+	resolveSpendPolicy,
+	resolveWindow,
+	withDateRangeValidation,
+} from "../analytics"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
 import { db } from "../db"
-import { loadConfig } from "../lib/config"
-import { coerceTrendArrays, resolveWindow, stripCostForViewer } from "../lib/route-helpers"
-import { currentRole } from "./index"
 
-const dateRangeBase = z.object({
-	from: z
-		.string()
-		.regex(/^\d{4}-\d{2}-\d{2}$/)
-		.optional(),
-	to: z
-		.string()
-		.regex(/^\d{4}-\d{2}-\d{2}$/)
-		.optional(),
-	days: z.coerce.number().int().min(1).max(365).optional(),
+const summaryQuery = withDateRangeValidation({
+	platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
 })
 
-const summaryQuery = dateRangeBase
-	.extend({
-		platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
-	})
-	.refine((q) => (q.from && q.to) || (!q.from && !q.to), {
-		message: "from and to must be provided together",
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
+const topUsersQuery = withDateRangeValidation({
+	platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
+	limit: z.coerce.number().int().min(1).max(200).default(50),
+	metric: z.enum(["cost", "tokens"]).default("cost"),
+})
 
-const topUsersQuery = dateRangeBase
-	.extend({
-		platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
-		limit: z.coerce.number().int().min(1).max(200).default(50),
-		metric: z.enum(["cost", "tokens"]).default("cost"),
-	})
-	.refine((q) => (q.from && q.to) || (!q.from && !q.to), {
-		message: "from and to must be provided together",
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
-
-const trendQuery = dateRangeBase
-	.extend({
-		platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
-	})
-	.refine((q) => (q.from && q.to) || (!q.from && !q.to), {
-		message: "from and to must be provided together",
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
+const trendQuery = summaryQuery
 
 export function registerModelRoutes(app: Hono<AppEnv>): void {
 	app.get("/api/models/:model", isAuthenticated, async (c) => {
@@ -57,62 +37,56 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, platform } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const role = currentRole(c)
-		const isViewer = role !== "admin"
-		const cfg = await loadConfig()
-		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
+		const spend = await resolveSpendPolicy(c)
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
 
-		// Resolve input model to its base model if it's a raw model
-		const aliasLookup = await db.execute(sql`
-			select base_model from model_aliases where raw_model = ${model}
-		`)
-		const baseModelName = (aliasLookup.rows[0]?.base_model as string) || model
+		const baseModelName = await resolveBaseModel(model)
+		const matchModel = modelMatchesExpr(baseModelName, model)
 
 		const result = await db.execute(sql`
 			with
 			cc as (
 				select
 					coalesce(sum(d.attributed_cents), 0)::bigint as cents,
-					coalesce(sum(d.uncached_input_tokens + d.cache_read_input_tokens + d.cache_creation_5m_tokens + d.cache_creation_1h_tokens + d.output_tokens), 0)::bigint as tokens
+					coalesce(sum(${ccTokensExpr("d")}), 0)::bigint as tokens
 				from daily_claude_code_attribution d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCC}
+				${modelAliasJoin()}
+				where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCC}
 			),
 			cu as (
 				select
 					coalesce(sum(d.charged_cents), 0)::bigint as cents,
-					coalesce(sum(d.input_tokens + d.output_tokens + d.cache_read_tokens + d.cache_write_tokens), 0)::bigint as tokens
+					coalesce(sum(${cuTokensExpr("d")}), 0)::bigint as tokens
 				from daily_cursor_usage d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCU}
+				${modelAliasJoin()}
+				where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCU}
 			),
 			plat_cc as (
 				select 'claude_code'::text as platform 
 				from daily_claude_code_attribution d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) limit 1
+				${modelAliasJoin()}
+				where ${matchModel} limit 1
 			),
 			plat_cu as (
 				select 'cursor'::text as platform 
 				from daily_cursor_usage d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) limit 1
+				${modelAliasJoin()}
+				where ${matchModel} limit 1
 			),
 			active_users as (
 				select count(distinct email)::integer as active_users_count
 				from (
 					select d.email 
 					from daily_claude_code_attribution d
-					left join model_aliases ma on ma.raw_model = d.model
-					where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCC}
+					${modelAliasJoin()}
+					where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCC}
 					union
 					select d.email 
 					from daily_cursor_usage d
-					left join model_aliases ma on ma.raw_model = d.model
-					where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCU}
+					${modelAliasJoin()}
+					where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCU}
 				) u
 			)
 			select
@@ -129,18 +103,9 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 			return c.json({ message: "Model not found" }, 404)
 		}
 
-		// Retrieve mapped raw models
-		const rawModelsRes = await db.execute(sql`
-			select raw_model
-			from model_aliases
-			where base_model = ${baseModelName}
-		`)
-		let rawModelsList = rawModelsRes.rows.map((r) => r.raw_model as string)
-		if (rawModelsList.length === 0) {
-			rawModelsList = [baseModelName]
-		}
+		const rawModelsList = await getRawModelsForBase(baseModelName)
 
-		const data = {
+		const data: Record<string, unknown> = {
 			model: baseModelName,
 			base_model: baseModelName,
 			raw_models: rawModelsList,
@@ -166,11 +131,7 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 			data.total_tokens = data.cu_tokens
 		}
 
-		if (hideCosts) {
-			data.cc_cents = null as unknown as number
-			data.cu_cents = null as unknown as number
-			data.total_cents = null as unknown as number
-		}
+		spend.redactObject(data, ["cc_cents", "cu_cents", "total_cents"])
 
 		return c.json(data)
 	})
@@ -182,39 +143,34 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, limit, metric, platform } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const role = currentRole(c)
-		const isViewer = role !== "admin"
-		const cfg = await loadConfig()
-		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
+		const spend = await resolveSpendPolicy(c)
+		const hideCosts = !spend.canViewOrgSpend
 
 		const sortBy = sql.raw(hideCosts || metric === "tokens" ? "tokens" : "cents")
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
 
-		// Resolve input model to its base model if it's a raw model
-		const aliasLookup = await db.execute(sql`
-			select base_model from model_aliases where raw_model = ${model}
-		`)
-		const baseModelName = (aliasLookup.rows[0]?.base_model as string) || model
+		const baseModelName = await resolveBaseModel(model)
+		const matchModel = modelMatchesExpr(baseModelName, model)
 
 		const result = await db.execute(sql`
 			with cc as (
 				select d.email,
 							 coalesce(sum(d.attributed_cents), 0)::bigint as cents,
-							 coalesce(sum(d.uncached_input_tokens + d.cache_read_input_tokens + d.cache_creation_5m_tokens + d.cache_creation_1h_tokens + d.output_tokens), 0)::bigint as tokens
+							 coalesce(sum(${ccTokensExpr("d")}), 0)::bigint as tokens
 				from daily_claude_code_attribution d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCC}
+				${modelAliasJoin()}
+				where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCC}
 				group by d.email
 			),
 			cu as (
 				select d.email,
 							 coalesce(sum(d.charged_cents), 0)::bigint as cents,
-							 coalesce(sum(d.input_tokens + d.output_tokens + d.cache_read_tokens + d.cache_write_tokens), 0)::bigint as tokens
+							 coalesce(sum(${cuTokensExpr("d")}), 0)::bigint as tokens
 				from daily_cursor_usage d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCU}
+				${modelAliasJoin()}
+				where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCU}
 				group by d.email
 			),
 			totals as (
@@ -243,20 +199,20 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 			daily_cc as (
 				select d.email, d.date,
 							 coalesce(sum(d.attributed_cents), 0)::bigint as cents,
-							 coalesce(sum(d.uncached_input_tokens + d.cache_read_input_tokens + d.cache_creation_5m_tokens + d.cache_creation_1h_tokens + d.output_tokens), 0)::bigint as tokens
+							 coalesce(sum(${ccTokensExpr("d")}), 0)::bigint as tokens
 				from daily_claude_code_attribution d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCC}
+				${modelAliasJoin()}
+				where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCC}
 				  and d.email in (select email from ranked)
 				group by d.email, d.date
 			),
 			daily_cu as (
 				select d.email, d.date,
 							 coalesce(sum(d.charged_cents), 0)::bigint as cents,
-							 coalesce(sum(d.input_tokens + d.output_tokens + d.cache_read_tokens + d.cache_write_tokens), 0)::bigint as tokens
+							 coalesce(sum(${cuTokensExpr("d")}), 0)::bigint as tokens
 				from daily_cursor_usage d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model}) and d.date between ${effFrom} and ${effTo} and ${includeCU}
+				${modelAliasJoin()}
+				where ${matchModel} and d.date between ${effFrom} and ${effTo} and ${includeCU}
 				  and d.email in (select email from ranked)
 				group by d.email, d.date
 			),
@@ -296,7 +252,7 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 			delete row.share_pct_tokens
 			delete row.share_pct_cost
 		})
-		await stripCostForViewer(typed, c, ["cents", "trend_cents"])
+		spend.redactRows(typed, ["cents", "trend_cents"])
 		return c.json(typed)
 	})
 
@@ -307,19 +263,15 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, platform } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const role = currentRole(c)
-		const isViewer = role !== "admin"
-		const cfg = await loadConfig()
-		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
+		const spend = await resolveSpendPolicy(c)
+		const hideCosts = !spend.canViewOrgSpend
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
 
-		// Resolve input model to its base model if it's a raw model
-		const aliasLookup = await db.execute(sql`
-			select base_model from model_aliases where raw_model = ${model}
-		`)
-		const baseModelName = (aliasLookup.rows[0]?.base_model as string) || model
+		const baseModelName = await resolveBaseModel(model)
+		const matchCc = modelMatchesExpr(baseModelName, model, "dcc")
+		const matchCu = modelMatchesExpr(baseModelName, model, "dcu")
 
 		const result = await db.execute(sql`
 			with days as (
@@ -329,26 +281,26 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 						 coalesce((
 							 select sum(dcc.attributed_cents)::bigint
 							 from daily_claude_code_attribution dcc
-							 left join model_aliases ma on ma.raw_model = dcc.model
-							 where (coalesce(ma.base_model, dcc.model) = ${baseModelName} or coalesce(ma.base_model, dcc.model) = ${model}) and dcc.date = d.d and ${includeCC}
+							 ${modelAliasJoin("dcc")}
+							 where ${matchCc} and dcc.date = d.d and ${includeCC}
 						 ), 0)::bigint as cc_cents,
 						 coalesce((
 							 select sum(dcu.charged_cents)::bigint
 							 from daily_cursor_usage dcu
-							 left join model_aliases ma on ma.raw_model = dcu.model
-							 where (coalesce(ma.base_model, dcu.model) = ${baseModelName} or coalesce(ma.base_model, dcu.model) = ${model}) and dcu.date = d.d and ${includeCU}
+							 ${modelAliasJoin("dcu")}
+							 where ${matchCu} and dcu.date = d.d and ${includeCU}
 						 ), 0)::bigint as cu_cents,
 						 coalesce((
-							 select sum(dcc.uncached_input_tokens + dcc.cache_read_input_tokens + dcc.cache_creation_5m_tokens + dcc.cache_creation_1h_tokens + dcc.output_tokens)::bigint
+							 select sum(${ccTokensExpr("dcc")})::bigint
 							 from daily_claude_code_attribution dcc
-							 left join model_aliases ma on ma.raw_model = dcc.model
-							 where (coalesce(ma.base_model, dcc.model) = ${baseModelName} or coalesce(ma.base_model, dcc.model) = ${model}) and dcc.date = d.d and ${includeCC}
+							 ${modelAliasJoin("dcc")}
+							 where ${matchCc} and dcc.date = d.d and ${includeCC}
 						 ), 0)::bigint as cc_tokens,
 						 coalesce((
-							 select sum(dcu.input_tokens + dcu.output_tokens + dcu.cache_read_tokens + dcu.cache_write_tokens)::bigint
+							 select sum(${cuTokensExpr("dcu")})::bigint
 							 from daily_cursor_usage dcu
-							 left join model_aliases ma on ma.raw_model = dcu.model
-							 where (coalesce(ma.base_model, dcu.model) = ${baseModelName} or coalesce(ma.base_model, dcu.model) = ${model}) and dcu.date = d.d and ${includeCU}
+							 ${modelAliasJoin("dcu")}
+							 where ${matchCu} and dcu.date = d.d and ${includeCU}
 						 ), 0)::bigint as cu_tokens
 			from days d
 			order by d.d asc
@@ -372,19 +324,14 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, platform } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const role = currentRole(c)
-		const isViewer = role !== "admin"
-		const cfg = await loadConfig()
-		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
+		const spend = await resolveSpendPolicy(c)
+		const hideCosts = !spend.canViewOrgSpend
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
 
-		// Resolve input model to its base model if it's a raw model
-		const aliasLookup = await db.execute(sql`
-			select base_model from model_aliases where raw_model = ${model}
-		`)
-		const baseModelName = (aliasLookup.rows[0]?.base_model as string) || model
+		const baseModelName = await resolveBaseModel(model)
+		const matchModel = modelMatchesExpr(baseModelName, model)
 
 		// Existence check
 		const existCheck = await db.execute(sql`
@@ -392,13 +339,13 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 			from (
 				select 1
 				from daily_claude_code_attribution d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 				union all
 				select 1
 				from daily_cursor_usage d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 			) limit 1
 		`)
 		if (existCheck.rows.length === 0) {
@@ -414,10 +361,10 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 				select
 					d.model as raw_model,
 					coalesce(sum(d.attributed_cents), 0)::bigint as cents,
-					coalesce(sum(d.uncached_input_tokens + d.cache_read_input_tokens + d.cache_creation_5m_tokens + d.cache_creation_1h_tokens + d.output_tokens), 0)::bigint as tokens
+					coalesce(sum(${ccTokensExpr("d")}), 0)::bigint as tokens
 				from daily_claude_code_attribution d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 				  and d.date between ${effFrom} and ${effTo}
 				  and ${includeCC}
 				group by d.model
@@ -426,10 +373,10 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 				select
 					d.model as raw_model,
 					coalesce(sum(d.charged_cents), 0)::bigint as cents,
-					coalesce(sum(d.input_tokens + d.output_tokens + d.cache_read_tokens + d.cache_write_tokens), 0)::bigint as tokens
+					coalesce(sum(${cuTokensExpr("d")}), 0)::bigint as tokens
 				from daily_cursor_usage d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 				  and d.date between ${effFrom} and ${effTo}
 				  and ${includeCU}
 				group by d.model
@@ -458,10 +405,10 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 					d.model as raw_model,
 					d.date,
 					coalesce(sum(d.attributed_cents), 0)::bigint as cents,
-					coalesce(sum(d.uncached_input_tokens + d.cache_read_input_tokens + d.cache_creation_5m_tokens + d.cache_creation_1h_tokens + d.output_tokens), 0)::bigint as tokens
+					coalesce(sum(${ccTokensExpr("d")}), 0)::bigint as tokens
 				from daily_claude_code_attribution d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 				  and d.date between ${effFrom} and ${effTo}
 				  and ${includeCC}
 				group by d.model, d.date
@@ -471,10 +418,10 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 					d.model as raw_model,
 					d.date,
 					coalesce(sum(d.charged_cents), 0)::bigint as cents,
-					coalesce(sum(d.input_tokens + d.output_tokens + d.cache_read_tokens + d.cache_write_tokens), 0)::bigint as tokens
+					coalesce(sum(${cuTokensExpr("d")}), 0)::bigint as tokens
 				from daily_cursor_usage d
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 				  and d.date between ${effFrom} and ${effTo}
 				  and ${includeCU}
 				group by d.model, d.date
@@ -533,18 +480,14 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, platform } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const role = currentRole(c)
-		const isViewer = role !== "admin"
-		const cfg = await loadConfig()
-		const hideCosts = isViewer && cfg.spendVisibility !== "viewer_all"
+		const spend = await resolveSpendPolicy(c)
+		const hideCosts = !spend.canViewOrgSpend
 
 		const includeCC = platform === "all" || platform === "claude_code"
 		const includeCU = platform === "all" || platform === "cursor"
 
-		const aliasLookup = await db.execute(sql`
-			select base_model from model_aliases where raw_model = ${model}
-		`)
-		const baseModelName = (aliasLookup.rows[0]?.base_model as string) || model
+		const baseModelName = await resolveBaseModel(model)
+		const matchModel = modelMatchesExpr(baseModelName, model)
 
 		const result = await db.execute(sql`
 			with
@@ -552,11 +495,11 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 				select
 					tm.team_id,
 					coalesce(sum(d.attributed_cents), 0)::bigint as cents,
-					coalesce(sum(d.uncached_input_tokens + d.cache_read_input_tokens + d.cache_creation_5m_tokens + d.cache_creation_1h_tokens + d.output_tokens), 0)::bigint as tokens
+					coalesce(sum(${ccTokensExpr("d")}), 0)::bigint as tokens
 				from daily_claude_code_attribution d
 				join team_memberships tm on tm.user_email = d.email
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 				  and d.date between ${effFrom} and ${effTo}
 				  and ${includeCC}
 				group by tm.team_id
@@ -565,11 +508,11 @@ export function registerModelRoutes(app: Hono<AppEnv>): void {
 				select
 					tm.team_id,
 					coalesce(sum(d.charged_cents), 0)::bigint as cents,
-					coalesce(sum(d.input_tokens + d.output_tokens + d.cache_read_tokens + d.cache_write_tokens), 0)::bigint as tokens
+					coalesce(sum(${cuTokensExpr("d")}), 0)::bigint as tokens
 				from daily_cursor_usage d
 				join team_memberships tm on tm.user_email = d.email
-				left join model_aliases ma on ma.raw_model = d.model
-				where (coalesce(ma.base_model, d.model) = ${baseModelName} or coalesce(ma.base_model, d.model) = ${model})
+				${modelAliasJoin()}
+				where ${matchModel}
 				  and d.date between ${effFrom} and ${effTo}
 				  and ${includeCU}
 				group by tm.team_id

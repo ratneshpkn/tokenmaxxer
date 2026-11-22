@@ -1,35 +1,23 @@
-import { PR_COMPLEXITY_WEIGHTS } from "@shared/constants"
 import { sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
+import {
+	ccTokensExpr,
+	complexityWeightCaseSql,
+	cuTokensExpr,
+	resolveSpendPolicy,
+	resolveWindow,
+	teamMembershipJoin,
+	windowDayCount,
+	withDateRangeValidation,
+} from "../analytics"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
 import { db } from "../db"
-import { resolveWindow, stripCostForViewer } from "../lib/route-helpers"
 
-const W1 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[1]))
-const W2 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[2]))
-const W3 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[3]))
-const W4 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[4]))
-const W5 = sql.raw(String(PR_COMPLEXITY_WEIGHTS[5]))
-
-const querySchema = z
-	.object({
-		from: z
-			.string()
-			.regex(/^\d{4}-\d{2}-\d{2}$/)
-			.optional(),
-		to: z
-			.string()
-			.regex(/^\d{4}-\d{2}-\d{2}$/)
-			.optional(),
-		days: z.coerce.number().int().min(1).max(365).optional(),
-		teamId: z.string().uuid().optional(),
-	})
-	.refine((q) => (q.from && q.to) || (!q.from && !q.to), {
-		message: "from and to must be provided together",
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
+const querySchema = withDateRangeValidation({
+	teamId: z.string().uuid().optional(),
+})
 
 export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 	// ── 1. Summary & Time-series Trend ──────────────────────────────────────
@@ -40,18 +28,10 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, teamId } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const teamFilterCc = teamId
-			? sql`join team_memberships tm_cc on tm_cc.user_email = daily_claude_code_attribution.email and tm_cc.team_id = ${teamId}`
-			: sql``
-		const teamFilterCu = teamId
-			? sql`join team_memberships tm_cu on tm_cu.user_email = daily_cursor_usage.email and tm_cu.team_id = ${teamId}`
-			: sql``
-		const teamFilterGh = teamId
-			? sql`join team_memberships tm_gh on tm_gh.user_email = daily_github_activity.email and tm_gh.team_id = ${teamId}`
-			: sql``
-		const teamFilterPr = teamId
-			? sql`join team_memberships tm_pr on tm_pr.user_email = gpr.email and tm_pr.team_id = ${teamId}`
-			: sql``
+		const teamFilterCc = teamMembershipJoin("daily_claude_code_attribution.email", teamId, "tm_cc")
+		const teamFilterCu = teamMembershipJoin("daily_cursor_usage.email", teamId, "tm_cu")
+		const teamFilterGh = teamMembershipJoin("daily_github_activity.email", teamId, "tm_gh")
+		const teamFilterPr = teamMembershipJoin("gpr.email", teamId, "tm_pr")
 
 		// Aggregate overall totals
 		const totalsQuery = await db.execute<{
@@ -72,11 +52,11 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 				   from daily_cursor_usage
 				   ${teamFilterCu}
 				  where date between ${effFrom} and ${effTo}) as cu_cents,
-				(select coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens), 0)::bigint
+				(select coalesce(sum(${ccTokensExpr()}), 0)::bigint
 				   from daily_claude_code_attribution
 				   ${teamFilterCc}
 				  where date between ${effFrom} and ${effTo}) as cc_tokens,
-				(select coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens), 0)::bigint
+				(select coalesce(sum(${cuTokensExpr()}), 0)::bigint
 				   from daily_cursor_usage
 				   ${teamFilterCu}
 				  where date between ${effFrom} and ${effTo}) as cu_tokens,
@@ -116,16 +96,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			avg_complexity: number | null
 		}>(sql`
 			select
-				coalesce(sum(
-					case gpe.complexity_score
-						when 1 then ${W1}
-						when 2 then ${W2}
-						when 3 then ${W3}
-						when 4 then ${W4}
-						when 5 then ${W5}
-						else 0.0
-					end
-				), 0)::float as total_impact_points,
+				coalesce(sum(${complexityWeightCaseSql("gpe")}), 0)::float as total_impact_points,
 				coalesce(count(*) filter (where gpe.complexity_score >= 4), 0)::int as substantive_prs,
 				count(gpe.repo)::int as total_enriched,
 				case when count(gpe.repo) > 0 then round(avg(gpe.complexity_score)::numeric, 1)::float else null end as avg_complexity
@@ -145,11 +116,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 		}
 
 		// Time-series trend (daily for <= 90 days, weekly for > 90 days)
-		const windowDays =
-			Math.round(
-				(new Date(effTo).getTime() - new Date(effFrom).getTime()) / (1000 * 60 * 60 * 24),
-			) + 1
-		const isWeekly = windowDays > 90
+		const isWeekly = windowDayCount(effFrom, effTo) > 90
 
 		const trendQuery = await db.execute<{
 			bucket: string
@@ -178,7 +145,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 						: sql`to_char(date, 'YYYY-MM-DD')`
 				} as bucket,
 				coalesce(sum(attributed_cents), 0) as cc_cents,
-				coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens), 0) as cc_tokens
+				coalesce(sum(${ccTokensExpr()}), 0) as cc_tokens
 				from daily_claude_code_attribution
 				${teamFilterCc}
 				where date between ${effFrom} and ${effTo}
@@ -191,7 +158,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 						: sql`to_char(date, 'YYYY-MM-DD')`
 				} as bucket,
 				coalesce(sum(charged_cents), 0) as cu_cents,
-				coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens), 0) as cu_tokens
+				coalesce(sum(${cuTokensExpr()}), 0) as cu_tokens
 				from daily_cursor_usage
 				${teamFilterCu}
 				where date between ${effFrom} and ${effTo}
@@ -216,16 +183,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 						? sql`to_char(date_trunc('week', gpr.merged_at at time zone 'UTC'), 'YYYY-MM-DD')`
 						: sql`to_char(gpr.merged_at at time zone 'UTC', 'YYYY-MM-DD')`
 				} as bucket,
-				coalesce(sum(
-					case gpe.complexity_score
-						when 1 then ${W1}
-						when 2 then ${W2}
-						when 3 then ${W3}
-						when 4 then ${W4}
-						when 5 then ${W5}
-						else 0.0
-					end
-				), 0)::float as impact_points,
+				coalesce(sum(${complexityWeightCaseSql("gpe")}), 0)::float as impact_points,
 				count(*) filter (where gpe.complexity_score >= 4)::int as substantive_prs
 				from github_pull_requests gpr
 				inner join github_pr_enrichments gpe
@@ -295,18 +253,13 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			trend,
 		}
 
-		await stripCostForViewer([responseData], c, [
+		const spend = await resolveSpendPolicy(c)
+		spend.redactObject(responseData, [
 			"totalCostCents",
 			"costPerPrCents",
 			"costPerImpactPointCents",
 		])
-
-		// If cost was stripped from responseData, also strip costCents from each trend point
-		if (responseData.totalCostCents === undefined) {
-			for (const pt of trend) {
-				delete (pt as Record<string, unknown>).costCents
-			}
-		}
+		spend.redactRows(trend, ["costCents"])
 
 		return c.json(responseData)
 	})
@@ -319,9 +272,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, teamId } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const teamFilterPr = teamId
-			? sql`join team_memberships tm_pr on tm_pr.user_email = gpr.email and tm_pr.team_id = ${teamId}`
-			: sql``
+		const teamFilterPr = teamMembershipJoin("gpr.email", teamId, "tm_pr")
 
 		const categoriesQuery = await db.execute<{
 			category: string
@@ -333,16 +284,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			select
 				coalesce(nullif(gpe.category, ''), 'other') as category,
 				count(*)::int as pr_count,
-				coalesce(sum(
-					case gpe.complexity_score
-						when 1 then ${W1}
-						when 2 then ${W2}
-						when 3 then ${W3}
-						when 4 then ${W4}
-						when 5 then ${W5}
-						else 0.0
-					end
-				), 0)::float as impact_points,
+				coalesce(sum(${complexityWeightCaseSql("gpe")}), 0)::float as impact_points,
 				round(avg(gpe.complexity_score)::numeric, 1)::float as avg_complexity,
 				count(*) filter (where gpe.complexity_score >= 4)::int as substantive_count
 			from github_pull_requests gpr
@@ -404,7 +346,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			with team_spend as (
 				select tm.team_id,
 					   coalesce(sum(cc.attributed_cents), 0)::bigint as cc_cents,
-					   coalesce(sum(cc.uncached_input_tokens + cc.cache_read_input_tokens + cc.cache_creation_5m_tokens + cc.cache_creation_1h_tokens + cc.output_tokens), 0)::bigint as cc_tokens
+					   coalesce(sum(${ccTokensExpr("cc")}), 0)::bigint as cc_tokens
 				from team_memberships tm
 				left join daily_claude_code_attribution cc
 					on cc.email = tm.user_email and cc.date between ${effFrom} and ${effTo}
@@ -413,7 +355,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			team_cursor as (
 				select tm.team_id,
 					   coalesce(sum(cu.charged_cents), 0)::bigint as cu_cents,
-					   coalesce(sum(cu.input_tokens + cu.output_tokens + cu.cache_read_tokens + cu.cache_write_tokens), 0)::bigint as cu_tokens
+					   coalesce(sum(${cuTokensExpr("cu")}), 0)::bigint as cu_tokens
 				from team_memberships tm
 				left join daily_cursor_usage cu
 					on cu.email = tm.user_email and cu.date between ${effFrom} and ${effTo}
@@ -429,16 +371,7 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			),
 			team_pr_impact as (
 				select tm.team_id,
-					   coalesce(sum(
-					   case gpe.complexity_score
-						   when 1 then ${W1}
-						   when 2 then ${W2}
-						   when 3 then ${W3}
-						   when 4 then ${W4}
-						   when 5 then ${W5}
-						   else 0.0
-					   end
-					   ), 0)::float as impact_points,
+					   coalesce(sum(${complexityWeightCaseSql("gpe")}), 0)::float as impact_points,
 					   count(*) filter (where gpe.complexity_score >= 4)::int as substantive_prs,
 					   case when count(*) > 0 then round(avg(gpe.complexity_score)::numeric, 1)::float else null end as avg_complexity
 				from team_memberships tm
@@ -495,7 +428,8 @@ export function registerVelocityRoutes(app: Hono<AppEnv>): void {
 			}
 		})
 
-		await stripCostForViewer(teamItems, c, ["totalCostCents", "costPerImpactPointCents"])
+		const spend = await resolveSpendPolicy(c)
+		spend.redactRows(teamItems, ["totalCostCents", "costPerImpactPointCents"])
 
 		return c.json({
 			from: effFrom,
