@@ -8,26 +8,22 @@ import { teamMemberships, teams, trackedUsers } from "@shared/schema"
 import { eq, inArray, sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
+import {
+	ccTokensExpr,
+	cuTokensExpr,
+	optionalDateRangeSchema,
+	resolveSpendPolicy,
+	resolveWindow,
+} from "../analytics"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
-import { resolveWindow, stripCostForViewer } from "../lib/route-helpers"
 
 // ── Zod Query & Payload Schemas ─────────────────────────────────────────────
 
 const teamIdParamSchema = z.string().uuid()
 
-const teamListQuery = z.object({
-	from: z
-		.string()
-		.regex(/^\d{4}-\d{2}-\d{2}$/)
-		.optional(),
-	to: z
-		.string()
-		.regex(/^\d{4}-\d{2}-\d{2}$/)
-		.optional(),
-	days: z.coerce.number().int().min(1).max(365).optional(),
-})
+const teamListQuery = optionalDateRangeSchema
 
 const createTeamSchema = z.object({
 	name: z.string().trim().min(1, "Name is required").max(100),
@@ -91,7 +87,7 @@ export function registerTeamRoutes(app: Hono<AppEnv>): void {
 			cc_usage as (
 				select tm.team_id,
 					coalesce(sum(ca.attributed_cents), 0)::bigint as cc_cents,
-					coalesce(sum(ca.uncached_input_tokens + ca.cache_read_input_tokens + ca.cache_creation_5m_tokens + ca.cache_creation_1h_tokens + ca.output_tokens), 0)::bigint as cc_tokens
+					coalesce(sum(${ccTokensExpr("ca")}), 0)::bigint as cc_tokens
 				from team_memberships tm
 				join daily_claude_code_attribution ca on ca.email = tm.user_email
 				where ca.date between ${from} and ${to}
@@ -100,7 +96,7 @@ export function registerTeamRoutes(app: Hono<AppEnv>): void {
 			cu_usage as (
 				select tm.team_id,
 					coalesce(sum(cu.charged_cents), 0)::bigint as cu_cents,
-					coalesce(sum(cu.input_tokens + cu.output_tokens + cu.cache_read_tokens + cu.cache_write_tokens), 0)::bigint as cu_tokens
+					coalesce(sum(${cuTokensExpr("cu")}), 0)::bigint as cu_tokens
 				from team_memberships tm
 				join daily_cursor_usage cu on cu.email = tm.user_email
 				where cu.date between ${from} and ${to}
@@ -138,8 +134,8 @@ export function registerTeamRoutes(app: Hono<AppEnv>): void {
 			cursorCostCents: Number(r.cursor_cost_cents || 0),
 		}))
 
-		// Server-side RBAC cost stripping
-		await stripCostForViewer(formatted as unknown as Record<string, unknown>[], c, [
+		const spend = await resolveSpendPolicy(c)
+		spend.redactRows(formatted as unknown as Record<string, unknown>[], [
 			"totalCostCents",
 			"claudeCodeCostCents",
 			"cursorCostCents",
@@ -246,7 +242,7 @@ export function registerTeamRoutes(app: Hono<AppEnv>): void {
 			with cc_user as (
 				select ca.email,
 					coalesce(sum(ca.attributed_cents), 0)::bigint as cc_cents,
-					coalesce(sum(ca.uncached_input_tokens + ca.cache_read_input_tokens + ca.cache_creation_5m_tokens + ca.cache_creation_1h_tokens + ca.output_tokens), 0)::bigint as cc_tokens
+					coalesce(sum(${ccTokensExpr("ca")}), 0)::bigint as cc_tokens
 				from daily_claude_code_attribution ca
 				where ca.date between ${from} and ${to}
 				group by ca.email
@@ -254,7 +250,7 @@ export function registerTeamRoutes(app: Hono<AppEnv>): void {
 			cu_user as (
 				select cu.email,
 					coalesce(sum(cu.charged_cents), 0)::bigint as cu_cents,
-					coalesce(sum(cu.input_tokens + cu.output_tokens + cu.cache_read_tokens + cu.cache_write_tokens), 0)::bigint as cu_tokens
+					coalesce(sum(${cuTokensExpr("cu")}), 0)::bigint as cu_tokens
 				from daily_cursor_usage cu
 				where cu.date between ${from} and ${to}
 				group by cu.email
@@ -322,13 +318,13 @@ export function registerTeamRoutes(app: Hono<AppEnv>): void {
 			cursorCostCents,
 		}
 
-		// Server-side RBAC cost stripping
-		await stripCostForViewer([teamItem] as unknown as Record<string, unknown>[], c, [
+		const spend = await resolveSpendPolicy(c)
+		spend.redactObject(teamItem as unknown as Record<string, unknown>, [
 			"totalCostCents",
 			"claudeCodeCostCents",
 			"cursorCostCents",
 		])
-		await stripCostForViewer(members as unknown as Record<string, unknown>[], c, ["totalCostCents"])
+		spend.redactRows(members as unknown as Record<string, unknown>[], ["totalCostCents"])
 
 		const response: TeamDetailResponse = {
 			team: teamItem,

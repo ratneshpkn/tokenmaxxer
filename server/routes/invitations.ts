@@ -2,8 +2,7 @@ import type { Hono } from "hono"
 import { z } from "zod"
 import { createInvite, deleteInvite, listPendingInvites } from "../auth/invitations"
 import type { AppEnv } from "../auth/session"
-import { isAuthenticated, requireAdmin } from "../auth/session"
-import { currentUser } from "./index"
+import { currentUser, isAuthenticated, requireAdmin } from "../auth/session"
 
 const createSchema = z.object({
 	email: z.string().email(),

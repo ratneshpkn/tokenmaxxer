@@ -10,7 +10,7 @@ import { desc, inArray, min } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
 import type { AppEnv } from "../auth/session"
-import { isAuthenticated, requireAdmin } from "../auth/session"
+import { currentUser, isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
 import { loadConfig } from "../lib/config"
 import { runComputeAlerts } from "../scripts/compute-alerts"
@@ -22,7 +22,6 @@ import { runAnthropicSync } from "../scripts/sync-anthropic"
 import { runCursorSync } from "../scripts/sync-cursor"
 import { runGithubSync } from "../scripts/sync-github"
 import { runPrFilesSync } from "../scripts/sync-pr-files"
-import { currentUser } from "./index"
 
 /** Manual sync button lookbacks. When the platform already has data, we re-pull just
  *  the recent window (cheap, fast, covers the "fix a bad day" case). When the table is

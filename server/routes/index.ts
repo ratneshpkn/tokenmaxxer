@@ -1,8 +1,8 @@
-import { type AppUser, appUsers } from "@shared/schema"
+import { appUsers } from "@shared/schema"
 import { sql } from "drizzle-orm"
-import type { Context, Hono } from "hono"
+import type { Hono } from "hono"
 import type { AppEnv } from "../auth/session"
-import { isAuthenticated } from "../auth/session"
+import { currentUser, isAuthenticated } from "../auth/session"
 import { db } from "../db"
 import { loadConfig, parseAllowedDomains } from "../lib/config"
 import { registerAdminConfigRoutes } from "./admin-config"
@@ -18,15 +18,6 @@ import { registerTeamRoutes } from "./teams"
 import { registerThresholdRoutes } from "./thresholds"
 import { registerUserRoutes } from "./users"
 import { registerVelocityRoutes } from "./velocity"
-
-export function currentUser(c: Context<AppEnv>): AppUser | null {
-	return c.get("user") ?? null
-}
-
-export function currentRole(c: Context<AppEnv>): "admin" | "viewer" | null {
-	const u = currentUser(c)
-	return u?.role ?? null
-}
 
 export async function registerRoutes(app: Hono<AppEnv>): Promise<void> {
 	// Public config — readable without auth so the login page can show the

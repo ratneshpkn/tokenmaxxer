@@ -3,8 +3,8 @@ import type { SyncJob } from "./constants"
 export interface UsageRow {
 	date: string
 	model?: string
-	estimated_cost_cents?: number
-	charged_cents?: number
+	estimated_cost_cents?: number | null
+	charged_cents?: number | null
 	input_tokens?: number
 	output_tokens?: number
 	cache_read_tokens?: number
@@ -319,7 +319,7 @@ export interface UserRawModelClaudeCodeItem {
 	output_tokens: number
 	cache_read_tokens: number
 	cache_creation_tokens: number
-	estimated_cost_cents?: number
+	estimated_cost_cents?: number | null
 }
 
 export interface UserRawModelCursorItem {
@@ -328,7 +328,7 @@ export interface UserRawModelCursorItem {
 	output_tokens: number
 	cache_read_tokens: number
 	cache_write_tokens: number
-	charged_cents?: number
+	charged_cents?: number | null
 	request_count: number
 }
 
@@ -407,9 +407,9 @@ export interface TeamItem {
 	totalTokens: number
 	claudeCodeTokens: number
 	cursorTokens: number
-	totalCostCents?: number
-	claudeCodeCostCents?: number
-	cursorCostCents?: number
+	totalCostCents?: number | null
+	claudeCodeCostCents?: number | null
+	cursorCostCents?: number | null
 	createdAt?: string
 	updatedAt?: string
 }
@@ -422,7 +422,7 @@ export interface TeamMemberItem {
 	githubUsername: string | null
 	isActive: boolean
 	totalTokens: number
-	totalCostCents?: number
+	totalCostCents?: number | null
 }
 
 export interface TeamListResponse {

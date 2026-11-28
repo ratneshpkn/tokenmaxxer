@@ -1,7 +1,7 @@
 import { anthropicApiKeys, anthropicUsers, dailyClaudeCodeAttribution } from "@shared/schema"
 import { sql } from "drizzle-orm"
+import { ensureModelAliases } from "../../analytics"
 import { db } from "../../db"
-import { ensureModelAliases } from "../../lib/model-aliases"
 
 /**
  * Pro-rate cost_report buckets across api_keys (by token share within each

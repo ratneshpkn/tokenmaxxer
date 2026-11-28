@@ -8,42 +8,33 @@ import {
 import { and, desc, eq, sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
+import {
+	baseModelExpr,
+	ccTokensExpr,
+	coerceTrendArrays,
+	cuTokensExpr,
+	modelAliasJoin,
+	requiredDateRangeSchema,
+	resolveSpendPolicy,
+	resolveWindow,
+	teamMembershipJoin,
+	withDateRangeValidation,
+	withRequiredDateRange,
+} from "../analytics"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
-import { loadConfig } from "../lib/config"
-import { coerceTrendArrays, resolveWindow, stripCostForViewer } from "../lib/route-helpers"
 import { startSyncRun } from "../scripts/lib/shared"
-import { currentRole, currentUser } from "./index"
 
-const usageQuery = z
-	.object({
-		from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-		to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-		platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
-	})
-	.refine((q) => q.from <= q.to, { message: "from must be <= to" })
+const usageQuery = withRequiredDateRange({
+	platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
+})
 
-const listQuery = z
-	.object({
-		from: z
-			.string()
-			.regex(/^\d{4}-\d{2}-\d{2}$/)
-			.optional(),
-		to: z
-			.string()
-			.regex(/^\d{4}-\d{2}-\d{2}$/)
-			.optional(),
-		teamId: z.string().uuid().optional(),
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
+const listQuery = withDateRangeValidation({
+	teamId: z.string().uuid().optional(),
+})
 
-const heatmapQuery = z
-	.object({
-		from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-		to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-	})
-	.refine((q) => q.from <= q.to, { message: "from must be <= to" })
+const heatmapQuery = requiredDateRangeSchema
 
 const userAlertsQuery = z.object({
 	days: z.coerce.number().int().min(7).max(365).default(30),
@@ -66,32 +57,23 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		if (!parse.success) {
 			return c.json({ message: "Invalid query", issues: parse.error.issues }, 400)
 		}
-		const { effFrom: from, effTo: to } = resolveWindow(
-			{ from: parse.data.from, to: parse.data.to },
-			30,
-		)
+		const { effFrom: from, effTo: to } = resolveWindow(parse.data, 30)
 		const { teamId } = parse.data
 
-		const isViewer = currentRole(c) !== "admin"
-		const orderExpr = isViewer
+		const spend = await resolveSpendPolicy(c)
+		const orderExpr = !spend.canViewOrgSpend
 			? sql`(coalesce(cc.tokens,0) + coalesce(cu.tokens,0)) desc`
 			: sql`(coalesce(cc.cents,0) + coalesce(cu.cents,0)) desc`
 
-		const teamFilterCc = teamId
-			? sql`join team_memberships tm_cc on tm_cc.user_email = daily_claude_code_attribution.email and tm_cc.team_id = ${teamId}`
-			: sql``
-		const teamFilterCu = teamId
-			? sql`join team_memberships tm_cu on tm_cu.user_email = daily_cursor_usage.email and tm_cu.team_id = ${teamId}`
-			: sql``
-		const teamFilterTu = teamId
-			? sql`join team_memberships tm_tu on tm_tu.user_email = tu.email and tm_tu.team_id = ${teamId}`
-			: sql``
+		const teamFilterCc = teamMembershipJoin("daily_claude_code_attribution.email", teamId, "tm_cc")
+		const teamFilterCu = teamMembershipJoin("daily_cursor_usage.email", teamId, "tm_cu")
+		const teamFilterTu = teamMembershipJoin("tu.email", teamId, "tm_tu")
 
 		const result = await db.execute<UserListRow>(sql`
       with cc as (
         select email,
                coalesce(sum(attributed_cents),0)::bigint as cents,
-               coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
+               coalesce(sum(${ccTokensExpr()}),0)::bigint as tokens
           from daily_claude_code_attribution
           ${teamFilterCc}
          where date between ${from} and ${to}
@@ -100,7 +82,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
       cu as (
         select email,
                coalesce(sum(charged_cents),0)::bigint as cents,
-               coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
+               coalesce(sum(${cuTokensExpr()}),0)::bigint as tokens
           from daily_cursor_usage
           ${teamFilterCu}
          where date between ${from} and ${to}
@@ -121,7 +103,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
       daily_cc as (
         select email, date,
                coalesce(sum(attributed_cents),0)::bigint as cents,
-               coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
+               coalesce(sum(${ccTokensExpr()}),0)::bigint as tokens
           from daily_claude_code_attribution
          where date between ${from} and ${to}
          group by email, date
@@ -129,7 +111,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
       daily_cu as (
         select email, date,
                coalesce(sum(charged_cents),0)::bigint as cents,
-               coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
+               coalesce(sum(${cuTokensExpr()}),0)::bigint as tokens
           from daily_cursor_usage
          where date between ${from} and ${to}
          group by email, date
@@ -181,7 +163,7 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			row.gh_deletions = Number(row.gh_deletions ?? 0)
 			row.github_username = (row.github_username as string) ?? null
 		})
-		await stripCostForViewer(typed, c, ["cc_cents", "cu_cents", "trend_cents"])
+		spend.redactRows(typed, ["cc_cents", "cu_cents", "trend_cents"])
 		return c.json(typed)
 	})
 
@@ -197,23 +179,23 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		const ccQuery =
 			platform === "claude_code" || platform === "all"
 				? db.execute(sql`
-          select d.date, coalesce(ma.base_model, d.model) as model,
+          select d.date, ${baseModelExpr()} as model,
                  sum(d.uncached_input_tokens)::bigint as input_tokens,
                  sum(d.output_tokens)::bigint as output_tokens,
                  sum(d.cache_read_input_tokens)::bigint as cache_read_tokens,
                  sum(d.cache_creation_5m_tokens + d.cache_creation_1h_tokens)::bigint as cache_creation_tokens,
                  sum(d.attributed_cents)::int as estimated_cost_cents
             from daily_claude_code_attribution d
-            left join model_aliases ma on ma.raw_model = d.model
+            ${modelAliasJoin()}
            where d.email = ${email} and d.date between ${from} and ${to}
-           group by d.date, coalesce(ma.base_model, d.model)
+           group by d.date, ${baseModelExpr()}
            order by d.date asc, model asc
         `)
 				: null
 		const cuQuery =
 			platform === "cursor" || platform === "all"
 				? db.execute(sql`
-          select d.date, coalesce(ma.base_model, d.model) as model,
+          select d.date, ${baseModelExpr()} as model,
                  sum(d.input_tokens)::bigint as input_tokens,
                  sum(d.output_tokens)::bigint as output_tokens,
                  sum(d.cache_read_tokens)::bigint as cache_read_tokens,
@@ -221,40 +203,26 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
                  sum(d.charged_cents)::int as charged_cents,
                  sum(d.request_count)::int as request_count
             from daily_cursor_usage d
-            left join model_aliases ma on ma.raw_model = d.model
+            ${modelAliasJoin()}
            where d.email = ${email} and d.date between ${from} and ${to}
-           group by d.date, coalesce(ma.base_model, d.model)
+           group by d.date, ${baseModelExpr()}
            order by d.date asc, model asc
         `)
 				: null
 
 		const [cc, cu] = await Promise.all([ccQuery, cuQuery])
-		const isViewer = currentRole(c) !== "admin"
-		const cfg = await loadConfig()
-		const hideCosts = isViewer && cfg.spendVisibility === "admin_only"
-		// If viewer_own, we show it because this route is specific to an email, but we should verify the email!
-		const isOwn = email === currentUser(c)?.email
-		const effectivelyHideCosts =
-			hideCosts || (isViewer && cfg.spendVisibility === "viewer_own" && !isOwn)
+		const spend = await resolveSpendPolicy(c)
 
 		const out: { claude_code?: unknown[]; cursor?: unknown[] } = {}
 		if (cc) {
-			out.claude_code = effectivelyHideCosts
-				? (cc.rows ?? []).map((row) => {
-						const r = { ...(row as Record<string, unknown>) }
-						delete r.estimated_cost_cents
-						return r
-					})
-				: (cc.rows ?? [])
+			const rows = (cc.rows ?? []).map((row) => ({ ...(row as Record<string, unknown>) }))
+			spend.redactRows(rows, ["estimated_cost_cents"], { targetEmail: email })
+			out.claude_code = rows
 		}
 		if (cu) {
-			out.cursor = effectivelyHideCosts
-				? (cu.rows ?? []).map((row) => {
-						const r = { ...(row as Record<string, unknown>) }
-						delete r.charged_cents
-						return r
-					})
-				: (cu.rows ?? [])
+			const rows = (cu.rows ?? []).map((row) => ({ ...(row as Record<string, unknown>) }))
+			spend.redactRows(rows, ["charged_cents"], { targetEmail: email })
+			out.cursor = rows
 		}
 		return c.json(out)
 	})
@@ -269,7 +237,6 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		}
 		const { from, to } = parse.data
 		const email = String(c.req.param("email")).toLowerCase()
-		const isViewer = currentRole(c) !== "admin"
 
 		const result = await db.execute<{
 			date: string
@@ -293,14 +260,12 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
                 where email = ${email} and date = d.d
              ), 0)::bigint as cu_cents,
              coalesce((
-               select sum(uncached_input_tokens + cache_read_input_tokens
-                          + cache_creation_5m_tokens + cache_creation_1h_tokens
-                          + output_tokens)::bigint
+               select sum(${ccTokensExpr()})::bigint
                  from daily_claude_code_attribution
                 where email = ${email} and date = d.d
              ), 0)::bigint as cc_tokens,
              coalesce((
-               select sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens)::bigint
+               select sum(${cuTokensExpr()})::bigint
                  from daily_cursor_usage
                 where email = ${email} and date = d.d
              ), 0)::bigint as cu_tokens
@@ -310,16 +275,13 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 
 		// Cast bigints from pg (returned as strings) back to numbers. Values are
 		// bounded by per-day spend × tokens which always fit in a JS number.
-		const cfg = await loadConfig()
-		const isOwn = email === currentUser(c)?.email
-		const effectivelyHideCosts =
-			isViewer &&
-			(cfg.spendVisibility === "admin_only" || (cfg.spendVisibility === "viewer_own" && !isOwn))
+		const spend = await resolveSpendPolicy(c)
+		const hideCosts = !spend.canViewEmail(email)
 
 		const rows = (result.rows ?? []).map((r) => ({
 			date: r.date,
-			cc_cents: effectivelyHideCosts ? null : Number(r.cc_cents),
-			cu_cents: effectivelyHideCosts ? null : Number(r.cu_cents),
+			cc_cents: hideCosts ? null : Number(r.cc_cents),
+			cu_cents: hideCosts ? null : Number(r.cu_cents),
 			cc_tokens: Number(r.cc_tokens),
 			cu_tokens: Number(r.cu_tokens),
 		}))
@@ -565,7 +527,6 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 		}
 		const { from, to, platform } = parse.data
 		const email = String(c.req.param("email")).toLowerCase()
-		const isViewer = currentRole(c) !== "admin"
 
 		const ccQuery =
 			platform === "claude_code" || platform === "all"
@@ -602,45 +563,30 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 
 		const [cc, cu] = await Promise.all([ccQuery, cuQuery])
 
-		const cfg = await loadConfig()
-		const isOwn = email === currentUser(c)?.email
-		const effectivelyHideCosts =
-			isViewer &&
-			(cfg.spendVisibility === "admin_only" || (cfg.spendVisibility === "viewer_own" && !isOwn))
+		const spend = await resolveSpendPolicy(c)
+		const hideCosts = !spend.canViewEmail(email)
 
 		const claude_code = cc
-			? (cc.rows ?? []).map((row: Record<string, unknown>) => {
-					const r = {
-						model: String(row.model),
-						input_tokens: Number(row.input_tokens),
-						output_tokens: Number(row.output_tokens),
-						cache_read_tokens: Number(row.cache_read_tokens),
-						cache_creation_tokens: Number(row.cache_creation_tokens),
-						estimated_cost_cents: Number(row.estimated_cost_cents) as number | undefined,
-					}
-					if (effectivelyHideCosts) {
-						delete r.estimated_cost_cents
-					}
-					return r
-				})
+			? (cc.rows ?? []).map((row: Record<string, unknown>) => ({
+					model: String(row.model),
+					input_tokens: Number(row.input_tokens),
+					output_tokens: Number(row.output_tokens),
+					cache_read_tokens: Number(row.cache_read_tokens),
+					cache_creation_tokens: Number(row.cache_creation_tokens),
+					estimated_cost_cents: hideCosts ? null : Number(row.estimated_cost_cents),
+				}))
 			: []
 
 		const cursor = cu
-			? (cu.rows ?? []).map((row: Record<string, unknown>) => {
-					const r = {
-						model: String(row.model),
-						input_tokens: Number(row.input_tokens),
-						output_tokens: Number(row.output_tokens),
-						cache_read_tokens: Number(row.cache_read_tokens),
-						cache_write_tokens: Number(row.cache_write_tokens),
-						charged_cents: Number(row.charged_cents) as number | undefined,
-						request_count: Number(row.request_count),
-					}
-					if (effectivelyHideCosts) {
-						delete r.charged_cents
-					}
-					return r
-				})
+			? (cu.rows ?? []).map((row: Record<string, unknown>) => ({
+					model: String(row.model),
+					input_tokens: Number(row.input_tokens),
+					output_tokens: Number(row.output_tokens),
+					cache_read_tokens: Number(row.cache_read_tokens),
+					cache_write_tokens: Number(row.cache_write_tokens),
+					charged_cents: hideCosts ? null : Number(row.charged_cents),
+					request_count: Number(row.request_count),
+				}))
 			: []
 
 		return c.json({ claude_code, cursor })
@@ -649,13 +595,8 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 	// User Model Recommendations
 	app.get("/api/users/:email/recommendations", isAuthenticated, async (c) => {
 		const email = decodeURIComponent(c.req.param("email")).toLowerCase()
-		const isViewer = currentRole(c) !== "admin"
-
-		const cfg = await loadConfig()
-		const isOwn = email === currentUser(c)?.email
-		const effectivelyHideCosts =
-			isViewer &&
-			(cfg.spendVisibility === "admin_only" || (cfg.spendVisibility === "viewer_own" && !isOwn))
+		const spend = await resolveSpendPolicy(c)
+		const hideCosts = !spend.canViewEmail(email)
 
 		const rows = await db
 			.select()
@@ -684,14 +625,9 @@ export function registerUserRoutes(app: Hono<AppEnv>): void {
 			let potentialSavingsCents = r.potentialSavingsCents
 			const metadata = r.metadata ? { ...r.metadata } : null
 
-			if (effectivelyHideCosts) {
+			if (hideCosts) {
 				potentialSavingsCents = null
-				message = message
-					.replace(/to save ~\$[\d.]+\./g, ".")
-					.replace(/\(\$[\d.]+\/M\)/g, "")
-					.replace(/\s+\./g, ".")
-					.replace(/\s+/g, " ")
-					.trim()
+				message = spend.redactRecommendationMessage(message)
 				if (metadata) {
 					delete metadata.userCentsPerToken
 					delete metadata.orgAvgCentsPerToken

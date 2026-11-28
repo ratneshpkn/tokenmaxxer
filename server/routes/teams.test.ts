@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
 import type { TeamItem } from "@shared/api-types"
-import { trackedUsers } from "@shared/schema"
+import { type AppUser, trackedUsers } from "@shared/schema"
 import { sql } from "drizzle-orm"
 import { Hono } from "hono"
-import type { AppEnv, AppUserSession } from "../auth/session"
+import type { AppEnv } from "../auth/session"
 import { db } from "../db"
 import { registerTeamRoutes } from "./teams"
 
@@ -12,7 +12,7 @@ let mockUser: { id: string; email: string; role: "admin" | "viewer" } | null = n
 
 app.use("*", async (c, next) => {
 	if (mockUser) {
-		c.set("user", mockUser as unknown as AppUserSession)
+		c.set("user", mockUser as unknown as AppUser)
 	}
 	await next()
 })
@@ -25,6 +25,7 @@ describe("teams routes", () => {
 		await db.execute(sql`insert into app_config (id) values (1) on conflict (id) do nothing`)
 		await db.execute(sql`
 			update app_config set 
+				spend_visibility = 'admin_only',
 				google_client_secret_enc = null,
 				anthropic_admin_api_key_enc = null,
 				cursor_admin_api_key_enc = null,
@@ -148,7 +149,7 @@ describe("teams routes", () => {
 		expect(viewerData.teams).toBeDefined()
 		const viewerTeam = viewerData.teams.find((t) => t.name === "Test Frontend Team")
 		expect(viewerTeam).toBeDefined()
-		expect(viewerTeam?.totalCostCents).toBeUndefined()
+		expect(viewerTeam?.totalCostCents).toBeNull()
 
 		// Admin request
 		mockUser = { id: "admin-1", email: "admin@test-team.com", role: "admin" }

@@ -1,9 +1,9 @@
 import { cursorMembers, cursorSpendSnapshots, dailyCursorUsage, trackedUsers } from "@shared/schema"
 import { sql } from "drizzle-orm"
+import { ensureModelAliases } from "../analytics"
 import { db, pool } from "../db"
 import { loadConfig } from "../lib/config"
 import { CursorAdminClient, dateRangeToEpochMs } from "../lib/cursor-admin"
-import { ensureModelAliases } from "../lib/model-aliases"
 import { bumpSyncRunRows, parseDateRangeArgs, today, withSyncRun, yesterday } from "./lib/shared"
 
 export interface SyncRange {

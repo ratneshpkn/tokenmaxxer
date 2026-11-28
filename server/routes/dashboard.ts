@@ -1,51 +1,34 @@
 import { sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import { z } from "zod"
+import {
+	baseModelExpr,
+	ccTokensExpr,
+	coerceTrendArrays,
+	cuTokensExpr,
+	modelAliasJoin,
+	optionalDateRangeSchema,
+	resolveSpendPolicy,
+	resolveWindow,
+	windowDayCount,
+	withDateRangeValidation,
+} from "../analytics"
 import type { AppEnv } from "../auth/session"
 import { isAuthenticated } from "../auth/session"
 import { db } from "../db"
-import { loadConfig } from "../lib/config"
-import { coerceTrendArrays, resolveWindow, stripCostForViewer } from "../lib/route-helpers"
-import { currentRole } from "./index"
 
-const dateRangeBase = z.object({
-	from: z
-		.string()
-		.regex(/^\d{4}-\d{2}-\d{2}$/)
-		.optional(),
-	to: z
-		.string()
-		.regex(/^\d{4}-\d{2}-\d{2}$/)
-		.optional(),
-	days: z.coerce.number().int().min(1).max(365).optional(),
+const summaryQuery = optionalDateRangeSchema
+
+const topQuery = withDateRangeValidation({
+	platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
+	limit: z.coerce.number().int().min(1).max(50).default(10),
+	metric: z.enum(["cost", "tokens"]).default("cost"),
 })
 
-const summaryQuery = dateRangeBase
-	.refine((q) => (q.from && q.to) || (!q.from && !q.to), {
-		message: "from and to must be provided together",
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
-
-const topQuery = dateRangeBase
-	.extend({
-		platform: z.enum(["claude_code", "cursor", "all"]).default("all"),
-		limit: z.coerce.number().int().min(1).max(50).default(10),
-		metric: z.enum(["cost", "tokens"]).default("cost"),
-	})
-	.refine((q) => (q.from && q.to) || (!q.from && !q.to), {
-		message: "from and to must be provided together",
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
-
-const modelMixQuery = dateRangeBase
-	.extend({
-		limit: z.coerce.number().int().min(1).max(500).default(20),
-		metric: z.enum(["cost", "tokens"]).default("cost"),
-	})
-	.refine((q) => (q.from && q.to) || (!q.from && !q.to), {
-		message: "from and to must be provided together",
-	})
-	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: "from must be <= to" })
+const modelMixQuery = withDateRangeValidation({
+	limit: z.coerce.number().int().min(1).max(500).default(20),
+	metric: z.enum(["cost", "tokens"]).default("cost"),
+})
 
 export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 	app.get("/api/dashboard/summary", isAuthenticated, async (c) => {
@@ -74,10 +57,10 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
           where date between ${effFrom} and ${effTo}) as cc_cents,
         (select coalesce(sum(charged_cents),0)::bigint from daily_cursor_usage
           where date between ${effFrom} and ${effTo}) as cu_cents,
-        (select coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint
+        (select coalesce(sum(${ccTokensExpr()}),0)::bigint
            from daily_claude_code_attribution
           where date between ${effFrom} and ${effTo}) as cc_tokens,
-        (select coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint
+        (select coalesce(sum(${cuTokensExpr()}),0)::bigint
            from daily_cursor_usage
           where date between ${effFrom} and ${effTo}) as cu_tokens,
         (select count(distinct email)::int from daily_claude_code_attribution
@@ -98,11 +81,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
     `)
 
 		// Trend: daily for ranges <= 90 days, weekly otherwise
-		const dayCount =
-			Math.round(
-				(new Date(`${effTo}T00:00:00Z`).getTime() - new Date(`${effFrom}T00:00:00Z`).getTime()) /
-					(24 * 60 * 60 * 1000),
-			) + 1
+		const dayCount = windowDayCount(effFrom, effTo)
 
 		let trendRows: Record<string, unknown>[]
 		if (dayCount <= 90) {
@@ -113,9 +92,9 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
         select dates.d as date,
                coalesce((select sum(attributed_cents) from daily_claude_code_attribution where date = dates.d),0)::bigint as claude_code_cents,
                coalesce((select sum(charged_cents) from daily_cursor_usage where date = dates.d),0)::bigint as cursor_cents,
-               coalesce((select sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens)
+               coalesce((select sum(${ccTokensExpr()})
                            from daily_claude_code_attribution where date = dates.d),0)::bigint as claude_code_tokens,
-               coalesce((select sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens)
+               coalesce((select sum(${cuTokensExpr()})
                            from daily_cursor_usage where date = dates.d),0)::bigint as cursor_tokens,
                coalesce((select sum(prs_merged) from daily_github_activity where date = dates.d),0)::bigint as gh_prs_merged,
                coalesce((select sum(additions) from daily_github_activity where date = dates.d),0)::bigint as gh_additions,
@@ -141,11 +120,11 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
                coalesce((select sum(charged_cents) from daily_cursor_usage
                           where date between weeks.wk and weeks.wk + 6
                             and date between ${effFrom} and ${effTo}),0)::bigint as cursor_cents,
-               coalesce((select sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens)
+               coalesce((select sum(${ccTokensExpr()})
                            from daily_claude_code_attribution
                           where date between weeks.wk and weeks.wk + 6
                             and date between ${effFrom} and ${effTo}),0)::bigint as claude_code_tokens,
-               coalesce((select sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens)
+               coalesce((select sum(${cuTokensExpr()})
                            from daily_cursor_usage
                           where date between weeks.wk and weeks.wk + 6
                             and date between ${effFrom} and ${effTo}),0)::bigint as cursor_tokens,
@@ -166,8 +145,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 
 		const totalsRow: Record<string, unknown> | null =
 			(totals.rows?.[0] as Record<string, unknown>) ?? null
-		const cfg = await loadConfig()
-		const hideCosts = currentRole(c) !== "admin" && cfg.spendVisibility !== "viewer_all"
+		const spend = await resolveSpendPolicy(c)
 
 		if (totalsRow) {
 			totalsRow.gh_prs_opened = Number(totalsRow.gh_prs_opened ?? 0)
@@ -175,24 +153,16 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 			totalsRow.gh_additions = Number(totalsRow.gh_additions ?? 0)
 			totalsRow.gh_deletions = Number(totalsRow.gh_deletions ?? 0)
 			totalsRow.gh_users = Number(totalsRow.gh_users ?? 0)
-			if (hideCosts) {
-				totalsRow.cc_cents = null
-				totalsRow.cu_cents = null
-				totalsRow.open_alerts = null
-			}
+			spend.redactObject(totalsRow, ["cc_cents", "cu_cents", "open_alerts"])
 		}
 
 		for (const row of trendRows) {
 			const r = row as Record<string, unknown>
-
 			r.gh_prs_merged = Number(r.gh_prs_merged ?? 0)
 			r.gh_additions = Number(r.gh_additions ?? 0)
 			r.gh_deletions = Number(r.gh_deletions ?? 0)
-			if (hideCosts) {
-				r.claude_code_cents = null
-				r.cursor_cents = null
-			}
 		}
+		spend.redactRows(trendRows, ["claude_code_cents", "cursor_cents"])
 
 		return c.json({ totals: totalsRow, trend: trendRows })
 	})
@@ -204,9 +174,8 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, platform, limit, metric } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 7)
 
-		const role = currentRole(c)
-		const isViewer = role !== "admin"
-		const sortByTokens = isViewer || metric === "tokens"
+		const spend = await resolveSpendPolicy(c)
+		const sortByTokens = !spend.canViewOrgSpend || metric === "tokens"
 
 		// orderBy for the inner `top` CTE (alias c from combined c)
 		const orderByInner = sortByTokens
@@ -239,7 +208,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
       cc as (
         select email,
                coalesce(sum(attributed_cents),0)::bigint as cents,
-               coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
+               coalesce(sum(${ccTokensExpr()}),0)::bigint as tokens
           from daily_claude_code_attribution
          where date between ${effFrom} and ${effTo}
          group by email
@@ -247,7 +216,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
       cu as (
         select email,
                coalesce(sum(charged_cents),0)::bigint as cents,
-               coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
+               coalesce(sum(${cuTokensExpr()}),0)::bigint as tokens
           from daily_cursor_usage
          where date between ${effFrom} and ${effTo}
          group by email
@@ -292,7 +261,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
       daily_cc as (
         select email, date,
                coalesce(sum(attributed_cents),0)::bigint as cents,
-               coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
+               coalesce(sum(${ccTokensExpr()}),0)::bigint as tokens
           from daily_claude_code_attribution
          where date between ${effFrom} and ${effTo}
            and email in (select email from top)
@@ -301,7 +270,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
       daily_cu as (
         select email, date,
                coalesce(sum(charged_cents),0)::bigint as cents,
-               coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
+               coalesce(sum(${cuTokensExpr()}),0)::bigint as tokens
           from daily_cursor_usage
          where date between ${effFrom} and ${effTo}
            and email in (select email from top)
@@ -334,7 +303,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 			row.gh_additions = Number(row.gh_additions ?? 0)
 			row.gh_deletions = Number(row.gh_deletions ?? 0)
 		})
-		await stripCostForViewer(typed, c, ["cc_cents", "cu_cents", "total_cents", "trend_cents"])
+		spend.redactRows(typed, ["cc_cents", "cu_cents", "total_cents", "trend_cents"])
 		return c.json(typed)
 	})
 
@@ -345,31 +314,30 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 		const { from, to, days, limit, metric } = parse.data
 		const { effFrom, effTo } = resolveWindow({ from, to, days }, 30)
 
-		const role = currentRole(c)
-		const isViewer = role !== "admin"
+		const spend = await resolveSpendPolicy(c)
 
-		// Sort metric column branches on role.
-		const sortBy = sql.raw(isViewer || metric === "tokens" ? "tokens" : "cents")
+		// Sort metric column branches on visibility policy.
+		const sortBy = sql.raw(!spend.canViewOrgSpend || metric === "tokens" ? "tokens" : "cents")
 
 		const result = await db.execute(sql`
       with
       cc as (
-        select coalesce(ma.base_model, d.model) as model,
-               coalesce(sum(attributed_cents),0)::bigint as cents,
-               coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
+        select ${baseModelExpr()} as model,
+               coalesce(sum(d.attributed_cents),0)::bigint as cents,
+               coalesce(sum(${ccTokensExpr("d")}),0)::bigint as tokens
           from daily_claude_code_attribution d
-          left join model_aliases ma on ma.raw_model = d.model
-         where date between ${effFrom} and ${effTo}
-         group by coalesce(ma.base_model, d.model)
+          ${modelAliasJoin()}
+         where d.date between ${effFrom} and ${effTo}
+         group by ${baseModelExpr()}
       ),
       cu as (
-        select coalesce(ma.base_model, d.model) as model,
-               coalesce(sum(charged_cents),0)::bigint as cents,
-               coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
+        select ${baseModelExpr()} as model,
+               coalesce(sum(d.charged_cents),0)::bigint as cents,
+               coalesce(sum(${cuTokensExpr("d")}),0)::bigint as tokens
           from daily_cursor_usage d
-          left join model_aliases ma on ma.raw_model = d.model
-         where date between ${effFrom} and ${effTo}
-         group by coalesce(ma.base_model, d.model)
+          ${modelAliasJoin()}
+         where d.date between ${effFrom} and ${effTo}
+         group by ${baseModelExpr()}
       ),
       totals as (
         select model, cents, tokens from cc
@@ -391,24 +359,24 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
         select generate_series(${effFrom}::date, ${effTo}::date, '1 day')::date as d
       ),
       daily_cc as (
-        select coalesce(ma.base_model, d.model) as model, date,
-               coalesce(sum(attributed_cents),0)::bigint as cents,
-               coalesce(sum(uncached_input_tokens + cache_read_input_tokens + cache_creation_5m_tokens + cache_creation_1h_tokens + output_tokens),0)::bigint as tokens
+        select ${baseModelExpr()} as model, d.date,
+               coalesce(sum(d.attributed_cents),0)::bigint as cents,
+               coalesce(sum(${ccTokensExpr("d")}),0)::bigint as tokens
           from daily_claude_code_attribution d
-          left join model_aliases ma on ma.raw_model = d.model
-         where date between ${effFrom} and ${effTo}
-           and coalesce(ma.base_model, d.model) in (select model from ranked)
-         group by coalesce(ma.base_model, d.model), date
+          ${modelAliasJoin()}
+         where d.date between ${effFrom} and ${effTo}
+           and ${baseModelExpr()} in (select model from ranked)
+         group by ${baseModelExpr()}, d.date
       ),
       daily_cu as (
-        select coalesce(ma.base_model, d.model) as model, date,
-               coalesce(sum(charged_cents),0)::bigint as cents,
-               coalesce(sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens),0)::bigint as tokens
+        select ${baseModelExpr()} as model, d.date,
+               coalesce(sum(d.charged_cents),0)::bigint as cents,
+               coalesce(sum(${cuTokensExpr("d")}),0)::bigint as tokens
           from daily_cursor_usage d
-          left join model_aliases ma on ma.raw_model = d.model
-         where date between ${effFrom} and ${effTo}
-           and coalesce(ma.base_model, d.model) in (select model from ranked)
-         group by coalesce(ma.base_model, d.model), date
+          ${modelAliasJoin()}
+         where d.date between ${effFrom} and ${effTo}
+           and ${baseModelExpr()} in (select model from ranked)
+         group by ${baseModelExpr()}, d.date
       ),
       trends as (
         select r.model, d.d as date,
@@ -432,7 +400,7 @@ export function registerDashboardRoutes(app: Hono<AppEnv>): void {
 		typed.forEach((row) => {
 			coerceTrendArrays(row, ["trend_cents", "trend_tokens"])
 		})
-		await stripCostForViewer(typed, c, ["cents", "trend_cents"])
+		spend.redactRows(typed, ["cents", "trend_cents"])
 		return c.json(typed)
 	})
 }

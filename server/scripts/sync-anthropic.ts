@@ -7,10 +7,10 @@ import {
 	trackedUsers,
 } from "@shared/schema"
 import { eq, sql } from "drizzle-orm"
+import { ensureModelAliases } from "../analytics"
 import { db, pool } from "../db"
 import { AnthropicAdminClient, decimalCentsToCents } from "../lib/anthropic-admin"
 import { invalidateConfigCache, loadConfig } from "../lib/config"
-import { ensureModelAliases } from "../lib/model-aliases"
 import { deriveAttribution } from "./lib/derive-attribution"
 import { bumpSyncRunRows, parseDateRangeArgs, today, withSyncRun, yesterday } from "./lib/shared"
 

@@ -2,9 +2,8 @@ import { appUsers } from "@shared/schema"
 import { eq, sql } from "drizzle-orm"
 import type { Hono } from "hono"
 import type { AppEnv } from "../auth/session"
-import { isAuthenticated, requireAdmin } from "../auth/session"
+import { currentUser, isAuthenticated, requireAdmin } from "../auth/session"
 import { db } from "../db"
-import { currentUser } from "./index"
 
 export function registerAppUserRoutes(app: Hono<AppEnv>): void {
 	app.get("/api/app-users", isAuthenticated, requireAdmin, async (c) => {
