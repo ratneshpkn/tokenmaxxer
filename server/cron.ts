@@ -1,13 +1,6 @@
 import { DEFAULTS } from "@shared/constants"
-import { runComputeAlerts } from "./scripts/compute-alerts"
-import { computeRecommendations } from "./scripts/compute-recommendations"
-import { runPREnrichment } from "./scripts/enrich-prs"
 import { daysAgo, today, yesterday } from "./scripts/lib/shared"
-import { runSlackDigest } from "./scripts/slack-digest"
-import { runAnthropicSync } from "./scripts/sync-anthropic"
-import { runCursorSync } from "./scripts/sync-cursor"
-import { runGithubSync } from "./scripts/sync-github"
-import { runPrFilesSync } from "./scripts/sync-pr-files"
+import { runSyncJob } from "./sync/runner"
 
 /** Two-cron design:
  *
@@ -18,28 +11,18 @@ import { runPrFilesSync } from "./scripts/sync-pr-files"
  *    downtime, API hiccups) and triggers the Slack digest.
  *
  *  Both pass `triggeredBy` so `sync_runs` shows the source of every row.
- *  Each job is wrapped in its own try/catch so one failure doesn't kill
- *  the others in the same tick.
+ *  Each job runs through `runSyncJob` (per-job lock + error isolation).
  */
 const DAILY_LOOKBACK_DAYS = 7
 const HOURLY_LOOKBACK_DAYS = 1
 
 const HOURLY_EXPR = "0 * * * *"
-const _DAILY_OFFSET_MINUTES = 15
-
-async function runJob(label: string, fn: () => Promise<unknown>): Promise<void> {
-	try {
-		await fn()
-	} catch (err) {
-		console.error(`[cron ${label}] failed`, err)
-	}
-}
 
 /**
  * Calculates the UTC cron expression for a daily job in a specific timezone.
  * Bun.cron runs in UTC, so we convert target local time to UTC on startup.
  */
-function getDailyExprInUtc(tz: string, localHour: number, localMinute: number): string {
+export function getDailyExprInUtc(tz: string, localHour: number, localMinute: number): string {
 	const now = new Date()
 
 	// Format today's date in target timezone to find host-to-target offset
@@ -80,13 +63,17 @@ export function startCron(): void {
 		hourlyRunning = true
 		try {
 			const range = { from: daysAgo(HOURLY_LOOKBACK_DAYS), to: today() }
-			const o = { triggeredBy: "cron:hourly" }
-			await runJob("hourly anthropic", () => runAnthropicSync(range, o))
-			await runJob("hourly cursor", () => runCursorSync(range, o))
-			await runJob("hourly github", () => runGithubSync(range, o))
-			await runJob("hourly pr files", () => runPrFilesSync(o))
-			await runJob("hourly pr enrich", () => runPREnrichment({ ...o, days: 2 }))
-			await runJob("hourly alerts", () => runComputeAlerts({ ...o, dates: [yesterday(), today()] }))
+			const o = { range, triggeredBy: "cron:hourly" }
+			await runSyncJob("anthropic", o, "hourly anthropic")
+			await runSyncJob("cursor", o, "hourly cursor")
+			await runSyncJob("github", o, "hourly github")
+			await runSyncJob("pr_files", { triggeredBy: "cron:hourly" }, "hourly pr files")
+			await runSyncJob("prs_enrich", { triggeredBy: "cron:hourly", days: 2 }, "hourly pr enrich")
+			await runSyncJob(
+				"alerts",
+				{ triggeredBy: "cron:hourly", dates: [yesterday(), today()] },
+				"hourly alerts",
+			)
 		} finally {
 			hourlyRunning = false
 		}
@@ -95,17 +82,18 @@ export function startCron(): void {
 	// Daily: deeper self-heal + Slack digest.
 	Bun.cron(dailyExpr, async () => {
 		const range = { from: daysAgo(DAILY_LOOKBACK_DAYS), to: yesterday() }
-		const o = { triggeredBy: "cron:daily" }
-		await runJob("daily anthropic", () => runAnthropicSync(range, o))
-		await runJob("daily cursor", () => runCursorSync(range, o))
-		await runJob("daily github", () => runGithubSync(range, o))
-		await runJob("daily alerts", () => runComputeAlerts(o))
-		await runJob("daily slack", () => runSlackDigest(o))
+		const o = { range, triggeredBy: "cron:daily" }
+		const base = { triggeredBy: "cron:daily" }
+		await runSyncJob("anthropic", o, "daily anthropic")
+		await runSyncJob("cursor", o, "daily cursor")
+		await runSyncJob("github", o, "daily github")
+		await runSyncJob("alerts", base, "daily alerts")
+		await runSyncJob("slack_digest", base, "daily slack")
 		// Backfill/sync PR files and enrich PRs before computing recommendations
 		// (which depend on github_pr_enrichments), while keeping them after alerts/digest.
-		await runJob("daily pr files", () => runPrFilesSync(o))
-		await runJob("daily pr enrich", () => runPREnrichment(o))
-		await runJob("daily recommendations", () => computeRecommendations(o))
+		await runSyncJob("pr_files", base, "daily pr files")
+		await runSyncJob("prs_enrich", base, "daily pr enrich")
+		await runSyncJob("recommendations", base, "daily recommendations")
 	})
 
 	console.log(

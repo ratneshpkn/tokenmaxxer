@@ -69,10 +69,10 @@ export async function runCursorSync(
 					.onConflictDoUpdate({
 						target: cursorMembers.id,
 						set: {
-							email: cursorMembers.email,
-							name: cursorMembers.name,
-							role: cursorMembers.role,
-							isRemoved: cursorMembers.isRemoved,
+							email: sql`excluded.email`,
+							name: sql`excluded.name`,
+							role: sql`excluded.role`,
+							isRemoved: sql`excluded.is_removed`,
 							syncedAt: new Date(),
 						},
 					})
@@ -90,7 +90,7 @@ export async function runCursorSync(
 					)
 					.onConflictDoUpdate({
 						target: trackedUsers.email,
-						set: { cursorUserId: trackedUsers.cursorUserId, updatedAt: new Date() },
+						set: { cursorUserId: sql`excluded.cursor_user_id`, updatedAt: new Date() },
 					})
 			}
 
@@ -119,9 +119,11 @@ export async function runCursorSync(
 					.onConflictDoUpdate({
 						target: [cursorSpendSnapshots.snapshotDate, cursorSpendSnapshots.email],
 						set: {
-							spendCents: cursorSpendSnapshots.spendCents,
-							overallSpendCents: cursorSpendSnapshots.overallSpendCents,
-							fastPremiumRequests: cursorSpendSnapshots.fastPremiumRequests,
+							spendCents: sql`excluded.spend_cents`,
+							overallSpendCents: sql`excluded.overall_spend_cents`,
+							fastPremiumRequests: sql`excluded.fast_premium_requests`,
+							hardLimitDollars: sql`excluded.hard_limit_dollars`,
+							monthlyLimitDollars: sql`excluded.monthly_limit_dollars`,
 							syncedAt: new Date(),
 						},
 					})
