@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { computeQuartileBuckets } from "./ActivityHeatmap"
+import { computeQuartileBuckets } from "./CalendarHeatmap"
 
 describe("computeQuartileBuckets", () => {
 	it("assigns bucket 0 to zero-activity days", () => {

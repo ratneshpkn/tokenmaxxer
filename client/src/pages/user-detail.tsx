@@ -14,10 +14,9 @@ import {
 	YAxis,
 } from "recharts"
 import { Link } from "wouter"
-import { ActivityHeatmap } from "@/components/ActivityHeatmap"
+import { ActivityHeatmap, GithubHeatmap } from "@/components/CalendarHeatmap"
 import { Cost } from "@/components/Cost"
 import { FlexCardModal } from "@/components/FlexCardModal"
-import { GithubHeatmap } from "@/components/GithubHeatmap"
 import { MetricPair } from "@/components/MetricPair"
 import { SearchInput } from "@/components/SearchInput"
 import { SectionHeader } from "@/components/SectionHeader"
@@ -50,6 +49,7 @@ import { platformLabel, useDisplaySession } from "@/lib/display-session"
 import { buildModelTrends, colorForModel, totalTokens } from "@/lib/model-trends"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
+import { useTableState } from "@/lib/use-table-state"
 import { cn, formatCompact, formatDate, formatNumber } from "@/lib/utils"
 
 type ModelSortKey = "model" | "value" | "share"
@@ -154,12 +154,6 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const [showFlexCard, setShowFlexCard] = useState(false)
 	const { isAdmin, isViewer, trendMode, privacyOn } = useDisplaySession()
 	const animating = useFirstRenderAnimation()
-	const [modelFilter, setModelFilter] = useState("")
-	const [modelSortKey, setModelSortKey] = useState<"model" | "value" | "share">("value")
-	const [modelSortDir, setModelSortDir] = useState<"asc" | "desc">("desc")
-	const [rawModelFilter, setRawModelFilter] = useState("")
-	const [rawModelSortKey, setRawModelSortKey] = useState<ModelSortKey>("value")
-	const [rawModelSortDir, setRawModelSortDir] = useState<"asc" | "desc">("desc")
 	const { from, to } = useDateRange()
 	const days = daysBetween(from, to)
 	const winLabel = days === 1 ? "1D" : `${days}D`
@@ -377,73 +371,49 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 		})
 	}, [rawModelsQuery.data, trendMode, ccTokens, cuTokens, totalCents])
 
-	const rawModelRows = useMemo(() => {
-		const f = rawModelFilter.trim().toLowerCase()
-		const filtered = f
-			? rawModelData.filter((m) => m.model.toLowerCase().includes(f))
-			: rawModelData
-
-		const sortVal = (m: (typeof filtered)[number]): string | number => {
-			switch (rawModelSortKey) {
-				case "model":
-					return m.model
-				case "value":
-					return trendMode === "tokens" ? m.tokens : m.cents
-				case "share":
-					return m.share
-			}
-		}
-
-		return [...filtered].sort((a, b) => {
-			const av = sortVal(a)
-			const bv = sortVal(b)
-			const cmp =
-				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
-			return rawModelSortDir === "asc" ? cmp : -cmp
-		})
-	}, [rawModelData, rawModelFilter, rawModelSortKey, rawModelSortDir, trendMode])
-
-	function toggleRawModelSort(k: ModelSortKey): void {
-		if (rawModelSortKey === k) setRawModelSortDir((d) => (d === "asc" ? "desc" : "asc"))
-		else {
-			setRawModelSortKey(k)
-			setRawModelSortDir(k === "model" ? "asc" : "desc")
+	const modelSortValue = (
+		m: { model: string; tokens: number; cents: number; share: number },
+		key: ModelSortKey,
+	): string | number => {
+		switch (key) {
+			case "model":
+				return m.model
+			case "value":
+				return trendMode === "tokens" ? m.tokens : m.cents
+			case "share":
+				return m.share
 		}
 	}
 
-	const modelRows = useMemo(() => {
-		const f = modelFilter.trim().toLowerCase()
-		const filtered = f
-			? leaderboardData.filter((m) => m.model.toLowerCase().includes(f))
-			: leaderboardData
+	const {
+		rows: rawModelRows,
+		filter: rawModelFilter,
+		setFilter: setRawModelFilter,
+		sortKey: rawModelSortKey,
+		sortDir: rawModelSortDir,
+		toggleSort: toggleRawModelSort,
+	} = useTableState({
+		data: rawModelData,
+		initialSortKey: "value" as ModelSortKey,
+		ascKeys: ["model"],
+		filterBy: (m, q) => m.model.toLowerCase().includes(q),
+		sortValue: modelSortValue,
+	})
 
-		const sortVal = (m: (typeof filtered)[number]): string | number => {
-			switch (modelSortKey) {
-				case "model":
-					return m.model
-				case "value":
-					return trendMode === "tokens" ? m.tokens : m.cents
-				case "share":
-					return m.share
-			}
-		}
-
-		return [...filtered].sort((a, b) => {
-			const av = sortVal(a)
-			const bv = sortVal(b)
-			const cmp =
-				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
-			return modelSortDir === "asc" ? cmp : -cmp
-		})
-	}, [leaderboardData, modelFilter, modelSortKey, modelSortDir, trendMode])
-
-	function toggleModelSort(k: ModelSortKey): void {
-		if (modelSortKey === k) setModelSortDir((d) => (d === "asc" ? "desc" : "asc"))
-		else {
-			setModelSortKey(k)
-			setModelSortDir(k === "model" ? "asc" : "desc")
-		}
-	}
+	const {
+		rows: modelRows,
+		filter: modelFilter,
+		setFilter: setModelFilter,
+		sortKey: modelSortKey,
+		sortDir: modelSortDir,
+		toggleSort: toggleModelSort,
+	} = useTableState({
+		data: leaderboardData,
+		initialSortKey: "value" as ModelSortKey,
+		ascKeys: ["model"],
+		filterBy: (m, q) => m.model.toLowerCase().includes(q),
+		sortValue: modelSortValue,
+	})
 
 	const heatDays = heatmapQuery.data ?? []
 	const activeDays = heatDays.filter((d) => d.cc_tokens + d.cu_tokens > 0).length
