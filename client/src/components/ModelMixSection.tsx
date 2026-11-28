@@ -1,8 +1,7 @@
 import { MetricPair } from "@/components/MetricPair"
 import { Sparkline } from "@/components/Sparkline"
+import { pickTrendSeries, useMetricMode } from "@/lib/display-session"
 import { colorForModelInMix } from "@/lib/model-color"
-
-import { useMetricMode } from "@/lib/use-metric-mode"
 
 type ModelMixItem = {
 	model: string
@@ -85,13 +84,7 @@ export function ModelMixSection({
 						</span>
 						<div className="col-span-4">
 							<Sparkline
-								data={
-									isViewer
-										? s.trend_tokens
-										: metricMode === "cost"
-											? (s.trend_cents ?? s.trend_tokens)
-											: s.trend_tokens
-								}
+								data={pickTrendSeries(s, isViewer, metricMode)}
 								color={s.color}
 								height={22}
 							/>

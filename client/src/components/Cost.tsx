@@ -1,4 +1,4 @@
-import { usePrivacyMode } from "@/lib/use-privacy-mode"
+import { usePrivacyMode } from "@/lib/display-session"
 import { formatCents, formatDollars } from "@/lib/utils"
 
 interface CostProps {

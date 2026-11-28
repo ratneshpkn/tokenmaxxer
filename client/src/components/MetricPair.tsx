@@ -1,6 +1,6 @@
 import { Cost } from "@/components/Cost"
 import { typographyVariants } from "@/components/ui/typography"
-import { useMetricMode } from "@/lib/use-metric-mode"
+import { useMetricMode } from "@/lib/display-session"
 import { cn, formatCompact } from "@/lib/utils"
 
 interface MetricPairProps {

@@ -3,9 +3,10 @@ import { Link } from "wouter"
 import { Button } from "@/components/ui/button"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { queryKeys } from "@/lib/display-session"
 
 export function HomePage(): React.JSX.Element {
-	const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: api.config })
+	const { data: cfg } = useQuery({ queryKey: queryKeys.config, queryFn: api.config })
 	const orgName = cfg?.orgName?.trim() || "tokenmaxxer"
 	const primaryHref = cfg?.bootstrapNeeded ? "/signup" : "/login"
 	const primaryLabel = cfg?.bootstrapNeeded ? "▶ GET STARTED" : "▶ SIGN IN"

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { queryKeys } from "@/lib/display-session"
 
 type ValidationState = "idle" | "checking" | "ok" | "bad"
 
@@ -68,7 +69,7 @@ function StatusPip({ state }: { state: ValidationState }): React.JSX.Element | n
 
 export function SetupPage(): React.JSX.Element {
 	const [, navigate] = useLocation()
-	const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: api.config })
+	const { data: cfg } = useQuery({ queryKey: queryKeys.config, queryFn: api.config })
 
 	useEffect(() => {
 		if (cfg?.setupCompleted) navigate("/")

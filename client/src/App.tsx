@@ -1,8 +1,7 @@
-import { useQuery } from "@tanstack/react-query"
 import { lazy, Suspense } from "react"
 import { Redirect, Route, Switch } from "wouter"
 import { ChunkErrorBoundary } from "@/components/ChunkErrorBoundary"
-import { api } from "@/lib/api"
+import { useMe } from "@/lib/display-session"
 
 const AppShell = lazy(() => import("@/components/AppShell").then((m) => ({ default: m.AppShell })))
 
@@ -36,11 +35,7 @@ function AuthGate({
 	adminOnly?: boolean
 	children: React.ReactNode
 }): React.JSX.Element {
-	const { data, isLoading, isError } = useQuery({
-		queryKey: ["me"],
-		queryFn: api.me,
-		retry: false,
-	})
+	const { data, isLoading, isError } = useMe()
 	if (isLoading) {
 		return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
 	}
@@ -62,11 +57,7 @@ function AuthGate({
 }
 
 function RootRoute({ children }: { children: React.ReactNode }): React.JSX.Element {
-	const { data, isLoading, isError } = useQuery({
-		queryKey: ["me"],
-		queryFn: api.me,
-		retry: false,
-	})
+	const { data, isLoading, isError } = useMe()
 	if (isLoading) {
 		return <div className="p-8 text-sm text-muted-foreground">Loading…</div>
 	}

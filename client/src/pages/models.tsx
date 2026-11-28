@@ -17,17 +17,14 @@ import {
 } from "@/components/ui/table"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { pickTrendSeries, useDisplaySession } from "@/lib/display-session"
 import { colorForModelInMix } from "@/lib/model-color"
 import { useDateRange } from "@/lib/use-date-range"
-import { useMetricMode } from "@/lib/use-metric-mode"
 
 type SortKey = "model" | "cents" | "tokens" | "share"
 
 export function ModelsPage(): React.JSX.Element {
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
-	const isViewer = me ? me.role !== "admin" : false
-	const [metricMode] = useMetricMode()
-	const effectiveMode = isViewer ? "tokens" : metricMode
+	const { isViewer, metricMode, effectiveMetric: effectiveMode } = useDisplaySession()
 
 	const { from, to } = useDateRange()
 	const modelsQuery = useQuery({
@@ -159,13 +156,7 @@ export function ModelsPage(): React.JSX.Element {
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<Sparkline
-												data={
-													isViewer
-														? m.trend_tokens
-														: metricMode === "cost"
-															? (m.trend_cents ?? m.trend_tokens)
-															: m.trend_tokens
-												}
+												data={pickTrendSeries(m, isViewer, metricMode)}
 												color={rowColor}
 												height={22}
 											/>

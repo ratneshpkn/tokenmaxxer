@@ -1,3 +1,4 @@
+import { Cost } from "@/components/Cost"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { typographyVariants } from "@/components/ui/typography"
 import { cn, formatCompact } from "@/lib/utils"
@@ -88,10 +89,6 @@ function formatLabel(ymd: string): string {
 	return d
 		.toLocaleDateString("en-US", { month: "short", day: "2-digit", timeZone: "UTC" })
 		.toUpperCase()
-}
-
-function formatCents(cents: number): string {
-	return `$${(cents / 100).toFixed(2)}`
 }
 
 interface ActivityHeatmapProps {
@@ -233,7 +230,8 @@ export function ActivityHeatmap({ days, trendMode }: ActivityHeatmapProps): Reac
 												<div className="font-semibold text-fg">{formatLabel(day.date)}</div>
 												{trendMode === "usd" ? (
 													<div className="text-fg-muted font-medium">
-														{formatCents(totalCents)} · {formatCompact(totalTokens)} tok
+														<Cost cents={totalCents} digits={2} /> · {formatCompact(totalTokens)}{" "}
+														tok
 													</div>
 												) : (
 													<div className="text-fg-muted font-medium">
@@ -242,8 +240,8 @@ export function ActivityHeatmap({ days, trendMode }: ActivityHeatmapProps): Reac
 												)}
 												{trendMode === "usd" ? (
 													<div className="text-fg-muted text-[9px] mt-0.5">
-														CC {formatCents(day.cc_cents ?? 0)} · Cursor{" "}
-														{formatCents(day.cu_cents ?? 0)}
+														CC <Cost cents={day.cc_cents ?? 0} digits={2} /> · Cursor{" "}
+														<Cost cents={day.cu_cents ?? 0} digits={2} />
 													</div>
 												) : (
 													<div className="text-fg-muted text-[9px] mt-0.5">

@@ -28,8 +28,8 @@ import {
 } from "@/components/ui/table"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { pickTrendSeries, useDisplaySession } from "@/lib/display-session"
 import { useDateRange } from "@/lib/use-date-range"
-import { useMetricMode } from "@/lib/use-metric-mode"
 import { formatNumber } from "@/lib/utils"
 
 type SortKey = "email" | "cc_cents" | "cu_cents" | "total" | "gh_lines" | "prs"
@@ -40,10 +40,7 @@ export function UsersPage(): React.JSX.Element {
 	const paramTeamId = searchParams.get("teamId")
 
 	const { from, to } = useDateRange()
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
-	const isViewer = me ? me.role !== "admin" : false
-	const [metricMode] = useMetricMode()
-	const effectiveMode = isViewer ? "tokens" : metricMode
+	const { isViewer, metricMode, effectiveMetric: effectiveMode } = useDisplaySession()
 
 	const [selectedTeamId, setSelectedTeamId] = useState<string>(paramTeamId || "all")
 
@@ -385,13 +382,7 @@ export function UsersPage(): React.JSX.Element {
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<Sparkline
-												data={
-													isViewer
-														? r.trend_tokens
-														: metricMode === "cost"
-															? (r.trend_cents ?? r.trend_tokens)
-															: r.trend_tokens
-												}
+												data={pickTrendSeries(r, isViewer, metricMode)}
 												color="var(--amber)"
 												height={22}
 											/>

@@ -44,9 +44,7 @@ import {
 } from "@/components/ui/sidebar"
 import { Typography, typographyVariants } from "@/components/ui/typography"
 import { api } from "@/lib/api"
-import { useMetricMode } from "@/lib/use-metric-mode"
-import { usePrivacyMode } from "@/lib/use-privacy-mode"
-import { type Theme, useTheme } from "@/lib/use-theme"
+import { queryKeys, type Theme, useDisplaySession, useTheme } from "@/lib/display-session"
 import { cn } from "@/lib/utils"
 
 interface NavItem {
@@ -73,10 +71,7 @@ function initials(email: string | undefined): string {
 
 export function AppShell({ children }: { children: ReactNode }): React.JSX.Element {
 	const [location] = useLocation()
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
-	const isAdmin = me?.role === "admin"
-	const [privacyOn, togglePrivacy] = usePrivacyMode()
-	const [metricMode, toggleMetric] = useMetricMode()
+	const { me, isAdmin, privacyOn, togglePrivacy, metricMode, toggleMetric } = useDisplaySession()
 	const { theme, setTheme } = useTheme()
 
 	const isDateAwareRoute =
@@ -86,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }): React.JSX.Eleme
 		location.startsWith("/velocity")
 
 	const { data: alertCountData } = useQuery({
-		queryKey: ["alerts.count"],
+		queryKey: queryKeys.alertsCount,
 		queryFn: api.alerts.openCount,
 		enabled: isAdmin,
 		refetchInterval: 10000,

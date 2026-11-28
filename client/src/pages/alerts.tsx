@@ -18,7 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
-import { platformLabel } from "@/lib/platform"
+import { platformLabel, queryKeys } from "@/lib/display-session"
 import { formatDate } from "@/lib/utils"
 
 type Status = "open" | "acknowledged" | "resolved" | "all"
@@ -33,22 +33,22 @@ export function AlertsPage(): React.JSX.Element {
 	const [status, setStatus] = useState<Status>("open")
 	const qc = useQueryClient()
 	const { data = [], isLoading } = useQuery({
-		queryKey: ["alerts", status],
+		queryKey: [...queryKeys.alerts, status],
 		queryFn: () => api.alerts.list(status),
 	})
 
 	const ack = useMutation({
 		mutationFn: (id: string) => api.alerts.acknowledge(id),
 		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["alerts"] })
-			qc.invalidateQueries({ queryKey: ["dashboard.alerts"] })
+			qc.invalidateQueries({ queryKey: queryKeys.alerts })
+			qc.invalidateQueries({ queryKey: queryKeys.alertsCount })
 		},
 	})
 	const resolve = useMutation({
 		mutationFn: (id: string) => api.alerts.resolve(id),
 		onSuccess: () => {
-			qc.invalidateQueries({ queryKey: ["alerts"] })
-			qc.invalidateQueries({ queryKey: ["dashboard.alerts"] })
+			qc.invalidateQueries({ queryKey: queryKeys.alerts })
+			qc.invalidateQueries({ queryKey: queryKeys.alertsCount })
 		},
 	})
 
