@@ -1,71 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useLocation } from "wouter"
+import { useDebouncedKeyValidation, ValidationStatusPip } from "@/components/KeyValidation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { queryKeys } from "@/lib/display-session"
-
-type ValidationState = "idle" | "checking" | "ok" | "bad"
-
-function useDebouncedValidation(
-	value: string,
-	fn: (v: string, signal: AbortSignal) => Promise<{ ok: boolean; error?: string }>,
-	delay = 500,
-): { state: ValidationState; error: string | null } {
-	const [state, setState] = useState<ValidationState>("idle")
-	const [error, setError] = useState<string | null>(null)
-	const acRef = useRef<AbortController | null>(null)
-	const lastFingerprintRef = useRef<string>("")
-
-	useEffect(() => {
-		const fp = value.slice(-4)
-		if (!value || value.length < 8) {
-			setState("idle")
-			setError(null)
-			return
-		}
-		if (fp === lastFingerprintRef.current) return
-		setState("checking")
-		setError(null)
-
-		const t = setTimeout(async () => {
-			acRef.current?.abort()
-			const ac = new AbortController()
-			acRef.current = ac
-			try {
-				const r = await fn(value, ac.signal)
-				if (ac.signal.aborted) return
-				if (r.ok) {
-					setState("ok")
-					setError(null)
-					lastFingerprintRef.current = fp
-				} else {
-					setState("bad")
-					setError(r.error ?? "Invalid")
-				}
-			} catch (err) {
-				if (ac.signal.aborted) return
-				setState("bad")
-				setError(err instanceof Error ? err.message : String(err))
-			}
-		}, delay)
-
-		return () => clearTimeout(t)
-	}, [value, fn, delay])
-
-	return { state, error }
-}
-
-function StatusPip({ state }: { state: ValidationState }): React.JSX.Element | null {
-	if (state === "idle") return null
-	if (state === "checking")
-		return <span className="text-[10px] tracked text-fg-muted">⏳ CHECKING…</span>
-	if (state === "ok") return <span className="text-[10px] tracked text-mint">✓ VALID</span>
-	return <span className="text-[10px] tracked text-amber-hot">✗ INVALID</span>
-}
 
 export function SetupPage(): React.JSX.Element {
 	const [, navigate] = useLocation()
@@ -87,51 +29,10 @@ export function SetupPage(): React.JSX.Element {
 	const [ccThreshold, setCcThreshold] = useState(50)
 	const [cuThreshold, setCuThreshold] = useState(50)
 
-	const anthropicVal = useDebouncedValidation(anthropicKey, async (v, signal) => {
-		const r = await fetch("/api/setup/validate-key", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			credentials: "include",
-			body: JSON.stringify({ provider: "anthropic", key: v }),
-			signal,
-		})
-		return r.json()
-	})
-	const cursorVal = useDebouncedValidation(cursorKey, async (v, signal) => {
-		const r = await fetch("/api/setup/validate-key", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			credentials: "include",
-			body: JSON.stringify({ provider: "cursor", key: v }),
-			signal,
-		})
-		return r.json()
-	})
-	const slackVal = useDebouncedValidation(slackToken, async (v, signal) => {
-		if (!v) return { ok: true }
-		const r = await fetch("/api/setup/validate-key", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			credentials: "include",
-			body: JSON.stringify({ provider: "slack", key: v, channelId: slackChannel || undefined }),
-			signal,
-		})
-		return r.json()
-	})
-	const githubFingerprint = `${githubToken}|${githubOrg}`
-	const githubVal = useDebouncedValidation(githubFingerprint, async (fp, signal) => {
-		const [token, org] = fp.split("|")
-		if (!token) return { ok: true }
-		if (!org) return { ok: false, error: "Please enter your GitHub organization" }
-		const r = await fetch("/api/setup/validate-key", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			credentials: "include",
-			body: JSON.stringify({ provider: "github", key: token, org }),
-			signal,
-		})
-		return r.json()
-	})
+	const anthropicVal = useDebouncedKeyValidation(anthropicKey, "anthropic")
+	const cursorVal = useDebouncedKeyValidation(cursorKey, "cursor")
+	const slackVal = useDebouncedKeyValidation(slackToken, "slack", slackChannel || undefined)
+	const githubVal = useDebouncedKeyValidation(githubToken, "github", githubOrg || undefined)
 
 	const canSave =
 		orgName.trim().length > 0 &&
@@ -253,7 +154,7 @@ export function SetupPage(): React.JSX.Element {
 										<Label htmlFor="anthropic" className="text-[10px] tracked text-fg-muted">
 											ANTHROPIC ADMIN API KEY
 										</Label>
-										<StatusPip state={anthropicVal.state} />
+										<ValidationStatusPip state={anthropicVal.state} />
 									</div>
 									<Input
 										id="anthropic"
@@ -272,7 +173,7 @@ export function SetupPage(): React.JSX.Element {
 										<Label htmlFor="cursor" className="text-[10px] tracked text-fg-muted">
 											CURSOR ADMIN API KEY
 										</Label>
-										<StatusPip state={cursorVal.state} />
+										<ValidationStatusPip state={cursorVal.state} />
 									</div>
 									<Input
 										id="cursor"
@@ -299,7 +200,7 @@ export function SetupPage(): React.JSX.Element {
 										<Label htmlFor="githubToken" className="text-[10px] tracked text-fg-muted">
 											GITHUB PERSONAL ACCESS TOKEN
 										</Label>
-										<StatusPip state={githubVal.state} />
+										<ValidationStatusPip state={githubVal.state} />
 									</div>
 									<Input
 										id="githubToken"
@@ -336,7 +237,7 @@ export function SetupPage(): React.JSX.Element {
 										<Label htmlFor="slackToken" className="text-[10px] tracked text-fg-muted">
 											SLACK BOT TOKEN
 										</Label>
-										<StatusPip state={slackVal.state} />
+										<ValidationStatusPip state={slackVal.state} />
 									</div>
 									<Input
 										id="slackToken"

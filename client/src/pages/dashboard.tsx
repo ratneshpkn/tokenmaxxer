@@ -1,17 +1,9 @@
 import { useQuery } from "@tanstack/react-query"
 import { Share2 } from "lucide-react"
 import { useMemo, useState } from "react"
-import {
-	Bar,
-	BarChart,
-	CartesianGrid,
-	ResponsiveContainer,
-	Tooltip,
-	type TooltipPayloadEntry,
-	XAxis,
-	YAxis,
-} from "recharts"
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Link } from "wouter"
+import { ChartTooltip } from "@/components/ChartTooltip"
 import { Cost } from "@/components/Cost"
 import { FlexCardModal } from "@/components/FlexCardModal"
 import { MetricPair } from "@/components/MetricPair"
@@ -32,41 +24,6 @@ import { formatCompact } from "@/lib/utils"
 
 const C_CC = "var(--amber)"
 const C_CU = "var(--sky)"
-
-function StatTooltip({
-	active,
-	payload,
-	mode,
-}: {
-	active?: boolean
-	payload?: readonly TooltipPayloadEntry[]
-	mode: "usd" | "tokens"
-}): React.JSX.Element | null {
-	if (!active || !payload?.length) return null
-	return (
-		<div className="bg-bg/95 border border-line-strong px-3 py-2 text-xs tabular">
-			<div className="text-fg-muted tracked-sm text-[9px] mb-1">
-				{payload[0].payload?.date ?? ""}
-			</div>
-			{payload.map((p) => {
-				const dataKeyStr = typeof p.dataKey === "function" ? "" : (p.dataKey ?? "")
-				return (
-					<div key={dataKeyStr} className="flex items-center justify-between gap-4">
-						<span className="flex items-center gap-1.5">
-							<span className="w-2 h-2" style={{ background: p.fill }} />
-							<span className="text-fg-muted">{dataKeyStr}</span>
-						</span>
-						<span className="text-fg">
-							{mode === "usd"
-								? `$${Number(p.value).toFixed(2)}`
-								: Math.abs(Number(p.value)).toLocaleString()}
-						</span>
-					</div>
-				)
-			})}
-		</div>
-	)
-}
 
 export function DashboardPage(): React.JSX.Element {
 	const [showFlexCard, setShowFlexCard] = useState(false)
@@ -366,7 +323,14 @@ export function DashboardPage(): React.JSX.Element {
 								/>
 								<Tooltip
 									cursor={{ fill: "color-mix(in oklch, var(--fg) 4%, transparent)" }}
-									content={(p) => <StatTooltip {...p} mode={trendMode} />}
+									content={(p) => (
+										<ChartTooltip
+											{...p}
+											formatValue={(val) =>
+												trendMode === "usd" ? `$${val.toFixed(2)}` : Math.abs(val).toLocaleString()
+											}
+										/>
+									)}
 								/>
 								<Bar dataKey="Claude Code" stackId="s" fill={C_CC} isAnimationActive={animating} />
 								<Bar dataKey="Cursor" stackId="s" fill={C_CU} isAnimationActive={animating} />
@@ -408,7 +372,9 @@ export function DashboardPage(): React.JSX.Element {
 								/>
 								<Tooltip
 									cursor={{ fill: "color-mix(in oklch, var(--fg) 4%, transparent)" }}
-									content={(p) => <StatTooltip {...p} mode="tokens" />}
+									content={(p) => (
+										<ChartTooltip {...p} formatValue={(val) => Math.abs(val).toLocaleString()} />
+									)}
 								/>
 								<Bar dataKey="PRs Merged" fill="var(--mint)" isAnimationActive={animating} />
 							</BarChart>

@@ -7,6 +7,7 @@ import { SearchInput } from "@/components/SearchInput"
 import { SortHeader } from "@/components/SortHeader"
 import { Sparkline } from "@/components/Sparkline"
 import { TableStateRow } from "@/components/TableStateRow"
+import { TeamFilterDropdown } from "@/components/TeamFilterDropdown"
 import { UserLink } from "@/components/UserLink"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -154,43 +155,11 @@ export function UsersPage(): React.JSX.Element {
 						onChange={setFilter}
 						className="w-52"
 					/>
-					{teams.length > 0 ? (
-						<DropdownMenu>
-							<DropdownMenuTrigger asChild>
-								<Button
-									variant="outline"
-									size="sm"
-									className="h-8 text-xs font-mono bg-bg border-line shrink-0"
-								>
-									{selectedTeamId === "all"
-										? "ALL TEAMS"
-										: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
-								</Button>
-							</DropdownMenuTrigger>
-							<DropdownMenuContent align="end" className="w-48 font-mono text-xs">
-								<DropdownMenuLabel>Filter by Team</DropdownMenuLabel>
-								<DropdownMenuSeparator />
-								<DropdownMenuCheckboxItem
-									checked={selectedTeamId === "all"}
-									onCheckedChange={() => setSelectedTeamId("all")}
-								>
-									ALL TEAMS
-								</DropdownMenuCheckboxItem>
-								<DropdownMenuSeparator />
-								{teams.map((t) => (
-									<DropdownMenuCheckboxItem
-										key={t.id}
-										checked={selectedTeamId === t.id}
-										onCheckedChange={() =>
-											setSelectedTeamId(selectedTeamId === t.id ? "all" : t.id)
-										}
-									>
-										{t.name}
-									</DropdownMenuCheckboxItem>
-								))}
-							</DropdownMenuContent>
-						</DropdownMenu>
-					) : null}
+					<TeamFilterDropdown
+						teams={teams}
+						selectedTeamId={selectedTeamId}
+						onSelect={setSelectedTeamId}
+					/>
 					<DropdownMenu>
 						<DropdownMenuTrigger asChild>
 							<Button variant="outline" size="icon" className="shrink-0 size-8 bg-bg border-line">

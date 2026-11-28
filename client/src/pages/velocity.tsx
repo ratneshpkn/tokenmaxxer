@@ -7,26 +7,18 @@ import {
 	Line,
 	ResponsiveContainer,
 	Tooltip,
-	type TooltipPayloadEntry,
 	XAxis,
 	YAxis,
 } from "recharts"
 import { useLocation, useSearch } from "wouter"
+import { ChartTooltip } from "@/components/ChartTooltip"
 import { Cost } from "@/components/Cost"
 import { MetricPair } from "@/components/MetricPair"
 import { SectionHeader } from "@/components/SectionHeader"
 import { SortHeader } from "@/components/SortHeader"
 import { TableStateRow } from "@/components/TableStateRow"
-import { Button } from "@/components/ui/button"
+import { TeamFilterDropdown } from "@/components/TeamFilterDropdown"
 import { Card } from "@/components/ui/card"
-import {
-	DropdownMenu,
-	DropdownMenuCheckboxItem,
-	DropdownMenuContent,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
 	Table,
@@ -56,43 +48,6 @@ const CATEGORY_COLORS: Record<string, string> = {
 	chore: "var(--fg-subtle)",
 	docs: "var(--chart-5)",
 	other: "var(--line-strong)",
-}
-
-function StatTooltip({
-	active,
-	payload,
-	mode,
-}: {
-	active?: boolean
-	payload?: readonly TooltipPayloadEntry[]
-	mode: "usd" | "tokens"
-}): React.JSX.Element | null {
-	if (!active || !payload?.length) return null
-	const pt = payload[0].payload
-	return (
-		<div className="bg-bg/95 border border-line-strong px-3 py-2 text-xs tabular">
-			<div className="text-fg-muted tracked-sm text-[9px] mb-1">{pt?.date ?? ""}</div>
-			{payload.map((p) => {
-				const key = String(p.dataKey ?? "")
-				const isSpend = key.includes("Spend") || key.includes("Tokens")
-				return (
-					<div key={key} className="flex items-center justify-between gap-4">
-						<span className="flex items-center gap-1.5">
-							<span className="w-2 h-2" style={{ background: p.color || (p.fill as string) }} />
-							<span className="text-fg-muted">{key}</span>
-						</span>
-						<span className="text-fg">
-							{isSpend
-								? mode === "usd"
-									? `$${Number(p.value).toFixed(2)}`
-									: formatCompact(Number(p.value))
-								: `${Number(p.value)} pts`}
-						</span>
-					</div>
-				)
-			})}
-		</div>
-	)
 }
 
 export function VelocityPage(): React.JSX.Element {
@@ -180,41 +135,11 @@ export function VelocityPage(): React.JSX.Element {
 							: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
 					</span>
 				</Typography>
-				{teams.length > 0 && (
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button
-								variant="outline"
-								size="sm"
-								className="h-8 text-xs font-mono bg-bg border-line shrink-0"
-							>
-								{selectedTeamId === "all"
-									? "ALL TEAMS"
-									: (teams.find((t) => t.id === selectedTeamId)?.name.toUpperCase() ?? "TEAM")}
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end" className="w-48 font-mono text-xs">
-							<DropdownMenuLabel>Filter by Team</DropdownMenuLabel>
-							<DropdownMenuSeparator />
-							<DropdownMenuCheckboxItem
-								checked={selectedTeamId === "all"}
-								onCheckedChange={() => setSelectedTeamId("all")}
-							>
-								ALL TEAMS
-							</DropdownMenuCheckboxItem>
-							<DropdownMenuSeparator />
-							{teams.map((t) => (
-								<DropdownMenuCheckboxItem
-									key={t.id}
-									checked={selectedTeamId === t.id}
-									onCheckedChange={() => setSelectedTeamId(t.id)}
-								>
-									{t.name.toUpperCase()}
-								</DropdownMenuCheckboxItem>
-							))}
-						</DropdownMenuContent>
-					</DropdownMenu>
-				)}
+				<TeamFilterDropdown
+					teams={teams}
+					selectedTeamId={selectedTeamId}
+					onSelect={setSelectedTeamId}
+				/>
 			</div>
 
 			{/* ── Headline KPI Band ───────────────────────────────────────── */}
@@ -384,7 +309,18 @@ export function VelocityPage(): React.JSX.Element {
 								/>
 								<Tooltip
 									cursor={{ fill: "color-mix(in oklch, var(--fg) 4%, transparent)" }}
-									content={(p) => <StatTooltip {...p} mode={trendMode} />}
+									content={(p) => (
+										<ChartTooltip
+											{...p}
+											formatValue={(val, key) =>
+												key.includes("Spend") || key.includes("Tokens")
+													? trendMode === "usd"
+														? `$${val.toFixed(2)}`
+														: formatCompact(val)
+													: `${val} pts`
+											}
+										/>
+									)}
 								/>
 								<Bar
 									yAxisId="impact"

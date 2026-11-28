@@ -1,9 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, Pencil, Share2, X } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import {
-	Area,
-	AreaChart,
 	Bar,
 	BarChart,
 	CartesianGrid,
@@ -18,21 +16,10 @@ import { ActivityHeatmap, GithubHeatmap } from "@/components/CalendarHeatmap"
 import { Cost } from "@/components/Cost"
 import { FlexCardModal } from "@/components/FlexCardModal"
 import { MetricPair } from "@/components/MetricPair"
-import { SearchInput } from "@/components/SearchInput"
 import { SectionHeader } from "@/components/SectionHeader"
-import { SortHeader } from "@/components/SortHeader"
-import { Sparkline } from "@/components/Sparkline"
-import { TableStateRow } from "@/components/TableStateRow"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import {
-	Dialog,
-	DialogContent,
-	DialogDescription,
-	DialogHeader,
-	DialogTitle,
-} from "@/components/ui/dialog"
 import {
 	Table,
 	TableBody,
@@ -42,6 +29,8 @@ import {
 	TableRow,
 } from "@/components/ui/table"
 import { Typography } from "@/components/ui/typography"
+import { PrComplexitySection } from "@/components/user-detail/PrComplexitySection"
+import { UserModelsSection } from "@/components/user-detail/UserModelsSection"
 import { severity } from "@/lib/alert-severity"
 import { api } from "@/lib/api"
 import { daysBetween } from "@/lib/date-range"
@@ -49,10 +38,7 @@ import { platformLabel, useDisplaySession } from "@/lib/display-session"
 import { buildModelTrends, colorForModel, totalTokens } from "@/lib/model-trends"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
-import { useTableState } from "@/lib/use-table-state"
-import { cn, formatCompact, formatDate, formatNumber } from "@/lib/utils"
-
-type ModelSortKey = "model" | "value" | "share"
+import { formatCompact, formatDate, formatNumber } from "@/lib/utils"
 
 function StatBlock({ label, value }: { label: string; value: React.ReactNode }): React.JSX.Element {
 	return (
@@ -189,7 +175,6 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 		queryFn: () => api.users.prComplexity(email, from, to),
 	})
 	const prComplexity = prComplexityQuery.data
-	const [viewPrsOpen, setViewPrsOpen] = useState(false)
 	const alertsQuery = useQuery({
 		queryKey: ["users.alerts", email],
 		queryFn: () => api.users.alertsByEmail(email, 365, 50),
@@ -223,197 +208,6 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const totalCents = ccCents + cuCents
 
 	const { chartModels, topModels, modelTrendsData } = buildModelTrends(ccRows, cuRows, trendMode)
-
-	const leaderboardData = useMemo(() => {
-		if (!usage) return []
-
-		const modelMap = new Map<
-			string,
-			{
-				model: string
-				platforms: Set<"claude_code" | "cursor">
-				cents: number
-				tokens: number
-				dailyValues: Map<string, number>
-			}
-		>()
-
-		// Union of all dates in chronological order
-		const ccDates = ccRows.map((r) => r.date)
-		const cuDates = cuRows.map((r) => r.date)
-		const allDates = [...new Set([...ccDates, ...cuDates])].sort()
-
-		const getOrCreate = (modelName: string) => {
-			let entry = modelMap.get(modelName)
-			if (!entry) {
-				entry = {
-					model: modelName,
-					platforms: new Set(),
-					cents: 0,
-					tokens: 0,
-					dailyValues: new Map<string, number>(),
-				}
-				modelMap.set(modelName, entry)
-			}
-			return entry
-		}
-
-		ccRows.forEach((r) => {
-			const m = r.model ?? "unknown"
-			const entry = getOrCreate(m)
-			entry.platforms.add("claude_code")
-			entry.cents += Number(r.estimated_cost_cents ?? 0)
-			const tokens = totalTokens(r)
-			entry.tokens += tokens
-
-			const val = trendMode === "tokens" ? tokens : Number(r.estimated_cost_cents ?? 0)
-			entry.dailyValues.set(r.date, (entry.dailyValues.get(r.date) ?? 0) + val)
-		})
-
-		cuRows.forEach((r) => {
-			const m = r.model ?? "unknown"
-			const entry = getOrCreate(m)
-			entry.platforms.add("cursor")
-			entry.cents += Number(r.charged_cents ?? 0)
-			const tokens = totalTokens(r)
-			entry.tokens += tokens
-
-			const val = trendMode === "tokens" ? tokens : Number(r.charged_cents ?? 0)
-			entry.dailyValues.set(r.date, (entry.dailyValues.get(r.date) ?? 0) + val)
-		})
-
-		const totalTokensSum = ccTokens + cuTokens
-
-		return [...modelMap.values()].map((item) => {
-			const trend = allDates.map((date) => item.dailyValues.get(date) ?? 0)
-			const share =
-				trendMode === "tokens"
-					? totalTokensSum > 0
-						? (item.tokens / totalTokensSum) * 100
-						: 0
-					: totalCents > 0
-						? (item.cents / totalCents) * 100
-						: 0
-			return {
-				model: item.model,
-				platforms: [...item.platforms],
-				cents: item.cents,
-				tokens: item.tokens,
-				share,
-				trend,
-			}
-		})
-	}, [ccRows, cuRows, usage, trendMode, ccTokens, cuTokens, totalCents])
-
-	const rawModelData = useMemo(() => {
-		if (!rawModelsQuery.data) return []
-		const modelMap = new Map<
-			string,
-			{
-				model: string
-				platforms: Set<"claude_code" | "cursor">
-				cents: number
-				tokens: number
-			}
-		>()
-
-		const getOrCreate = (modelName: string) => {
-			let entry = modelMap.get(modelName)
-			if (!entry) {
-				entry = {
-					model: modelName,
-					platforms: new Set(),
-					cents: 0,
-					tokens: 0,
-				}
-				modelMap.set(modelName, entry)
-			}
-			return entry
-		}
-
-		rawModelsQuery.data.claude_code.forEach((r) => {
-			const m = r.model ?? "unknown"
-			const entry = getOrCreate(m)
-			entry.platforms.add("claude_code")
-			entry.cents += Number(r.estimated_cost_cents ?? 0)
-			const tokens =
-				r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_creation_tokens
-			entry.tokens += tokens
-		})
-
-		rawModelsQuery.data.cursor.forEach((r) => {
-			const m = r.model ?? "unknown"
-			const entry = getOrCreate(m)
-			entry.platforms.add("cursor")
-			entry.cents += Number(r.charged_cents ?? 0)
-			const tokens = r.input_tokens + r.output_tokens + r.cache_read_tokens + r.cache_write_tokens
-			entry.tokens += tokens
-		})
-
-		const totalTokensSum = ccTokens + cuTokens
-
-		return [...modelMap.values()].map((item) => {
-			const share =
-				trendMode === "tokens"
-					? totalTokensSum > 0
-						? (item.tokens / totalTokensSum) * 100
-						: 0
-					: totalCents > 0
-						? (item.cents / totalCents) * 100
-						: 0
-			return {
-				model: item.model,
-				platforms: [...item.platforms],
-				cents: item.cents,
-				tokens: item.tokens,
-				share,
-			}
-		})
-	}, [rawModelsQuery.data, trendMode, ccTokens, cuTokens, totalCents])
-
-	const modelSortValue = (
-		m: { model: string; tokens: number; cents: number; share: number },
-		key: ModelSortKey,
-	): string | number => {
-		switch (key) {
-			case "model":
-				return m.model
-			case "value":
-				return trendMode === "tokens" ? m.tokens : m.cents
-			case "share":
-				return m.share
-		}
-	}
-
-	const {
-		rows: rawModelRows,
-		filter: rawModelFilter,
-		setFilter: setRawModelFilter,
-		sortKey: rawModelSortKey,
-		sortDir: rawModelSortDir,
-		toggleSort: toggleRawModelSort,
-	} = useTableState({
-		data: rawModelData,
-		initialSortKey: "value" as ModelSortKey,
-		ascKeys: ["model"],
-		filterBy: (m, q) => m.model.toLowerCase().includes(q),
-		sortValue: modelSortValue,
-	})
-
-	const {
-		rows: modelRows,
-		filter: modelFilter,
-		setFilter: setModelFilter,
-		sortKey: modelSortKey,
-		sortDir: modelSortDir,
-		toggleSort: toggleModelSort,
-	} = useTableState({
-		data: leaderboardData,
-		initialSortKey: "value" as ModelSortKey,
-		ascKeys: ["model"],
-		filterBy: (m, q) => m.model.toLowerCase().includes(q),
-		sortValue: modelSortValue,
-	})
 
 	const heatDays = heatmapQuery.data ?? []
 	const activeDays = heatDays.filter((d) => d.cc_tokens + d.cu_tokens > 0).length
@@ -737,253 +531,8 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 
 			{/* PR Workload & Complexity */}
 			{prComplexity && prComplexity.totalEnrichedPrs > 0 && (
-				<Card className="overflow-hidden">
-					<SectionHeader
-						title="PR WORKLOAD & COMPLEXITY"
-						subtitle={`${prComplexity.totalEnrichedPrs} AI-analyzed Pull Requests`}
-						action={
-							<Button
-								variant="outline"
-								size="sm"
-								className="text-[10px] font-mono border-line hover:border-amber hover:text-amber"
-								onClick={() => setViewPrsOpen(true)}
-							>
-								VIEW PRs ({prComplexity.totalEnrichedPrs})
-							</Button>
-						}
-					/>
-					<div className="p-5 space-y-6">
-						{/* Metrics Summary Row */}
-						<div className="grid grid-cols-1 md:grid-cols-4 gap-4 pb-5 border-b border-line">
-							<div className="bg-bg p-4 flex flex-col justify-between border border-line rounded-xs">
-								<div className="text-[10px] tracked text-fg-muted font-mono">
-									WEIGHTED COMPLEXITY (1.0-5.0)
-								</div>
-								<div className="flex items-baseline gap-2 mt-2">
-									<span className="font-mono text-3xl font-medium text-amber font-bold">
-										{prComplexity.weightedAvgComplexity ?? prComplexity.averageComplexity ?? "—"}
-									</span>
-									<span className="text-xs font-mono text-fg-muted">/ 5.0</span>
-									<Badge
-										variant="outline"
-										className={cn(
-											"ml-auto text-[9px] font-mono border",
-											(prComplexity.weightedAvgComplexity ?? 0) <= 2
-												? "bg-mint/10 text-mint border-mint/30"
-												: (prComplexity.weightedAvgComplexity ?? 0) <= 3.5
-													? "bg-amber-hot/10 text-amber-hot border-amber-hot/30"
-													: "bg-crimson/10 text-crimson border-crimson/30",
-										)}
-									>
-										{(prComplexity.weightedAvgComplexity ?? 0) <= 2
-											? "MODEST DEPTH"
-											: (prComplexity.weightedAvgComplexity ?? 0) <= 3.2
-												? "SOLID DEPTH"
-												: "HIGH DEPTH"}
-									</Badge>
-								</div>
-								<div className="text-[9px] font-mono text-fg-muted mt-1">
-									Simple Avg: {prComplexity.averageComplexity ?? "—"}
-								</div>
-							</div>
-
-							<div className="bg-bg p-4 flex flex-col justify-between border border-line rounded-xs">
-								<div className="text-[10px] tracked text-fg-muted font-mono">
-									TOTAL IMPACT POINTS
-								</div>
-								<div className="flex items-baseline justify-between mt-2">
-									<span className="font-mono text-3xl font-medium text-fg">
-										{prComplexity.totalImpactPoints ?? 0}
-									</span>
-									<span className="text-[10px] font-mono text-fg-muted">
-										pts ({prComplexity.totalEnrichedPrs} PRs)
-									</span>
-								</div>
-								<div className="text-[9px] font-mono text-fg-muted mt-1">
-									Substantive (L4+L5): {prComplexity.substantivePrCount ?? 0} PRs
-								</div>
-							</div>
-
-							<div className="bg-bg p-4 flex flex-col justify-between border border-line rounded-xs col-span-1 md:col-span-2">
-								<div className="flex items-center justify-between text-[10px] tracked text-fg-muted font-mono">
-									<span>SCORE DISTRIBUTION (1-5)</span>
-									<span className="text-[9px] text-fg-muted font-normal font-mono">
-										{prComplexity.totalEnrichedPrs} Enriched PRs
-									</span>
-								</div>
-								<div className="flex items-end gap-2 h-14 mt-2 pt-1">
-									{prComplexity.distribution.map((d) => {
-										const maxCount = Math.max(
-											...prComplexity.distribution.map((item) => item.count),
-											1,
-										)
-										const pct = (d.count / maxCount) * 100
-										const total = prComplexity.totalEnrichedPrs || 1
-										const sharePct = ((d.count / total) * 100).toFixed(0)
-
-										const colorClass =
-											d.score === 1
-												? "bg-fg-subtle/30 group-hover:bg-fg-subtle/50"
-												: d.score === 2
-													? "bg-mint/60 group-hover:bg-mint/80"
-													: d.score === 3
-														? "bg-sky/70 group-hover:bg-sky/90"
-														: d.score === 4
-															? "bg-amber/80 group-hover:bg-amber"
-															: "bg-amber-hot group-hover:bg-amber-hot/90"
-
-										return (
-											<div
-												key={d.score}
-												className="flex-1 flex flex-col items-center gap-0.5 group relative cursor-pointer"
-												title={`Score ${d.score}: ${d.count} PRs (${sharePct}%)`}
-											>
-												<span className="text-[9px] font-mono font-medium text-fg-muted group-hover:text-fg transition-colors">
-													{d.count}
-												</span>
-												<div className="w-full bg-line/40 rounded-xs overflow-hidden flex flex-col justify-end h-8 p-0.5">
-													<div
-														className={cn(
-															"w-full rounded-xs transition-all duration-300",
-															colorClass,
-														)}
-														style={{ height: `${Math.max(pct, d.count > 0 ? 12 : 0)}%` }}
-													/>
-												</div>
-												<span className="text-[9px] font-mono text-fg-muted group-hover:text-fg font-medium transition-colors">
-													L{d.score}
-												</span>
-											</div>
-										)
-									})}
-								</div>
-							</div>
-						</div>
-
-						{/* Average Complexity Trend Graph */}
-						{prComplexity.trend && prComplexity.trend.length > 0 && (
-							<div>
-								<div className="text-[10px] font-mono text-fg-muted mb-3 uppercase tracking-wider">
-									Average Complexity Trend Over Time
-								</div>
-								<div className="h-48 w-full bg-bg/50 border border-line rounded-xs p-3">
-									<ResponsiveContainer width="100%" height="100%">
-										<AreaChart
-											data={prComplexity.trend}
-											margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-										>
-											<defs>
-												<linearGradient id="complexityGrad" x1="0" y1="0" x2="0" y2="1">
-													<stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
-													<stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-												</linearGradient>
-											</defs>
-											<CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
-											<XAxis
-												dataKey="date"
-												stroke="var(--fg-subtle)"
-												tick={{ fontSize: 10, fontFamily: "monospace" }}
-											/>
-											<YAxis
-												domain={[1, 5]}
-												ticks={[1, 2, 3, 4, 5]}
-												stroke="var(--fg-subtle)"
-												tick={{ fontSize: 10, fontFamily: "monospace" }}
-											/>
-											<Tooltip
-												contentStyle={{
-													backgroundColor: "var(--bg-elev)",
-													borderColor: "var(--line)",
-													borderRadius: "4px",
-													fontSize: "12px",
-												}}
-												formatter={(value) => [`${value ?? 0} / 5.0`, "Avg Complexity"]}
-												labelFormatter={(label) => `Date: ${label}`}
-											/>
-											<Area
-												type="monotone"
-												dataKey="averageComplexity"
-												stroke="#f59e0b"
-												strokeWidth={2}
-												fillOpacity={1}
-												fill="url(#complexityGrad)"
-											/>
-										</AreaChart>
-									</ResponsiveContainer>
-								</div>
-							</div>
-						)}
-					</div>
-				</Card>
+				<PrComplexitySection email={email} prComplexity={prComplexity} />
 			)}
-
-			{/* View PRs Dialog Modal */}
-			<Dialog open={viewPrsOpen} onOpenChange={setViewPrsOpen}>
-				<DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto bg-bg border-line">
-					<DialogHeader>
-						<DialogTitle className="font-mono text-sm uppercase text-fg">
-							CLASSIFIED PULL REQUESTS · {email}
-						</DialogTitle>
-						<DialogDescription className="text-xs text-fg-muted">
-							Detailed AI classification, complexity rating, and rationale for pull requests.
-						</DialogDescription>
-					</DialogHeader>
-					<div className="mt-2 border border-line rounded-xs overflow-x-auto">
-						<Table className="w-full tabular text-xs">
-							<TableHeader className="border-b border-line bg-elev2/40">
-								<TableRow>
-									<TableHead className="w-[180px]">PULL REQUEST</TableHead>
-									<TableHead className="w-[120px]">CATEGORY</TableHead>
-									<TableHead className="w-[110px]">SCORE</TableHead>
-									<TableHead>SUMMARY & RATIONALE</TableHead>
-								</TableRow>
-							</TableHeader>
-							<TableBody>
-								{prComplexity?.recentPrs.map((pr) => (
-									<TableRow key={`${pr.repo}#${pr.number}`} className="border-line/60">
-										<TableCell className="font-mono text-fg font-medium">
-											{pr.repo}#{pr.number}
-										</TableCell>
-										<TableCell>
-											<Badge
-												variant="outline"
-												className="text-[10px] font-mono uppercase bg-elev border-line text-fg-muted"
-											>
-												{pr.category || "uncategorized"}
-											</Badge>
-										</TableCell>
-										<TableCell>
-											{pr.complexityScore != null ? (
-												<Badge
-													variant="outline"
-													className={cn(
-														"text-[10px] font-mono border",
-														pr.complexityScore <= 2
-															? "bg-mint/10 text-mint border-mint/30"
-															: pr.complexityScore <= 3
-																? "bg-amber-hot/10 text-amber-hot border-amber-hot/30"
-																: "bg-crimson/10 text-crimson border-crimson/30",
-													)}
-												>
-													{pr.complexityScore} / 5
-												</Badge>
-											) : (
-												<span className="text-[10px] font-mono text-fg-muted">—</span>
-											)}
-										</TableCell>
-										<TableCell className="text-fg-muted text-xs py-2.5">
-											<div className="font-medium text-fg">{pr.summary || pr.title}</div>
-											{pr.complexityReason && (
-												<div className="text-xs text-fg-muted mt-0.5">{pr.complexityReason}</div>
-											)}
-										</TableCell>
-									</TableRow>
-								))}
-							</TableBody>
-						</Table>
-					</div>
-				</DialogContent>
-			</Dialog>
 
 			{/* Model Recommendations */}
 			{recommendations.length > 0 && (
@@ -1027,174 +576,20 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 				</Card>
 			)}
 
-			{/* Model Usage Leaderboard */}
-			<Card className="overflow-hidden">
-				<SectionHeader
-					title="TOP MODELS"
-					subtitle={winLabel}
-					action={
-						<SearchInput value={modelFilter} onChange={setModelFilter} placeholder="filter…" />
-					}
-				/>
-				<Table className="w-full tabular text-xs table-fixed">
-					<TableHeader className="border-b border-line bg-elev2/40">
-						<TableRow>
-							<TableHead className="w-14 text-right">#</TableHead>
-							<SortHeader
-								label="MODEL"
-								active={modelSortKey === "model"}
-								dir={modelSortDir}
-								onClick={() => toggleModelSort("model")}
-							/>
-							<SortHeader
-								label="VALUE"
-								active={modelSortKey === "value"}
-								dir={modelSortDir}
-								onClick={() => toggleModelSort("value")}
-								align="right"
-							/>
-							<SortHeader
-								label="SHARE"
-								active={modelSortKey === "share"}
-								dir={modelSortDir}
-								onClick={() => toggleModelSort("share")}
-								align="right"
-							/>
-							<TableHead className="w-[140px]">TREND</TableHead>
-						</TableRow>
-					</TableHeader>
-					<TableBody>
-						{usageQuery.isLoading || modelRows.length === 0 ? (
-							<TableStateRow
-								colSpan={5}
-								isLoading={usageQuery.isLoading}
-								emptyText="no models in window"
-							/>
-						) : (
-							modelRows.map((m, i) => {
-								return (
-									<TableRow key={m.model}>
-										<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
-											{String(i + 1).padStart(3, "0")}
-										</TableCell>
-										<TableCell className="px-3 py-2.5">
-											<Link
-												href={`/models/${encodeURIComponent(m.model)}`}
-												className="flex items-center min-w-0 group"
-											>
-												<span className="flex items-center gap-1.5 min-w-0">
-													<span className="flex items-center gap-1 flex-shrink-0">
-														{m.platforms.includes("claude_code") && (
-															<span className="w-1.5 h-1.5 bg-amber" />
-														)}
-														{m.platforms.includes("cursor") && (
-															<span className="w-1.5 h-1.5 bg-sky" />
-														)}
-													</span>
-													<span className="text-fg truncate group-hover:text-amber transition-colors">
-														{m.model}
-													</span>
-												</span>
-											</Link>
-										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg">
-											<MetricPair cents={isViewer ? null : m.cents} tokens={m.tokens} digits={2} />
-										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg-muted text-xs">
-											{m.share.toFixed(1)}%
-										</TableCell>
-										<TableCell className="px-3 py-2.5">
-											<Sparkline data={m.trend} color="var(--fg-muted)" height={22} />
-										</TableCell>
-									</TableRow>
-								)
-							})
-						)}
-					</TableBody>
-				</Table>
-			</Card>
-
-			{/* Raw Models Breakdown */}
-			<Card className="overflow-hidden">
-				<SectionHeader
-					title="RAW MODELS BREAKDOWN"
-					subtitle={winLabel}
-					action={
-						<SearchInput
-							value={rawModelFilter}
-							onChange={setRawModelFilter}
-							placeholder="filter…"
-						/>
-					}
-				/>
-				<Table className="w-full tabular text-xs table-fixed">
-					<TableHeader className="border-b border-line bg-elev2/40">
-						<TableRow>
-							<TableHead className="w-14 text-right">#</TableHead>
-							<SortHeader
-								label="RAW MODEL"
-								active={rawModelSortKey === "model"}
-								dir={rawModelSortDir}
-								onClick={() => toggleRawModelSort("model")}
-							/>
-							<SortHeader
-								label="VALUE"
-								active={rawModelSortKey === "value"}
-								dir={rawModelSortDir}
-								onClick={() => toggleRawModelSort("value")}
-								align="right"
-							/>
-							<SortHeader
-								label="SHARE"
-								active={rawModelSortKey === "share"}
-								dir={rawModelSortDir}
-								onClick={() => toggleRawModelSort("share")}
-								align="right"
-							/>
-						</TableRow>
-					</TableHeader>
-					<TableBody>
-						{rawModelsQuery.isLoading || rawModelRows.length === 0 ? (
-							<TableStateRow
-								colSpan={4}
-								isLoading={rawModelsQuery.isLoading}
-								emptyText="no raw models in window"
-							/>
-						) : (
-							rawModelRows.map((m, i) => {
-								return (
-									<TableRow key={m.model}>
-										<TableCell className="px-3 py-2.5 text-right text-xs tabular text-fg-subtle">
-											{String(i + 1).padStart(3, "0")}
-										</TableCell>
-										<TableCell className="px-3 py-2.5">
-											<div className="flex items-center min-w-0">
-												<span className="flex items-center gap-1.5 min-w-0">
-													<span className="flex items-center gap-1 flex-shrink-0">
-														{m.platforms.includes("claude_code") && (
-															<span className="w-1.5 h-1.5 bg-amber" />
-														)}
-														{m.platforms.includes("cursor") && (
-															<span className="w-1.5 h-1.5 bg-sky" />
-														)}
-													</span>
-													<span className="text-fg truncate font-mono">{m.model}</span>
-												</span>
-											</div>
-										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg">
-											<MetricPair cents={isViewer ? null : m.cents} tokens={m.tokens} digits={2} />
-										</TableCell>
-										<TableCell className="px-3 py-2.5 text-right text-fg-muted text-xs">
-											{m.share.toFixed(1)}%
-										</TableCell>
-									</TableRow>
-								)
-							})
-						)}
-					</TableBody>
-				</Table>
-			</Card>
+			{/* Model Usage Leaderboard & Raw Models Breakdown */}
+			<UserModelsSection
+				ccRows={ccRows}
+				cuRows={cuRows}
+				hasUsage={Boolean(usage)}
+				usageLoading={usageQuery.isLoading}
+				rawModels={rawModelsQuery.data}
+				rawModelsLoading={rawModelsQuery.isLoading}
+				trendMode={trendMode}
+				isViewer={isViewer}
+				totalCents={totalCents}
+				totalTokensSum={ccTokens + cuTokens}
+				winLabel={winLabel}
+			/>
 
 			{/* Alert history (admin-only) */}
 			{isAdmin ? (

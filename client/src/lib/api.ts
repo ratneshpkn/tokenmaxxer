@@ -83,16 +83,35 @@ export const api = {
 
 	setup: {
 		status: () => request<{ setupCompleted: boolean }>("/api/setup/status"),
-		validateKey: (
+		validateKey: async (
 			provider: "anthropic" | "cursor" | "slack" | "github",
 			key: string,
 			channelId?: string,
 			org?: string,
-		) =>
-			request<{ ok: boolean; error?: string }>("/api/setup/validate-key", {
+			signal?: AbortSignal,
+		): Promise<{ ok: boolean; error?: string }> => {
+			const res = await fetch("/api/setup/validate-key", {
 				method: "POST",
+				credentials: "include",
+				headers: { "content-type": "application/json", accept: "application/json" },
 				body: JSON.stringify({ provider, key, channelId, org }),
-			}),
+				signal,
+			})
+			if (res.status === 401) {
+				window.location.href = "/login"
+				throw new Error("Unauthorized")
+			}
+			const data = (await res.json().catch(() => null)) as {
+				ok?: boolean
+				error?: string
+				message?: string
+			} | null
+			if (res.ok && data?.ok) return { ok: true }
+			return {
+				ok: false,
+				error: data?.error ?? data?.message ?? `Validation failed (${res.status})`,
+			}
+		},
 		save: (payload: SetupSavePayload) =>
 			request<{ ok: true }>("/api/setup", {
 				method: "POST",
