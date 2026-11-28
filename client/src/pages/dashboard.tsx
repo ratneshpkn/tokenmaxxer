@@ -25,20 +25,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Typography } from "@/components/ui/typography"
 import { severity } from "@/lib/alert-severity"
 import { api } from "@/lib/api"
+import { PLATFORMS, pickTrendSeries, queryKeys, useDisplaySession } from "@/lib/display-session"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
-import { useMetricMode } from "@/lib/use-metric-mode"
-import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { formatCompact } from "@/lib/utils"
-
-function pickTrend(
-	r: { trend_cents: number[] | null; trend_tokens: number[] },
-	isViewer: boolean,
-	metricMode: "cost" | "tokens",
-): number[] {
-	if (isViewer) return r.trend_tokens
-	return metricMode === "cost" ? (r.trend_cents ?? r.trend_tokens) : r.trend_tokens
-}
 
 const C_CC = "var(--amber)"
 const C_CU = "var(--sky)"
@@ -80,14 +70,9 @@ function StatTooltip({
 
 export function DashboardPage(): React.JSX.Element {
 	const [showFlexCard, setShowFlexCard] = useState(false)
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
-	const isViewer = me ? me.role !== "admin" : false
-	const [privacyOn] = usePrivacyMode()
+	const { me, isAdmin, isViewer, metricMode, effectiveMetric, trendMode, privacyOn } =
+		useDisplaySession()
 	const animating = useFirstRenderAnimation()
-
-	const [metricMode] = useMetricMode()
-	// Map global mode to chart's usd/tokens axis
-	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
 
 	const { from, to, winLabel } = useDateRange()
 	const summaryQuery = useQuery({
@@ -95,21 +80,21 @@ export function DashboardPage(): React.JSX.Element {
 		queryFn: () => api.dashboard.summary({ from, to }),
 	})
 	const topQuery = useQuery({
-		queryKey: ["dashboard.top", from, to, metricMode],
-		queryFn: () => api.dashboard.topSpenders({ from, to }, "all", 8, metricMode),
+		queryKey: ["dashboard.top", from, to, effectiveMetric],
+		queryFn: () => api.dashboard.topSpenders({ from, to }, "all", 8, effectiveMetric),
 	})
 	const modelMixQuery = useQuery({
-		queryKey: ["dashboard.modelMix", from, to, metricMode],
-		queryFn: () => api.dashboard.modelMix({ from, to }, undefined, metricMode),
+		queryKey: ["dashboard.modelMix", from, to, effectiveMetric],
+		queryFn: () => api.dashboard.modelMix({ from, to }, undefined, effectiveMetric),
 	})
 	const modelMix = modelMixQuery.data
 	const summary = summaryQuery.data
 	const top = topQuery.data
 	const isLoading = summaryQuery.isLoading
 	const { data: openAlerts } = useQuery({
-		queryKey: ["alerts", "open"],
+		queryKey: [...queryKeys.alerts, "open"],
 		queryFn: () => api.alerts.list("open", 50),
-		enabled: !isViewer,
+		enabled: isAdmin,
 	})
 
 	const totals = summary?.totals
@@ -479,7 +464,7 @@ export function DashboardPage(): React.JSX.Element {
 									/>
 									<div className="col-span-4">
 										<Sparkline
-											data={pickTrend(r, isViewer, metricMode)}
+											data={pickTrendSeries(r, isViewer, metricMode)}
 											color="var(--amber)"
 											height={24}
 										/>
@@ -543,7 +528,7 @@ export function DashboardPage(): React.JSX.Element {
 													</Link>
 												</span>
 												<span className="text-xs tracked text-fg-muted shrink-0">
-													{a.platform === "claude_code" ? "CC" : "CU"}
+													{PLATFORMS[a.platform].short}
 												</span>
 											</div>
 											<div className="mt-1 flex items-center justify-between text-xs tabular pl-3.5">

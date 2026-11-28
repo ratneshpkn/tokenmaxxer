@@ -38,10 +38,9 @@ import {
 } from "@/components/ui/table"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { useDisplaySession } from "@/lib/display-session"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
-import { useMetricMode } from "@/lib/use-metric-mode"
-import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { formatCompact, formatNumber } from "@/lib/utils"
 
 type TeamSortField = "impactPoints" | "spend" | "prsMerged" | "efficiency"
@@ -102,13 +101,8 @@ export function VelocityPage(): React.JSX.Element {
 	const paramTeamId = searchParams.get("teamId")
 
 	const { from, to, winLabel } = useDateRange()
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
-	const isViewer = me ? me.role !== "admin" : false
-	const [privacyOn] = usePrivacyMode()
+	const { isViewer, effectiveMetric: effectiveMode, trendMode, privacyOn } = useDisplaySession()
 	const animating = useFirstRenderAnimation()
-	const [metricMode] = useMetricMode()
-	const effectiveMode = isViewer ? "tokens" : metricMode
-	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
 
 	const [selectedTeamId, setSelectedTeamId] = useState<string>(paramTeamId || "all")
 	useEffect(() => {

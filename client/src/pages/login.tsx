@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { Redirect, useLocation } from "wouter"
 import { Button } from "@/components/ui/button"
@@ -6,14 +6,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { queryKeys } from "@/lib/display-session"
 
 export function LoginPage(): React.JSX.Element {
 	const [, navigate] = useLocation()
+	const qc = useQueryClient()
 	const params = new URLSearchParams(window.location.search)
 	const oauthErr = params.get("error")
 
 	const { data: cfg, isLoading: cfgLoading } = useQuery({
-		queryKey: ["config"],
+		queryKey: queryKeys.config,
 		queryFn: api.config,
 	})
 
@@ -34,6 +36,7 @@ export function LoginPage(): React.JSX.Element {
 		setSubmitting(true)
 		try {
 			await api.auth.login(email, password)
+			qc.removeQueries({ queryKey: queryKeys.me })
 			navigate("/")
 		} catch {
 			setError("Invalid credentials")

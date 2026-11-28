@@ -32,10 +32,9 @@ import {
 } from "@/components/ui/table"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { pickTrendSeries, useDisplaySession } from "@/lib/display-session"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
-import { useMetricMode } from "@/lib/use-metric-mode"
-import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { formatCompact, formatNumber } from "@/lib/utils"
 
 type SortKey = "email" | "cents" | "tokens" | "share"
@@ -48,12 +47,8 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 	const platformFilter: "all" | "claude_code" | "cursor" =
 		urlPlatform === "claude_code" || urlPlatform === "cursor" ? urlPlatform : "all"
 
-	const [privacyOn] = usePrivacyMode()
-	const [metricMode] = useMetricMode()
+	const { isViewer, metricMode, privacyOn, effectiveMetric: trendMode } = useDisplaySession()
 	const animating = useFirstRenderAnimation()
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
-	const isViewer = me ? me.role !== "admin" : true
-	const trendMode = isViewer || metricMode === "tokens" ? "tokens" : "cost"
 
 	const { from, to, winLabel } = useDateRange()
 
@@ -459,13 +454,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<Sparkline
-												data={
-													isViewer
-														? u.trend_tokens
-														: metricMode === "cost"
-															? (u.trend_cents ?? u.trend_tokens)
-															: u.trend_tokens
-												}
+												data={pickTrendSeries(u, isViewer, metricMode)}
 												color="var(--fg-muted)"
 												height={22}
 											/>
@@ -539,13 +528,7 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 										</TableCell>
 										<TableCell className="px-3 py-2.5">
 											<Sparkline
-												data={
-													isViewer
-														? u.trend_tokens
-														: metricMode === "cost"
-															? (u.trend_cents ?? u.trend_tokens)
-															: u.trend_tokens
-												}
+												data={pickTrendSeries(u, isViewer, metricMode)}
 												color="var(--fg-muted)"
 												height={22}
 											/>

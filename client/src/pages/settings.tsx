@@ -35,7 +35,7 @@ import {
 import { toast } from "@/components/ui/toast"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
-import { platformLabel } from "@/lib/platform"
+import { platformLabel, queryKeys, useMe } from "@/lib/display-session"
 import { cn, formatCents, formatDate, formatDuration } from "@/lib/utils"
 
 type ValidationState = "idle" | "checking" | "ok" | "bad"
@@ -122,7 +122,7 @@ function StatusPip({ state }: { state: ValidationState }): React.JSX.Element | n
 
 export function SettingsPage(): React.JSX.Element {
 	const qc = useQueryClient()
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
+	const { data: me } = useMe()
 	const { data: appUsers = [] } = useQuery({ queryKey: ["appUsers"], queryFn: api.appUsers.list })
 	const { data: thresholds } = useQuery({
 		queryKey: ["thresholds"],
@@ -384,7 +384,7 @@ export function SettingsPage(): React.JSX.Element {
 		},
 		onSuccess: () => {
 			qc.invalidateQueries({ queryKey: ["admin.config"] })
-			qc.invalidateQueries({ queryKey: ["config"] })
+			qc.invalidateQueries({ queryKey: queryKeys.config })
 			toast.success("Workspace configuration updated successfully.")
 			setAnthropicKey("")
 			setCursorKey("")

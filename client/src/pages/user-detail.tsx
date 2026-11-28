@@ -46,17 +46,15 @@ import { Typography } from "@/components/ui/typography"
 import { severity } from "@/lib/alert-severity"
 import { api } from "@/lib/api"
 import { daysBetween } from "@/lib/date-range"
+import { platformLabel, useDisplaySession } from "@/lib/display-session"
 import { buildModelTrends, colorForModel, totalTokens } from "@/lib/model-trends"
-import { platformLabel } from "@/lib/platform"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
-import { useMetricMode } from "@/lib/use-metric-mode"
-import { usePrivacyMode } from "@/lib/use-privacy-mode"
 import { cn, formatCompact, formatDate, formatNumber } from "@/lib/utils"
 
 type ModelSortKey = "model" | "value" | "share"
 
-function StatBlock({ label, value }: { label: string; value: string }): React.JSX.Element {
+function StatBlock({ label, value }: { label: string; value: React.ReactNode }): React.JSX.Element {
 	return (
 		<div className="flex flex-col gap-1 select-none">
 			<Typography variant="label" as="div">
@@ -154,8 +152,7 @@ function EditableField({
 
 export function UserDetailPage({ email }: { email: string }): React.JSX.Element {
 	const [showFlexCard, setShowFlexCard] = useState(false)
-	const [privacyOn] = usePrivacyMode()
-	const [metricMode] = useMetricMode()
+	const { isAdmin, isViewer, trendMode, privacyOn } = useDisplaySession()
 	const animating = useFirstRenderAnimation()
 	const [modelFilter, setModelFilter] = useState("")
 	const [modelSortKey, setModelSortKey] = useState<"model" | "value" | "share">("value")
@@ -163,9 +160,6 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	const [rawModelFilter, setRawModelFilter] = useState("")
 	const [rawModelSortKey, setRawModelSortKey] = useState<ModelSortKey>("value")
 	const [rawModelSortDir, setRawModelSortDir] = useState<"asc" | "desc">("desc")
-	const { data: me } = useQuery({ queryKey: ["me"], queryFn: api.me })
-	const isViewer = me ? me.role !== "admin" : false
-	const trendMode: "usd" | "tokens" = isViewer || metricMode === "tokens" ? "tokens" : "usd"
 	const { from, to } = useDateRange()
 	const days = daysBetween(from, to)
 	const winLabel = days === 1 ? "1D" : `${days}D`
@@ -202,7 +196,6 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 	})
 	const prComplexity = prComplexityQuery.data
 	const [viewPrsOpen, setViewPrsOpen] = useState(false)
-	const isAdmin = me?.role === "admin"
 	const alertsQuery = useQuery({
 		queryKey: ["users.alerts", email],
 		queryFn: () => api.users.alertsByEmail(email, 365, 50),
@@ -632,12 +625,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 						)}
 					</div>
 
-					<div
-						className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-px bg-line"
-						style={{
-							filter: privacyOn && trendMode === "usd" ? "blur(6px)" : undefined,
-						}}
-					>
+					<div className="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-px bg-line">
 						<div className="p-5 flex flex-col justify-center bg-elev hover:bg-elev2/20 transition-colors duration-150">
 							<StatBlock label="ACTIVE DAYS" value={totalHeatDays > 0 ? String(activeDays) : "—"} />
 						</div>
@@ -648,11 +636,15 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 							<StatBlock
 								label="PEAK DAY"
 								value={
-									activeDays > 0
-										? trendMode === "usd"
-											? `$${Math.round(peakCents / 100)}`
-											: formatCompact(peakTokens)
-										: "—"
+									activeDays > 0 ? (
+										trendMode === "usd" ? (
+											<Cost cents={peakCents} digits={0} />
+										) : (
+											formatCompact(peakTokens)
+										)
+									) : (
+										"—"
+									)
 								}
 							/>
 						</div>
@@ -660,11 +652,15 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 							<StatBlock
 								label="AVG / ACTIVE"
 								value={
-									activeDays > 0
-										? trendMode === "usd"
-											? `$${Math.round(avgActiveCents / 100)}`
-											: formatCompact(avgActiveTokens)
-										: "—"
+									activeDays > 0 ? (
+										trendMode === "usd" ? (
+											<Cost cents={avgActiveCents} digits={0} />
+										) : (
+											formatCompact(avgActiveTokens)
+										)
+									) : (
+										"—"
+									)
 								}
 							/>
 						</div>
@@ -1050,7 +1046,7 @@ export function UserDetailPage({ email }: { email: string }): React.JSX.Element 
 										<span className="text-amber font-medium">{rec.suggestedModel}</span>
 										{rec.potentialSavingsCents != null && rec.potentialSavingsCents > 0 && (
 											<div className="text-xs text-mint mt-0.5">
-												Est. Savings: ${(rec.potentialSavingsCents / 100).toFixed(2)}
+												Est. Savings: <Cost cents={rec.potentialSavingsCents} digits={2} />
 											</div>
 										)}
 									</div>

@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "@/components/ui/toast"
 import { Typography } from "@/components/ui/typography"
-import { useMetricMode } from "@/lib/use-metric-mode"
-import { usePrivacyMode } from "@/lib/use-privacy-mode"
+import { useMetricMode, usePrivacyMode } from "@/lib/display-session"
 import { formatCompact } from "@/lib/utils"
 
 interface FlexCardModalProps {

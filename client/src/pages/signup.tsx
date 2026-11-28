@@ -6,10 +6,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
+import { queryKeys } from "@/lib/display-session"
 
 export function SignupPage(): React.JSX.Element {
 	const [, navigate] = useLocation()
-	const { data: cfg } = useQuery({ queryKey: ["config"], queryFn: api.config })
+	const { data: cfg } = useQuery({ queryKey: queryKeys.config, queryFn: api.config })
 	const qc = useQueryClient()
 
 	const search = typeof window !== "undefined" ? window.location.search : ""
@@ -33,7 +34,7 @@ export function SignupPage(): React.JSX.Element {
 		setSubmitting(true)
 		try {
 			await api.auth.signup(email, password, inviteToken)
-			await qc.invalidateQueries({ queryKey: ["me"] })
+			qc.removeQueries({ queryKey: queryKeys.me })
 			if (cfg?.bootstrapNeeded) {
 				navigate("/setup")
 			} else {
