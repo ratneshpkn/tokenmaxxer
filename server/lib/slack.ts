@@ -9,6 +9,8 @@
  * and a non-ok response is still HTTP 200 with `ok: false` plus an `error`
  * string. Treat that as a thrown error.
  */
+import { fetchWithRetry, type TransportDeps } from "./http-transport"
+
 const BASE = "https://slack.com/api"
 
 interface SlackResponse {
@@ -21,15 +23,28 @@ async function call(
 	method: string,
 	token: string,
 	body?: Record<string, unknown>,
+	opts?: { idempotent?: boolean; deps?: TransportDeps },
 ): Promise<SlackResponse> {
-	const res = await fetch(`${BASE}/${method}`, {
-		method: "POST",
-		headers: {
-			Authorization: `Bearer ${token}`,
-			"Content-Type": "application/json; charset=utf-8",
+	const idempotent = opts?.idempotent ?? true
+	const res = await fetchWithRetry(
+		`${BASE}/${method}`,
+		{
+			method: "POST",
+			headers: {
+				Authorization: `Bearer ${token}`,
+				"Content-Type": "application/json; charset=utf-8",
+			},
+			body: body ? JSON.stringify(body) : "",
 		},
-		body: body ? JSON.stringify(body) : "",
-	})
+		{
+			label: "slack",
+			timeoutMs: 15_000,
+			maxRetries429: 3,
+			maxRetries5xx: idempotent ? 2 : 0,
+			maxRetriesNetwork: idempotent ? 2 : 0,
+			...opts?.deps,
+		},
+	)
 	if (!res.ok) {
 		throw new Error(
 			`Slack ${method} HTTP ${res.status}: ${await res.text().catch(() => "")}`.slice(0, 300),
@@ -42,12 +57,16 @@ async function call(
 	return json
 }
 
-export async function slackAuthTest(token: string): Promise<void> {
-	await call("auth.test", token)
+export async function slackAuthTest(token: string, deps?: TransportDeps): Promise<void> {
+	await call("auth.test", token, undefined, { deps })
 }
 
-export async function slackChannelInfo(token: string, channel: string): Promise<void> {
-	await call("conversations.info", token, { channel })
+export async function slackChannelInfo(
+	token: string,
+	channel: string,
+	deps?: TransportDeps,
+): Promise<void> {
+	await call("conversations.info", token, { channel }, { deps })
 }
 
 export async function postDigest(
@@ -55,10 +74,11 @@ export async function postDigest(
 	channel: string | null | undefined,
 	text: string,
 	blocks?: unknown[],
+	deps?: TransportDeps,
 ): Promise<void> {
 	if (!token || !channel) {
 		console.log("[slack] skipped (token or channel not configured)")
 		return
 	}
-	await call("chat.postMessage", token, { channel, text, blocks })
+	await call("chat.postMessage", token, { channel, text, blocks }, { idempotent: false, deps })
 }

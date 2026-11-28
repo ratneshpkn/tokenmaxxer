@@ -1,5 +1,16 @@
 import type { PRFileCache } from "@shared/schema"
-import { isBlacklistedPatchFile } from "./pr-diff-signals"
+import { fetchWithRetry } from "./http-transport"
+
+const LOCK_OR_BUNDLE_SUFFIX_RE =
+	/(?:\.lockb?|-lock\.(?:json|ya?ml|toml|txt|xml)|(?:^|[/\\])(?:go\.sum|npm-shrinkwrap\.json|Package\.resolved|Podfile\.resolved|packages\.lock\.json|paket\.lock)|\.snap|\.map|\.(?:min|bundle|chunk)\.[^/\\]+|\.(?:generated|g|freezed)\.[^/\\]+|\.pb\.(?:go|ts|js|cc|h)|_pb2(?:_grpc)?\.py|\.(?:wasm|pyc|class|o|so|dylib|dll|exe|jar|whl|tgz|zip|woff2?|ttf|eot|ico|pdf|svg))$/i
+
+const BUNDLE_OR_VENDOR_DIR_RE =
+	/(?:^|[/\\])(?:dist|build|\.next|\.nuxt|out|coverage|node_modules|Pods|vendor|third_party|__generated__|__snapshots__)[/\\]/i
+
+export function isBlacklistedPatchFile(filename: string): boolean {
+	const trimmed = filename.trim()
+	return LOCK_OR_BUNDLE_SUFFIX_RE.test(trimmed) || BUNDLE_OR_VENDOR_DIR_RE.test(trimmed)
+}
 
 export const INLINE_DIFF_MAX_LINES = 2500
 export const INLINE_DIFF_MAX_CHARS = 100_000
@@ -462,10 +473,13 @@ export async function enrichSinglePR(
 	const initialUserText = `<untrusted_pr_data>\n${JSON.stringify(initialPayload)}\n</untrusted_pr_data>`
 	const allowedTools = getAllowedToolsForPayload(initialPayload)
 
-	if (config.provider === "anthropic") {
-		return runAnthropicAgentLoop(pr, initialUserText, allowedTools, config)
-	}
-	return runOpenAIAgentLoop(pr, initialUserText, allowedTools, config)
+	return runAgentLoop(
+		pr,
+		initialUserText,
+		allowedTools,
+		config,
+		config.provider === "anthropic" ? anthropicAdapter : openaiAdapter,
+	)
 }
 
 export async function classifyPRBatch(
@@ -504,96 +518,96 @@ export async function classifyPRBatch(
 
 const RETRYABLE_STATUSES = new Set([408, 409, 425, 429, 500, 502, 503, 504, 529])
 
-function sleep(ms: number): Promise<void> {
-	return new Promise((resolve) => setTimeout(resolve, ms))
+function postWithRetry(url: string, init: RequestInit): Promise<Response> {
+	return fetchWithRetry(url, init, {
+		label: "enrichment-llm",
+		timeoutMs: LLM_FETCH_TIMEOUT_MS,
+		baseDelayMs: LLM_RETRY_BASE_MS,
+		maxDelayMs: LLM_RETRY_MAX_MS,
+		maxRetries429: LLM_MAX_ATTEMPTS - 1,
+		maxRetries5xx: LLM_MAX_ATTEMPTS - 1,
+		maxRetriesNetwork: LLM_MAX_ATTEMPTS - 1,
+		retryableStatuses: RETRYABLE_STATUSES,
+	})
 }
 
-async function postWithRetry(url: string, init: RequestInit): Promise<Response> {
-	let lastErr: unknown
-	for (let attempt = 1; attempt <= LLM_MAX_ATTEMPTS; attempt++) {
-		try {
-			const res = await fetch(url, { ...init, signal: AbortSignal.timeout(LLM_FETCH_TIMEOUT_MS) })
-			if (!RETRYABLE_STATUSES.has(res.status) || attempt === LLM_MAX_ATTEMPTS) {
-				return res
-			}
-			const retryAfterSec = Number(res.headers.get("retry-after"))
-			const delay =
-				Number.isFinite(retryAfterSec) && retryAfterSec > 0
-					? Math.min(retryAfterSec * 1000, LLM_RETRY_MAX_MS)
-					: Math.min(LLM_RETRY_BASE_MS * 2 ** (attempt - 1), LLM_RETRY_MAX_MS)
-			await res.body?.cancel().catch(() => {})
-			await sleep(delay)
-		} catch (err) {
-			lastErr = err
-			if (attempt === LLM_MAX_ATTEMPTS) break
-			await sleep(Math.min(LLM_RETRY_BASE_MS * 2 ** (attempt - 1), LLM_RETRY_MAX_MS))
-		}
-	}
-	throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
+type ToolDef = (typeof TOOL_DEFINITIONS)[number]
+
+interface ProviderTurnResult {
+	toolCalls: NormalizedToolCall[]
+	textResponse: string
+	appendToHistory: (
+		messages: Array<Record<string, unknown>>,
+		results: Array<{ call: NormalizedToolCall; output: string }>,
+	) => void
 }
 
-async function runAnthropicAgentLoop(
-	pr: PREnrichmentInput,
-	initialUserText: string,
-	allowedTools: ReadonlyArray<(typeof TOOL_DEFINITIONS)[number]>,
-	config: LLMConfig,
-): Promise<PREnrichmentResult> {
-	const baseUrl = (config.baseUrl?.trim() || "https://api.anthropic.com")
-		.replace(/\/+$/, "")
-		.replace(/\/v1$/, "")
-	const url = `${baseUrl}/v1/messages`
+interface LLMProviderAdapter {
+	name: string
+	resolveUrl: (config: LLMConfig) => string
+	initMessages: (initialUserText: string) => Array<Record<string, unknown>>
+	buildRequest: (
+		config: LLMConfig,
+		messages: Array<Record<string, unknown>>,
+		tools: ReadonlyArray<ToolDef>,
+		forceSubmit: boolean,
+	) => RequestInit
+	parseResponse: (pr: PREnrichmentInput, turn: number, data: unknown) => ProviderTurnResult
+	handleError?: (
+		pr: PREnrichmentInput,
+		url: string,
+		messages: Array<Record<string, unknown>>,
+		config: LLMConfig,
+		turn: number,
+		status: number,
+		body: string,
+	) => Promise<PREnrichmentResult> | null
+}
 
-	const messages: Array<{ role: "user" | "assistant"; content: unknown }> = [
-		{ role: "user", content: initialUserText },
-	]
-
-	for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
-		const isLastTurn = turn === MAX_AGENT_TURNS - 1
-		const toolsForTurn = isLastTurn
-			? allowedTools.filter((t) => t.name === "submit_evaluation")
-			: allowedTools
-		const forceSubmit = isLastTurn || toolsForTurn.length === 1
-
-		const res = await postWithRetry(url, {
-			method: "POST",
-			headers: {
-				"x-api-key": config.apiKey,
-				"anthropic-version": "2023-06-01",
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({
-				model: config.modelName,
-				max_tokens: 1024,
-				system: SYSTEM_PROMPT,
-				tools: toolsForTurn.map((t) => ({
-					name: t.name,
-					description: t.description,
-					input_schema: t.parameters,
-				})),
-				tool_choice: forceSubmit ? { type: "tool", name: "submit_evaluation" } : { type: "auto" },
-				messages,
-			}),
-		})
-
-		if (!res.ok) {
-			const text = await res.text()
-			throw new Error(`Anthropic LLM error (${res.status}): ${text.slice(0, 300)}`)
-		}
-
-		const data = (await res.json()) as {
-			content?: Array<{
-				type: string
-				text?: string
-				id?: string
-				name?: string
-				input?: Record<string, unknown>
-			}>
-		}
-
-		const contentBlocks = data.content ?? []
+const anthropicAdapter: LLMProviderAdapter = {
+	name: "Anthropic",
+	resolveUrl: (config) => {
+		const baseUrl = (config.baseUrl?.trim() || "https://api.anthropic.com")
+			.replace(/\/+$/, "")
+			.replace(/\/v1$/, "")
+		return `${baseUrl}/v1/messages`
+	},
+	initMessages: (initialUserText) => [{ role: "user", content: initialUserText }],
+	buildRequest: (config, messages, tools, forceSubmit) => ({
+		method: "POST",
+		headers: {
+			"x-api-key": config.apiKey,
+			"anthropic-version": "2023-06-01",
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({
+			model: config.modelName,
+			max_tokens: 1024,
+			system: SYSTEM_PROMPT,
+			tools: tools.map((t) => ({
+				name: t.name,
+				description: t.description,
+				input_schema: t.parameters,
+			})),
+			tool_choice: forceSubmit ? { type: "tool", name: "submit_evaluation" } : { type: "auto" },
+			messages,
+		}),
+	}),
+	parseResponse: (_pr, turn, raw) => {
+		const contentBlocks =
+			(
+				raw as {
+					content?: Array<{
+						type: string
+						text?: string
+						id?: string
+						name?: string
+						input?: Record<string, unknown>
+					}>
+				}
+			).content ?? []
 		const toolCalls: NormalizedToolCall[] = []
 		let textResponse = ""
-
 		for (const block of contentBlocks) {
 			if (block.type === "tool_use" && block.name) {
 				toolCalls.push({
@@ -605,108 +619,65 @@ async function runAnthropicAgentLoop(
 				textResponse += block.text
 			}
 		}
-
-		const submitCall = toolCalls.find((c) => c.name === "submit_evaluation")
-		if (submitCall) {
-			return buildResultFromArgs(pr, submitCall.input)
+		return {
+			toolCalls,
+			textResponse,
+			appendToHistory: (messages, results) => {
+				messages.push({ role: "assistant", content: contentBlocks })
+				messages.push({
+					role: "user",
+					content: results.map(({ call, output }) => ({
+						type: "tool_result",
+						tool_use_id: call.id,
+						content: output,
+					})),
+				})
+			},
 		}
-
-		if (toolCalls.length === 0) {
-			const parsed = parseFallbackJsonResult(pr, textResponse)
-			if (parsed) return parsed
-			throw new Error(
-				`[enrichment-llm] Anthropic model returned no tool calls or valid JSON for ${pr.repo}#${pr.number}`,
-			)
-		}
-
-		messages.push({ role: "assistant", content: contentBlocks })
-		const toolResults = toolCalls.map((call) => ({
-			type: "tool_result",
-			tool_use_id: call.id,
-			content: executeAgentTool(pr, call.name, call.input),
-		}))
-		messages.push({ role: "user", content: toolResults })
-	}
-
-	throw new Error(
-		`[enrichment-llm] Exceeded max agent turns (${MAX_AGENT_TURNS}) for ${pr.repo}#${pr.number}`,
-	)
+	},
 }
 
-async function runOpenAIAgentLoop(
-	pr: PREnrichmentInput,
-	initialUserText: string,
-	allowedTools: ReadonlyArray<(typeof TOOL_DEFINITIONS)[number]>,
-	config: LLMConfig,
-): Promise<PREnrichmentResult> {
-	const baseUrl = config.baseUrl?.trim() || "https://api.openai.com/v1"
-	const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`
-
-	const messages: Array<Record<string, unknown>> = [
+const openaiAdapter: LLMProviderAdapter = {
+	name: "OpenAI",
+	resolveUrl: (config) =>
+		`${(config.baseUrl?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "")}/chat/completions`,
+	initMessages: (initialUserText) => [
 		{ role: "system", content: SYSTEM_PROMPT },
 		{ role: "user", content: initialUserText },
-	]
-
-	for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
-		const isLastTurn = turn === MAX_AGENT_TURNS - 1
-		const toolsForTurn = isLastTurn
-			? allowedTools.filter((t) => t.name === "submit_evaluation")
-			: allowedTools
-		const forceSubmit = isLastTurn || toolsForTurn.length === 1
-
-		const res = await postWithRetry(url, {
-			method: "POST",
-			headers: {
-				authorization: `Bearer ${config.apiKey}`,
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({
-				model: config.modelName,
-				messages,
-				tools: toolsForTurn.map((t) => ({
-					type: "function",
-					function: {
-						name: t.name,
-						description: t.description,
-						parameters: t.parameters,
-					},
-				})),
-				tool_choice: forceSubmit
-					? { type: "function", function: { name: "submit_evaluation" } }
-					: "auto",
-			}),
-		})
-
-		if (!res.ok) {
-			const text = await res.text()
-			// Some OpenAI-compatible proxies / local models reject `tools`. Fall back to a
-			// single JSON-mode completion instead of failing every PR.
-			if (
-				config.provider === "openai_compatible" &&
-				turn === 0 &&
-				[400, 404, 422].includes(res.status) &&
-				/tool|function/i.test(text)
-			) {
-				return runOpenAIJsonFallback(pr, url, messages, config)
+	],
+	buildRequest: (config, messages, tools, forceSubmit) => ({
+		method: "POST",
+		headers: {
+			authorization: `Bearer ${config.apiKey}`,
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({
+			model: config.modelName,
+			messages,
+			tools: tools.map((t) => ({
+				type: "function",
+				function: { name: t.name, description: t.description, parameters: t.parameters },
+			})),
+			tool_choice: forceSubmit
+				? { type: "function", function: { name: "submit_evaluation" } }
+				: "auto",
+		}),
+	}),
+	parseResponse: (pr, turn, raw) => {
+		const msg = (
+			raw as {
+				choices?: Array<{
+					message?: {
+						content?: string | null
+						tool_calls?: Array<{
+							id: string
+							type: string
+							function: { name: string; arguments: string }
+						}>
+					}
+				}>
 			}
-			throw new Error(`OpenAI LLM error (${res.status}): ${text.slice(0, 300)}`)
-		}
-
-		const data = (await res.json()) as {
-			choices?: Array<{
-				message?: {
-					role?: string
-					content?: string | null
-					tool_calls?: Array<{
-						id: string
-						type: string
-						function: { name: string; arguments: string }
-					}>
-				}
-			}>
-		}
-
-		const msg = data.choices?.[0]?.message
+		).choices?.[0]?.message
 		const rawToolCalls = msg?.tool_calls ?? []
 		const toolCalls: NormalizedToolCall[] = rawToolCalls.map((tc, idx) => {
 			let parsedArgs: Record<string, unknown> = {}
@@ -722,40 +693,86 @@ async function runOpenAIAgentLoop(
 						`[enrichment-llm] Malformed JSON in submit_evaluation arguments for ${pr.repo}#${pr.number}: ${err instanceof Error ? err.message : String(err)}`,
 					)
 				}
-				parsedArgs = {}
 			}
-			return {
-				id: tc.id || `call_${turn}_${idx}`,
-				name: tc.function.name,
-				input: parsedArgs,
-			}
+			return { id: tc.id || `call_${turn}_${idx}`, name: tc.function.name, input: parsedArgs }
 		})
+		return {
+			toolCalls,
+			textResponse: msg?.content || "",
+			appendToHistory: (messages, results) => {
+				messages.push({
+					role: "assistant",
+					content: msg?.content ?? null,
+					tool_calls: rawToolCalls,
+				})
+				for (const { call, output } of results) {
+					messages.push({ role: "tool", tool_call_id: call.id, content: output })
+				}
+			},
+		}
+	},
+	handleError: (pr, url, messages, config, turn, status, text) => {
+		if (
+			config.provider === "openai_compatible" &&
+			turn === 0 &&
+			[400, 404, 422].includes(status) &&
+			/tool|function/i.test(text)
+		) {
+			return runOpenAIJsonFallback(pr, url, messages, config)
+		}
+		return null
+	},
+}
 
-		const submitCall = toolCalls.find((c) => c.name === "submit_evaluation")
-		if (submitCall) {
-			return buildResultFromArgs(pr, submitCall.input)
+async function runAgentLoop(
+	pr: PREnrichmentInput,
+	initialUserText: string,
+	allowedTools: ReadonlyArray<ToolDef>,
+	config: LLMConfig,
+	adapter: LLMProviderAdapter,
+): Promise<PREnrichmentResult> {
+	const url = adapter.resolveUrl(config)
+	const messages = adapter.initMessages(initialUserText)
+
+	for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
+		const isLastTurn = turn === MAX_AGENT_TURNS - 1
+		const toolsForTurn = isLastTurn
+			? allowedTools.filter((t) => t.name === "submit_evaluation")
+			: allowedTools
+		const forceSubmit = isLastTurn || toolsForTurn.length === 1
+
+		const res = await postWithRetry(
+			url,
+			adapter.buildRequest(config, messages, toolsForTurn, forceSubmit),
+		)
+		if (!res.ok) {
+			const text = await res.text()
+			const fallback = adapter.handleError?.(pr, url, messages, config, turn, res.status, text)
+			if (fallback) return fallback
+			throw new Error(`${adapter.name} LLM error (${res.status}): ${text.slice(0, 300)}`)
 		}
 
+		const { toolCalls, textResponse, appendToHistory } = adapter.parseResponse(
+			pr,
+			turn,
+			await res.json(),
+		)
+
+		const submitCall = toolCalls.find((c) => c.name === "submit_evaluation")
+		if (submitCall) return buildResultFromArgs(pr, submitCall.input)
+
 		if (toolCalls.length === 0) {
-			const parsed = parseFallbackJsonResult(pr, msg?.content || "")
+			const parsed = parseFallbackJsonResult(pr, textResponse)
 			if (parsed) return parsed
 			throw new Error(
-				`[enrichment-llm] OpenAI model returned no tool calls or valid JSON for ${pr.repo}#${pr.number}`,
+				`[enrichment-llm] ${adapter.name} model returned no tool calls or valid JSON for ${pr.repo}#${pr.number}`,
 			)
 		}
 
-		messages.push({
-			role: "assistant",
-			content: msg?.content ?? null,
-			tool_calls: rawToolCalls,
-		})
-		for (const call of toolCalls) {
-			messages.push({
-				role: "tool",
-				tool_call_id: call.id,
-				content: executeAgentTool(pr, call.name, call.input),
-			})
-		}
+		appendToHistory(
+			messages,
+			toolCalls.map((call) => ({ call, output: executeAgentTool(pr, call.name, call.input) })),
+		)
 	}
 
 	throw new Error(

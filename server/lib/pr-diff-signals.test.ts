@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { isBlacklistedPatchFile } from "./pr-diff-signals"
+import { isBlacklistedPatchFile } from "./enrichment-llm"
 
 describe("isBlacklistedPatchFile", () => {
 	it("matches lockfiles, dependency resolution files, snapshots, sourcemaps, and bundle/codegen artifacts", () => {
