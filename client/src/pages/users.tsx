@@ -30,6 +30,7 @@ import { Typography } from "@/components/ui/typography"
 import { api } from "@/lib/api"
 import { pickTrendSeries, useDisplaySession } from "@/lib/display-session"
 import { useDateRange } from "@/lib/use-date-range"
+import { useTableState } from "@/lib/use-table-state"
 import { formatNumber } from "@/lib/utils"
 
 type SortKey = "email" | "cc_cents" | "cu_cents" | "total" | "gh_lines" | "prs"
@@ -67,56 +68,58 @@ export function UsersPage(): React.JSX.Element {
 	const data = usersQuery.data ?? []
 	const isLoading = usersQuery.isLoading
 
-	const [filter, setFilter] = useState("")
 	const [selectedEmails, setSelectedEmails] = useState<Set<string>>(new Set())
-	const [sortKey, setSortKey] = useState<SortKey>("total")
-	const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
 
-	const rows = useMemo(() => {
-		const f = filter.trim().toLowerCase()
-		let filtered = f
-			? data.filter(
-					(r) =>
-						r.email.toLowerCase().includes(f) ||
-						r.name?.toLowerCase().includes(f) ||
-						r.teams?.some((t) => t.name.toLowerCase().includes(f)),
-				)
-			: data
+	const scopedUsers = useMemo(() => {
+		let list = data
 		if (selectedTeamId !== "all") {
-			filtered = filtered.filter((r) => r.teams?.some((t) => t.id === selectedTeamId))
+			list = list.filter((r) => r.teams?.some((t) => t.id === selectedTeamId))
 		}
 		if (selectedEmails.size > 0) {
-			filtered = filtered.filter((r) => selectedEmails.has(r.email))
+			list = list.filter((r) => selectedEmails.has(r.email))
 		}
-		const sortVal = (r: (typeof filtered)[number]): string | number => {
-			if (sortKey === "email") return r.email
-			if (sortKey === "total") {
+		return list
+	}, [data, selectedTeamId, selectedEmails])
+
+	const {
+		rows,
+		filter,
+		setFilter,
+		sortKey,
+		sortDir,
+		setSortKey,
+		setSortDir,
+		toggleSort: toggle,
+	} = useTableState({
+		data: scopedUsers,
+		initialSortKey: "total" as SortKey,
+		ascKeys: ["email"],
+		filterBy: (r, q) =>
+			r.email.toLowerCase().includes(q) ||
+			(r.name?.toLowerCase().includes(q) ?? false) ||
+			(r.teams?.some((t) => t.name.toLowerCase().includes(q)) ?? false),
+		sortValue: (r, key) => {
+			if (key === "email") return r.email
+			if (key === "total") {
 				return effectiveMode === "tokens"
 					? Number(r.cc_tokens) + Number(r.cu_tokens)
 					: Number(r.cc_cents) + Number(r.cu_cents)
 			}
-			if (sortKey === "cc_cents") {
+			if (key === "cc_cents") {
 				return effectiveMode === "tokens" ? Number(r.cc_tokens) : Number(r.cc_cents)
 			}
-			if (sortKey === "cu_cents") {
+			if (key === "cu_cents") {
 				return effectiveMode === "tokens" ? Number(r.cu_tokens) : Number(r.cu_cents)
 			}
-			if (sortKey === "gh_lines") {
+			if (key === "gh_lines") {
 				return Number(r.gh_additions ?? 0) + Number(r.gh_deletions ?? 0)
 			}
-			if (sortKey === "prs") {
+			if (key === "prs") {
 				return Number(r.gh_prs_merged ?? 0)
 			}
 			return 0
-		}
-		return [...filtered].sort((a, b) => {
-			const av = sortVal(a)
-			const bv = sortVal(b)
-			const cmp =
-				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
-			return sortDir === "asc" ? cmp : -cmp
-		})
-	}, [data, filter, selectedEmails, sortKey, sortDir, effectiveMode, selectedTeamId])
+		},
+	})
 
 	const getSortLabel = (key: SortKey): string => {
 		switch (key) {
@@ -134,14 +137,6 @@ export function UsersPage(): React.JSX.Element {
 				return "GITHUB PRs"
 			default:
 				return String(key).toUpperCase()
-		}
-	}
-
-	function toggle(k: SortKey): void {
-		if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-		else {
-			setSortKey(k)
-			setSortDir(k === "email" ? "asc" : "desc")
 		}
 	}
 

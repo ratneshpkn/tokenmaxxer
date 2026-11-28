@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import {
 	Area,
 	AreaChart,
@@ -35,10 +35,11 @@ import { api } from "@/lib/api"
 import { pickTrendSeries, useDisplaySession } from "@/lib/display-session"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
+import { useTableState } from "@/lib/use-table-state"
 import { formatCompact, formatNumber } from "@/lib/utils"
 
-type SortKey = "email" | "cents" | "tokens" | "share"
-type RawSortKey = "raw_model" | "cents" | "tokens" | "share"
+type SortKey = "email" | "value" | "share"
+type RawSortKey = "raw_model" | "value" | "share"
 
 export function ModelDetailPage({ model }: { model: string }): React.JSX.Element {
 	const searchString = useSearch()
@@ -83,85 +84,54 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 	const rawModels = rawModelsQuery.data ?? []
 	const teamBreakdown = teamsQuery.data ?? []
 
-	const [filter, setFilter] = useState("")
-	const [sortKey, setSortKey] = useState<SortKey>(isViewer ? "tokens" : "cents")
-	const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
-
-	const [rawFilter, setRawFilter] = useState("")
-	const [rawSortKey, setRawSortKey] = useState<RawSortKey>(isViewer ? "tokens" : "cents")
-	const [rawSortDir, setRawSortDir] = useState<"asc" | "desc">("desc")
-
-	const rows = useMemo(() => {
-		const f = filter.trim().toLowerCase()
-		const filtered = f
-			? topUsers.filter(
-					(u) => u.email.toLowerCase().includes(f) || u.name?.toLowerCase().includes(f),
-				)
-			: topUsers
-
-		const sortVal = (u: (typeof filtered)[number]): string | number => {
-			switch (sortKey) {
+	const {
+		rows,
+		filter,
+		setFilter,
+		sortKey,
+		sortDir,
+		toggleSort: toggle,
+	} = useTableState({
+		data: topUsers,
+		initialSortKey: "value" as SortKey,
+		ascKeys: ["email"],
+		filterBy: (u, q) =>
+			u.email.toLowerCase().includes(q) || (u.name?.toLowerCase().includes(q) ?? false),
+		sortValue: (u, key) => {
+			switch (key) {
 				case "email":
 					return u.name || u.email
-				case "cents":
-					return Number(u.cents ?? 0)
-				case "tokens":
-					return Number(u.tokens)
+				case "value":
+					return trendMode === "cost" ? Number(u.cents ?? 0) : Number(u.tokens)
 				case "share":
 					return Number(u.share_pct)
 			}
-		}
+		},
+	})
 
-		return [...filtered].sort((a, b) => {
-			const av = sortVal(a)
-			const bv = sortVal(b)
-			const cmp =
-				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
-			return sortDir === "asc" ? cmp : -cmp
-		})
-	}, [topUsers, filter, sortKey, sortDir])
-
-	function toggle(k: SortKey): void {
-		if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-		else {
-			setSortKey(k)
-			setSortDir(k === "email" ? "asc" : "desc")
-		}
-	}
-
-	const rawModelRows = useMemo(() => {
-		const f = rawFilter.trim().toLowerCase()
-		const filtered = f ? rawModels.filter((u) => u.raw_model.toLowerCase().includes(f)) : rawModels
-
-		const sortVal = (u: (typeof filtered)[number]): string | number => {
-			switch (rawSortKey) {
+	const {
+		rows: rawModelRows,
+		filter: rawFilter,
+		setFilter: setRawFilter,
+		sortKey: rawSortKey,
+		sortDir: rawSortDir,
+		toggleSort: toggleRawSort,
+	} = useTableState({
+		data: rawModels,
+		initialSortKey: "value" as RawSortKey,
+		ascKeys: ["raw_model"],
+		filterBy: (u, q) => u.raw_model.toLowerCase().includes(q),
+		sortValue: (u, key) => {
+			switch (key) {
 				case "raw_model":
 					return u.raw_model
-				case "cents":
-					return Number(u.cents ?? 0)
-				case "tokens":
-					return Number(u.tokens)
+				case "value":
+					return trendMode === "cost" ? Number(u.cents ?? 0) : Number(u.tokens)
 				case "share":
 					return Number(u.share_pct)
 			}
-		}
-
-		return [...filtered].sort((a, b) => {
-			const av = sortVal(a)
-			const bv = sortVal(b)
-			const cmp =
-				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
-			return rawSortDir === "asc" ? cmp : -cmp
-		})
-	}, [rawModels, rawFilter, rawSortKey, rawSortDir])
-
-	function toggleRawSort(k: RawSortKey): void {
-		if (rawSortKey === k) setRawSortDir((d) => (d === "asc" ? "desc" : "asc"))
-		else {
-			setRawSortKey(k)
-			setRawSortDir(k === "raw_model" ? "asc" : "desc")
-		}
-	}
+		},
+	})
 
 	const chartData = useMemo(() => {
 		return trendData.map((d) => {
@@ -414,9 +384,9 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 							/>
 							<SortHeader
 								label="VALUE"
-								active={sortKey === "cents" || sortKey === "tokens"}
+								active={sortKey === "value"}
 								dir={sortDir}
-								onClick={() => toggle(trendMode === "cost" ? "cents" : "tokens")}
+								onClick={() => toggle("value")}
 								align="right"
 							/>
 							<SortHeader
@@ -486,9 +456,9 @@ export function ModelDetailPage({ model }: { model: string }): React.JSX.Element
 							/>
 							<SortHeader
 								label="VALUE"
-								active={rawSortKey === "cents" || rawSortKey === "tokens"}
+								active={rawSortKey === "value"}
 								dir={rawSortDir}
-								onClick={() => toggleRawSort(trendMode === "cost" ? "cents" : "tokens")}
+								onClick={() => toggleRawSort("value")}
 								align="right"
 							/>
 							<SortHeader

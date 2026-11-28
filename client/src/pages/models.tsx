@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { Link } from "wouter"
 import { MetricPair } from "@/components/MetricPair"
 import { SearchInput } from "@/components/SearchInput"
@@ -20,8 +20,9 @@ import { api } from "@/lib/api"
 import { pickTrendSeries, useDisplaySession } from "@/lib/display-session"
 import { colorForModelInMix } from "@/lib/model-color"
 import { useDateRange } from "@/lib/use-date-range"
+import { useTableState } from "@/lib/use-table-state"
 
-type SortKey = "model" | "cents" | "tokens" | "share"
+type SortKey = "model" | "value" | "share"
 
 export function ModelsPage(): React.JSX.Element {
 	const { isViewer, metricMode, effectiveMetric: effectiveMode } = useDisplaySession()
@@ -34,55 +35,42 @@ export function ModelsPage(): React.JSX.Element {
 	const data = modelsQuery.data ?? []
 	const isLoading = modelsQuery.isLoading
 
-	const [filter, setFilter] = useState("")
-
-	const [sortKey, setSortKey] = useState<SortKey>(isViewer ? "tokens" : "cents")
-	const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
-
 	// Window totals for share %.
 	const totalCents = useMemo(() => data.reduce((acc, m) => acc + Number(m.cents ?? 0), 0), [data])
 	const totalTokens = useMemo(() => data.reduce((acc, m) => acc + Number(m.tokens), 0), [data])
 	const denom = effectiveMode === "cost" ? totalCents : totalTokens
 
-	const rows = useMemo(() => {
-		const f = filter.trim().toLowerCase()
-		const filtered = f ? data.filter((m) => m.model.toLowerCase().includes(f)) : data
-		const sortVal = (m: (typeof filtered)[number]): string | number => {
-			switch (sortKey) {
+	const {
+		rows,
+		filter,
+		setFilter,
+		sortKey,
+		sortDir,
+		toggleSort: toggle,
+	} = useTableState({
+		data,
+		initialSortKey: "value" as SortKey,
+		ascKeys: ["model"],
+		filterBy: (m, q) => m.model.toLowerCase().includes(q),
+		sortValue: (m, key) => {
+			switch (key) {
 				case "model":
 					return m.model
-
-				case "cents":
-					return Number(m.cents ?? 0)
-				case "tokens":
-					return Number(m.tokens)
+				case "value":
 				case "share":
-					return isViewer ? Number(m.tokens) : Number(m.cents ?? 0)
+					return effectiveMode === "cost" ? Number(m.cents ?? 0) : Number(m.tokens)
 			}
-		}
-		return [...filtered].sort((a, b) => {
-			const av = sortVal(a)
-			const bv = sortVal(b)
-			const cmp =
-				typeof av === "string" ? av.localeCompare(bv as string) : (av as number) - (bv as number)
-			return sortDir === "asc" ? cmp : -cmp
-		})
-	}, [data, filter, sortKey, sortDir, isViewer])
+		},
+	})
 
-	function toggle(k: SortKey): void {
-		if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"))
-		else {
-			setSortKey(k)
-			setSortDir(k === "model" ? "asc" : "desc")
-		}
-	}
+	const sortLabel =
+		sortKey === "value" ? (effectiveMode === "cost" ? "CENTS" : "TOKENS") : sortKey.toUpperCase()
 
 	return (
 		<div className="space-y-4 fade-rise">
 			<div className="flex items-end justify-between gap-4">
 				<Typography variant="label" className="max-w-xl">
-					{data.length} MODELS TRACKED · sorted by{" "}
-					<span className="text-fg">{sortKey.toUpperCase()}</span>
+					{data.length} MODELS TRACKED · sorted by <span className="text-fg">{sortLabel}</span>
 				</Typography>
 				<SearchInput
 					placeholder="filter by model name…"
@@ -106,9 +94,9 @@ export function ModelsPage(): React.JSX.Element {
 
 							<SortHeader
 								label="VALUE"
-								active={sortKey === "cents" || sortKey === "tokens"}
+								active={sortKey === "value"}
 								dir={sortDir}
-								onClick={() => toggle(effectiveMode === "cost" ? "cents" : "tokens")}
+								onClick={() => toggle("value")}
 								align="right"
 							/>
 							<SortHeader

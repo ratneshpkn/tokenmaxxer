@@ -41,6 +41,7 @@ import { api } from "@/lib/api"
 import { useDisplaySession } from "@/lib/display-session"
 import { useDateRange } from "@/lib/use-date-range"
 import { useFirstRenderAnimation } from "@/lib/use-first-render-animation"
+import { useTableState } from "@/lib/use-table-state"
 import { formatCompact, formatNumber } from "@/lib/utils"
 
 type TeamSortField = "impactPoints" | "spend" | "prsMerged" | "efficiency"
@@ -109,9 +110,6 @@ export function VelocityPage(): React.JSX.Element {
 		if (paramTeamId) setSelectedTeamId(paramTeamId)
 	}, [paramTeamId])
 
-	const [sortField, setSortField] = useState<TeamSortField>("impactPoints")
-	const [sortAsc, setSortAsc] = useState(false)
-
 	const { data: teamsData } = useQuery({ queryKey: ["teams"], queryFn: () => api.teams.list() })
 	const teams = teamsData?.teams ?? []
 	const teamQueryParam = selectedTeamId !== "all" ? selectedTeamId : undefined
@@ -132,35 +130,29 @@ export function VelocityPage(): React.JSX.Element {
 	})
 	const velocityTeams = velocityTeamsData?.teams ?? []
 
-	const sortedTeams = useMemo(() => {
-		return [...velocityTeams].sort((a, b) => {
-			const valA =
-				sortField === "impactPoints"
-					? a.impactPoints
-					: sortField === "prsMerged"
-						? a.prsMerged
-						: sortField === "spend"
-							? effectiveMode === "tokens"
-								? a.totalTokens
-								: (a.totalCostCents ?? 0)
-							: effectiveMode === "tokens"
-								? (a.tokensPerImpactPoint ?? 0)
-								: (a.costPerImpactPointCents ?? 0)
-			const valB =
-				sortField === "impactPoints"
-					? b.impactPoints
-					: sortField === "prsMerged"
-						? b.prsMerged
-						: sortField === "spend"
-							? effectiveMode === "tokens"
-								? b.totalTokens
-								: (b.totalCostCents ?? 0)
-							: effectiveMode === "tokens"
-								? (b.tokensPerImpactPoint ?? 0)
-								: (b.costPerImpactPointCents ?? 0)
-			return sortAsc ? valA - valB : valB - valA
-		})
-	}, [velocityTeams, sortField, sortAsc, effectiveMode])
+	const {
+		rows: sortedTeams,
+		sortKey: sortField,
+		sortDir,
+		toggleSort: handleSort,
+	} = useTableState({
+		data: velocityTeams,
+		initialSortKey: "impactPoints" as TeamSortField,
+		sortValue: (t, key) => {
+			switch (key) {
+				case "impactPoints":
+					return t.impactPoints
+				case "prsMerged":
+					return t.prsMerged
+				case "spend":
+					return effectiveMode === "tokens" ? t.totalTokens : (t.totalCostCents ?? 0)
+				case "efficiency":
+					return effectiveMode === "tokens"
+						? (t.tokensPerImpactPoint ?? 0)
+						: (t.costPerImpactPointCents ?? 0)
+			}
+		},
+	})
 
 	const trendChartData = useMemo(() => {
 		return (summary?.trend ?? []).map((pt) => ({
@@ -175,14 +167,6 @@ export function VelocityPage(): React.JSX.Element {
 					: pt.tokens,
 		}))
 	}, [summary?.trend, trendMode])
-
-	const handleSort = (field: TeamSortField) => {
-		if (sortField === field) setSortAsc(!sortAsc)
-		else {
-			setSortField(field)
-			setSortAsc(false)
-		}
-	}
 
 	return (
 		<div className="space-y-6 fade-rise">
@@ -437,28 +421,28 @@ export function VelocityPage(): React.JSX.Element {
 									<SortHeader
 										label="IMPACT PTS"
 										active={sortField === "impactPoints"}
-										dir={sortAsc ? "asc" : "desc"}
+										dir={sortDir}
 										onClick={() => handleSort("impactPoints")}
 										align="right"
 									/>
 									<SortHeader
 										label="PRS MERGED"
 										active={sortField === "prsMerged"}
-										dir={sortAsc ? "asc" : "desc"}
+										dir={sortDir}
 										onClick={() => handleSort("prsMerged")}
 										align="right"
 									/>
 									<SortHeader
 										label={effectiveMode === "tokens" ? "TOKENS" : "SPEND"}
 										active={sortField === "spend"}
-										dir={sortAsc ? "asc" : "desc"}
+										dir={sortDir}
 										onClick={() => handleSort("spend")}
 										align="right"
 									/>
 									<SortHeader
 										label={effectiveMode === "tokens" ? "TOKENS / PT" : "COST / PT"}
 										active={sortField === "efficiency"}
-										dir={sortAsc ? "asc" : "desc"}
+										dir={sortDir}
 										onClick={() => handleSort("efficiency")}
 										align="right"
 									/>
