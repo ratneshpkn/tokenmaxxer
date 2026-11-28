@@ -41,3 +41,20 @@ export const PR_COMPLEXITY_WEIGHTS: Record<number, number> = {
 	4: 8.0,
 	5: 20.0,
 }
+
+/** Non-secret defaults that ship with the app. Per-user overrides live in `alert_thresholds`. */
+export const DEFAULTS = {
+	thresholds: {
+		claude_code_daily_cents: 5000, // $50/day
+		cursor_daily_cents: 5000, // $50/day
+	},
+	cron: {
+		dailySyncAt: "0 9 * * *", // 9:00 AM PT — cron.ts adds +15min offset to avoid colliding with the hourly tick
+		timezone: "America/Los_Angeles",
+	},
+	slack: {
+		digestTopSpendersCount: 5,
+	},
+} as const
+
+export type Defaults = typeof DEFAULTS
